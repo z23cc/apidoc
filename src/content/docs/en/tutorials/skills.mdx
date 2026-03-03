@@ -1,0 +1,412 @@
+---
+title: Skills System
+description: Extend Claude Code with Skills and SkillKit
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## What are Skills?
+
+Skills are modular plugins that extend Claude Code's capabilities. Each Skill is a directory containing a `SKILL.md` file that defines instructions, templates, and scripts Claude follows in specific scenarios.
+
+You can invoke them directly with `/skill-name`, or let Claude load them automatically when relevant.
+
+<CardGrid>
+  <Card title="Simple to Create" icon="add-document">
+    Just a SKILL.md file is all you need to create a custom skill.
+  </Card>
+  <Card title="Auto-trigger" icon="approve-check-circle">
+    Claude automatically decides when to use skills based on their description.
+  </Card>
+  <Card title="Cross-platform" icon="puzzle">
+    Follows the Agent Skills open standard. Supports 44+ AI tools via SkillKit.
+  </Card>
+  <Card title="Shareable" icon="rocket">
+    Commit to version control or publish as a plugin for team use.
+  </Card>
+</CardGrid>
+
+---
+
+## Bundled Skills
+
+Claude Code ships with these built-in skills, available in every session:
+
+| Skill | Description |
+|-------|-------------|
+| `/simplify` | Reviews recently changed files for code reuse, quality, and efficiency issues, then fixes them. Spawns 3 parallel review agents |
+| `/batch <instruction>` | Orchestrates large-scale changes across a codebase. Decomposes into 5-30 independent units, each in an isolated git worktree |
+| `/debug [description]` | Troubleshoots your current Claude Code session by reading the session debug log |
+
+<Aside type="tip">
+Claude Code also includes a bundled developer platform skill that activates automatically when your code imports the Anthropic SDK.
+</Aside>
+
+---
+
+## Creating Custom Skills
+
+### Basic Structure
+
+Each Skill is a directory with `SKILL.md` as the entrypoint:
+
+```
+my-skill/
+├── SKILL.md           # Main instructions (required)
+├── template.md        # Template file (optional)
+├── examples/
+│   └── sample.md      # Example output (optional)
+└── scripts/
+    └── validate.sh    # Executable script (optional)
+```
+
+### Create Your First Skill
+
+<Steps>
+1. Create the skill directory:
+   ```bash
+   mkdir -p ~/.claude/skills/explain-code
+   ```
+
+2. Write `SKILL.md`:
+   ```markdown
+   ---
+   name: explain-code
+   description: Explains code with visual diagrams and analogies. Use when explaining how code works or teaching about a codebase.
+   ---
+
+   When explaining code, always include:
+
+   1. **Start with an analogy**: Compare the code to something from everyday life
+   2. **Draw a diagram**: Use ASCII art to show the flow, structure, or relationships
+   3. **Walk through the code**: Explain step-by-step what happens
+   4. **Highlight a gotcha**: What's a common mistake or misconception?
+
+   Keep explanations conversational. For complex concepts, use multiple analogies.
+   ```
+
+3. Test the skill:
+   ```bash
+   # Auto-trigger: ask something matching the description
+   How does this code work?
+
+   # Or invoke directly
+   /explain-code src/auth/login.ts
+   ```
+</Steps>
+
+---
+
+## Where Skills Live
+
+| Level | Path | Applies to |
+|-------|------|------------|
+| Enterprise | Via managed settings | All users in your organization |
+| Personal | `~/.claude/skills/<name>/SKILL.md` | All your projects |
+| Project | `.claude/skills/<name>/SKILL.md` | This project only |
+| Plugin | `<plugin>/skills/<name>/SKILL.md` | Where plugin is enabled |
+
+Priority: Enterprise > Personal > Project. Plugin skills use `plugin-name:skill-name` namespace, so they don't conflict.
+
+<Aside>
+In monorepos, Claude Code automatically discovers skills from nested `.claude/skills/` directories. For example, editing files in `packages/frontend/` also loads `packages/frontend/.claude/skills/`.
+</Aside>
+
+---
+
+## Frontmatter Configuration
+
+YAML frontmatter at the top of `SKILL.md` controls skill behavior:
+
+```yaml
+---
+name: my-skill
+description: What this skill does
+disable-model-invocation: true
+allowed-tools: Read, Grep
+context: fork
+agent: Explore
+---
+```
+
+### Field Reference
+
+| Field | Description |
+|-------|-------------|
+| `name` | Skill name for `/name` invocation. Lowercase letters, numbers, and hyphens only |
+| `description` | What the skill does. Claude uses this to decide when to auto-load |
+| `argument-hint` | Hint shown during autocomplete, e.g., `[issue-number]` |
+| `disable-model-invocation` | Set `true` to prevent Claude from auto-invoking. Manual `/name` only |
+| `user-invocable` | Set `false` to hide from `/` menu. Only Claude can load it |
+| `allowed-tools` | Tools Claude can use without permission when skill is active |
+| `model` | Model to use when skill is active |
+| `context` | Set to `fork` to run in an isolated subagent |
+| `agent` | Which subagent type to use with `context: fork` |
+
+### Invocation Control
+
+| Config | You can invoke | Claude can invoke | Use case |
+|--------|---------------|-------------------|----------|
+| Default | Yes | Yes | General-purpose skills |
+| `disable-model-invocation: true` | Yes | No | Deploy, commit, actions with side effects |
+| `user-invocable: false` | No | Yes | Background knowledge like legacy system docs |
+
+---
+
+## Passing Arguments
+
+Use the `$ARGUMENTS` placeholder to receive arguments:
+
+```yaml
+---
+name: fix-issue
+description: Fix a GitHub issue
+disable-model-invocation: true
+---
+
+Fix GitHub issue $ARGUMENTS following our coding standards.
+
+1. Read the issue description
+2. Understand the requirements
+3. Implement the fix
+4. Write tests
+5. Create a commit
+```
+
+Running `/fix-issue 123` sends Claude "Fix GitHub issue 123..."
+
+Access arguments by position with `$ARGUMENTS[0]` or shorthand `$0`:
+
+```yaml
+---
+name: migrate-component
+description: Migrate a component between frameworks
+---
+
+Migrate the $0 component from $1 to $2.
+Preserve all existing behavior and tests.
+```
+
+Run `/migrate-component SearchBar React Vue`.
+
+---
+
+## Advanced Patterns
+
+### Dynamic Context Injection
+
+Use `` !`command` `` syntax to run shell commands before sending to Claude:
+
+```yaml
+---
+name: pr-summary
+description: Summarize PR changes
+context: fork
+agent: Explore
+allowed-tools: Bash(gh *)
+---
+
+## Pull Request Context
+- PR diff: !`gh pr diff`
+- PR comments: !`gh pr view --comments`
+- Changed files: !`gh pr diff --name-only`
+
+## Your task
+Summarize this pull request...
+```
+
+Each `` !`command` `` runs before Claude sees the content, and output replaces the placeholder.
+
+### Run Skills in a Subagent
+
+Add `context: fork` to run a skill in isolation:
+
+```yaml
+---
+name: deep-research
+description: Research a topic thoroughly
+context: fork
+agent: Explore
+---
+
+Research $ARGUMENTS thoroughly:
+
+1. Find relevant files using Glob and Grep
+2. Read and analyze the code
+3. Summarize findings with specific file references
+```
+
+`agent` options: `Explore` (read-only), `Plan` (planning), `general-purpose`, or custom subagents.
+
+---
+
+## SkillKit: Cross-platform Skill Manager
+
+SkillKit is the open source package manager for AI agent skills. Write a skill once, deploy to **44+ agents** — Claude, Cursor, Copilot, Windsurf, Devin, Codex, and more.
+
+### Installation
+
+<Tabs>
+<TabItem label="npm">
+
+```bash
+npm install -g skillkit
+```
+
+</TabItem>
+<TabItem label="pnpm">
+
+```bash
+pnpm add -g skillkit
+```
+
+</TabItem>
+<TabItem label="No install">
+
+```bash
+npx skillkit@latest
+```
+
+</TabItem>
+</Tabs>
+
+### Quick Start
+
+```bash
+skillkit init                          # Detect agents, create dirs
+skillkit recommend                     # Get smart suggestions
+skillkit install anthropics/skills     # Install from marketplace
+skillkit sync                          # Deploy to your agents
+```
+
+### Supported Agents
+
+| Agent | Format | Directory |
+|-------|--------|-----------|
+| Claude Code | SKILL.md | `.claude/skills/` |
+| Cursor | .mdc | `.cursor/skills/` |
+| Codex | SKILL.md | `.codex/skills/` |
+| Gemini CLI | SKILL.md | `.gemini/skills/` |
+| GitHub Copilot | Markdown | `.github/skills/` |
+| Windsurf | Markdown | `.windsurf/skills/` |
+| Devin | Markdown | `.devin/skills/` |
+
+Plus Aider, Amazon Q, Cody, and **37+ more agents**.
+
+### Core Commands
+
+```bash
+# Install and manage
+skillkit install <source>              # Install skills (GitHub/GitLab/local)
+skillkit remove <skills>               # Remove skills
+skillkit translate <skill> --to cursor # Translate skill format
+skillkit sync                          # Sync to all agents
+
+# Discovery
+skillkit marketplace                   # Browse marketplace (15,000+ skills)
+skillkit recommend                     # Project-based smart recommendations
+skillkit find <query>                  # Quick search
+
+# AI generation
+skillkit generate                      # AI skill generation wizard
+skillkit primer --all-agents           # Auto-generate agent instruction files
+```
+
+### Cross-platform Translation
+
+Write once, deploy everywhere:
+
+```bash
+# Write for Claude, deploy to Cursor
+skillkit translate my-skill --to cursor
+
+# Translate all skills to Windsurf format
+skillkit translate --all --to windsurf
+```
+
+### Smart Recommendations
+
+SkillKit analyzes your project, detects your stack, and suggests relevant skills:
+
+```bash
+skillkit recommend
+# 92% vercel-react-best-practices
+# 87% tailwind-v4-patterns
+# 85% nextjs-app-router
+```
+
+### MCP Integration
+
+Configure MCP server for runtime skill discovery:
+
+```json
+{
+  "mcpServers": {
+    "skillkit": {
+      "command": "npx",
+      "args": ["@skillkit/mcp"]
+    }
+  }
+}
+```
+
+### Memory System
+
+Capture session learnings:
+
+```bash
+skillkit memory compress               # Compress session learnings
+skillkit memory search "auth patterns" # Search memory
+skillkit memory export auth-patterns   # Export memory as a skill
+```
+
+### Team Collaboration
+
+Share skills via a Git-committable `.skills` manifest:
+
+```bash
+skillkit manifest init                 # Initialize manifest
+skillkit manifest add anthropics/skills  # Add skills
+git commit -m "add team skills"        # Commit to version control
+# Team members run:
+skillkit manifest install              # Sync install
+```
+
+---
+
+## Skill Sources
+
+### Official Partners
+
+| Repository | Description |
+|------------|-------------|
+| `anthropics/skills` | Official Claude Code skills |
+| `vercel-labs/agent-skills` | Next.js and React skills |
+| `expo/skills` | Mobile development with Expo |
+| `supabase/agent-skills` | Database and auth skills |
+| `stripe/ai` | Payment integration patterns |
+
+### Community
+
+`trailofbits/skills`, `ComposioHQ/awesome-claude-skills`, `better-auth/skills`, and many more community skill repositories.
+
+---
+
+## Troubleshooting
+
+### Skill Not Triggering
+
+- Check that `description` includes keywords users would naturally say
+- Verify the skill appears in `What skills are available?`
+- Try invoking directly with `/skill-name`
+
+### Skill Triggers Too Often
+
+- Make the `description` more specific
+- Add `disable-model-invocation: true` for manual-only invocation
+
+### Claude Can't See All Skills
+
+Skill descriptions are loaded into context. If you have many skills, they may exceed the character budget (2% of context window, fallback 16,000 chars). Run `/context` to check for excluded skills.
+
+Override with the `SLASH_COMMAND_TOOL_CHAR_BUDGET` environment variable.

@@ -1,0 +1,411 @@
+---
+title: Skills 技能系统
+description: 使用 Skills 和 SkillKit 扩展 Claude Code 的能力
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## 什么是 Skills？
+
+Skills（技能）是扩展 Claude Code 能力的模块化插件。每个 Skill 就是一个包含 `SKILL.md` 文件的目录，其中定义了 Claude 在特定场景下应该遵循的指令、模板和脚本。
+
+你可以通过 `/skill-name` 直接调用，也可以让 Claude 在相关场景下自动加载。
+
+<CardGrid>
+  <Card title="简单创建" icon="add-document">
+    只需一个 SKILL.md 文件，即可创建自定义技能。
+  </Card>
+  <Card title="自动触发" icon="approve-check-circle">
+    Claude 根据描述自动判断何时使用，无需手动调用。
+  </Card>
+  <Card title="跨平台" icon="puzzle">
+    遵循 Agent Skills 开放标准，通过 SkillKit 支持 44+ AI 工具。
+  </Card>
+  <Card title="可分享" icon="rocket">
+    提交到版本控制或发布为插件，团队共享使用。
+  </Card>
+</CardGrid>
+
+---
+
+## 内置技能
+
+Claude Code 自带以下技能，在每个会话中都可用：
+
+| 技能 | 说明 |
+|------|------|
+| `/simplify` | 审查最近修改的代码，检查复用性、质量和效率问题，然后自动修复。启动 3 个并行 Agent 审查 |
+| `/batch <描述>` | 大规模批量修改代码库。自动分解为 5-30 个独立工作单元，每个在独立 worktree 中并行执行 |
+| `/debug [描述]` | 通过读取会话调试日志来排查当前 Claude Code 会话的问题 |
+
+<Aside type="tip">
+当你的代码导入 Anthropic SDK 时，Claude Code 还会自动激活开发者平台技能，无需手动调用。
+</Aside>
+
+---
+
+## 创建自定义 Skill
+
+### 基本结构
+
+每个 Skill 是一个目录，`SKILL.md` 为入口文件：
+
+```
+my-skill/
+├── SKILL.md           # 主指令（必需）
+├── template.md        # 模板文件（可选）
+├── examples/
+│   └── sample.md      # 示例输出（可选）
+└── scripts/
+    └── validate.sh    # 可执行脚本（可选）
+```
+
+### 创建你的第一个 Skill
+
+<Steps>
+1. 创建技能目录：
+   ```bash
+   mkdir -p ~/.claude/skills/explain-code
+   ```
+
+2. 编写 `SKILL.md`：
+   ```markdown
+   ---
+   name: explain-code
+   description: 用可视化图表和类比解释代码。当解释代码如何工作或教学时使用。
+   ---
+
+   解释代码时，始终包含：
+
+   1. **用类比开始**：将代码与日常生活中的事物比较
+   2. **绘制图表**：用 ASCII 图展示流程、结构或关系
+   3. **逐步讲解**：逐步说明代码执行过程
+   4. **指出陷阱**：常见的误区或误解是什么？
+
+   保持解释通俗易懂。对于复杂概念，使用多个类比。
+   ```
+
+3. 测试技能：
+   ```bash
+   # 自动触发：问与描述匹配的问题
+   How does this code work?
+
+   # 或直接调用
+   /explain-code src/auth/login.ts
+   ```
+</Steps>
+
+---
+
+## Skill 存储位置
+
+| 层级 | 路径 | 适用范围 |
+|------|------|----------|
+| 企业级 | 通过管理设置配置 | 组织内所有用户 |
+| 个人级 | `~/.claude/skills/<name>/SKILL.md` | 你的所有项目 |
+| 项目级 | `.claude/skills/<name>/SKILL.md` | 仅当前项目 |
+| 插件级 | `<plugin>/skills/<name>/SKILL.md` | 启用插件的项目 |
+
+优先级：企业级 > 个人级 > 项目级。插件技能使用 `插件名:技能名` 命名空间，不会冲突。
+
+<Aside>
+在 Monorepo 中，Claude Code 会自动发现子目录中的 `.claude/skills/` 技能。例如编辑 `packages/frontend/` 中的文件时，会自动加载 `packages/frontend/.claude/skills/`。
+</Aside>
+
+---
+
+## Frontmatter 配置
+
+`SKILL.md` 顶部的 YAML frontmatter 控制技能行为：
+
+```yaml
+---
+name: my-skill
+description: 这个技能做什么
+disable-model-invocation: true
+allowed-tools: Read, Grep
+context: fork
+agent: Explore
+---
+```
+
+### 字段说明
+
+| 字段 | 说明 |
+|------|------|
+| `name` | 技能名称，用于 `/name` 调用。仅限小写字母、数字和连字符 |
+| `description` | 描述技能功能，Claude 根据此决定何时自动加载 |
+| `argument-hint` | 自动补全时显示的参数提示，如 `[issue-number]` |
+| `disable-model-invocation` | 设为 `true` 阻止 Claude 自动调用，仅手动 `/name` 触发 |
+| `user-invocable` | 设为 `false` 从 `/` 菜单隐藏，仅 Claude 可加载 |
+| `allowed-tools` | 技能活跃时 Claude 可无需确认使用的工具 |
+| `model` | 技能活跃时使用的模型 |
+| `context` | 设为 `fork` 在隔离的子 Agent 中运行 |
+| `agent` | `context: fork` 时使用的子 Agent 类型 |
+
+### 调用控制
+
+| 配置 | 你可以调用 | Claude 可以调用 | 用途 |
+|------|-----------|----------------|------|
+| 默认 | 是 | 是 | 通用技能 |
+| `disable-model-invocation: true` | 是 | 否 | 部署、提交等有副作用的操作 |
+| `user-invocable: false` | 否 | 是 | 背景知识，如遗留系统说明 |
+
+---
+
+## 参数传递
+
+使用 `$ARGUMENTS` 占位符接收参数：
+
+```yaml
+---
+name: fix-issue
+description: 修复 GitHub Issue
+disable-model-invocation: true
+---
+
+修复 GitHub Issue $ARGUMENTS，遵循我们的编码标准。
+
+1. 读取 Issue 描述
+2. 理解需求
+3. 实现修复
+4. 编写测试
+5. 创建提交
+```
+
+调用 `/fix-issue 123`，Claude 收到 "修复 GitHub Issue 123..."
+
+按位置访问参数：`$ARGUMENTS[0]` 或简写 `$0`：
+
+```yaml
+---
+name: migrate-component
+description: 在框架间迁移组件
+---
+
+将 $0 组件从 $1 迁移到 $2。保留所有现有行为和测试。
+```
+
+调用 `/migrate-component SearchBar React Vue`。
+
+---
+
+## 高级模式
+
+### 动态上下文注入
+
+使用 `` !`command` `` 语法在发送给 Claude 前执行 shell 命令：
+
+```yaml
+---
+name: pr-summary
+description: 总结 PR 变更
+context: fork
+agent: Explore
+allowed-tools: Bash(gh *)
+---
+
+## Pull Request 上下文
+- PR diff: !`gh pr diff`
+- PR 评论: !`gh pr view --comments`
+- 变更文件: !`gh pr diff --name-only`
+
+## 你的任务
+总结这个 Pull Request...
+```
+
+每个 `` !`command` `` 会在 Claude 看到内容之前执行，输出替换占位符。
+
+### 在子 Agent 中运行
+
+添加 `context: fork` 让技能在隔离环境中运行：
+
+```yaml
+---
+name: deep-research
+description: 深入研究某个主题
+context: fork
+agent: Explore
+---
+
+深入研究 $ARGUMENTS：
+
+1. 使用 Glob 和 Grep 查找相关文件
+2. 阅读和分析代码
+3. 用具体文件引用总结发现
+```
+
+`agent` 可选值：`Explore`（只读探索）、`Plan`（规划）、`general-purpose`（通用），或自定义子 Agent。
+
+---
+
+## SkillKit：跨平台技能管理
+
+SkillKit 是 AI Agent 技能的开源包管理器，可在 **44+ 工具**之间安装、翻译和共享技能。
+
+### 安装
+
+<Tabs>
+<TabItem label="npm">
+
+```bash
+npm install -g skillkit
+```
+
+</TabItem>
+<TabItem label="pnpm">
+
+```bash
+pnpm add -g skillkit
+```
+
+</TabItem>
+<TabItem label="无需安装">
+
+```bash
+npx skillkit@latest
+```
+
+</TabItem>
+</Tabs>
+
+### 快速开始
+
+```bash
+skillkit init                          # 检测 Agent，创建目录
+skillkit recommend                     # 获取智能推荐
+skillkit install anthropics/skills     # 从市场安装
+skillkit sync                          # 部署到你的 Agent
+```
+
+### 支持的 Agent
+
+| Agent | 格式 | 目录 |
+|-------|------|------|
+| Claude Code | SKILL.md | `.claude/skills/` |
+| Cursor | .mdc | `.cursor/skills/` |
+| Codex | SKILL.md | `.codex/skills/` |
+| Gemini CLI | SKILL.md | `.gemini/skills/` |
+| GitHub Copilot | Markdown | `.github/skills/` |
+| Windsurf | Markdown | `.windsurf/skills/` |
+| Devin | Markdown | `.devin/skills/` |
+
+加上 Aider、Amazon Q、Cody 等 **37+ 更多 Agent**。
+
+### 核心命令
+
+```bash
+# 安装和管理
+skillkit install <source>              # 安装技能（GitHub/GitLab/本地路径）
+skillkit remove <skills>               # 移除技能
+skillkit translate <skill> --to cursor # 翻译技能格式
+skillkit sync                          # 同步到所有 Agent
+
+# 发现
+skillkit marketplace                   # 浏览技能市场（15,000+ 技能）
+skillkit recommend                     # 基于项目的智能推荐
+skillkit find <query>                  # 快速搜索
+
+# AI 生成
+skillkit generate                      # AI 生成技能向导
+skillkit primer --all-agents           # 自动生成 Agent 指令文件
+```
+
+### 跨平台翻译
+
+写一次，部署到所有 Agent：
+
+```bash
+# 为 Claude 编写，部署到 Cursor
+skillkit translate my-skill --to cursor
+
+# 翻译所有技能到 Windsurf 格式
+skillkit translate --all --to windsurf
+```
+
+### 智能推荐
+
+SkillKit 分析你的项目，检测技术栈，推荐相关技能：
+
+```bash
+skillkit recommend
+# 92% vercel-react-best-practices
+# 87% tailwind-v4-patterns
+# 85% nextjs-app-router
+```
+
+### MCP 集成
+
+配置 MCP 服务器让 Agent 在运行时发现技能：
+
+```json
+{
+  "mcpServers": {
+    "skillkit": {
+      "command": "npx",
+      "args": ["@skillkit/mcp"]
+    }
+  }
+}
+```
+
+### 记忆系统
+
+捕获会话中的学习成果：
+
+```bash
+skillkit memory compress               # 压缩会话经验
+skillkit memory search "auth patterns" # 搜索记忆
+skillkit memory export auth-patterns   # 导出记忆为技能
+```
+
+### 团队协作
+
+通过 Git 可提交的 `.skills` 清单共享：
+
+```bash
+skillkit manifest init                 # 初始化清单
+skillkit manifest add anthropics/skills  # 添加技能
+git commit -m "add team skills"        # 提交到版本控制
+# 团队成员运行：
+skillkit manifest install              # 同步安装
+```
+
+---
+
+## 技能来源
+
+### 官方合作方
+
+| 仓库 | 说明 |
+|------|------|
+| `anthropics/skills` | 官方 Claude Code 技能 |
+| `vercel-labs/agent-skills` | Next.js 和 React 技能 |
+| `expo/skills` | Expo 移动开发技能 |
+| `supabase/agent-skills` | 数据库和认证技能 |
+| `stripe/ai` | 支付集成模式 |
+
+### 社区贡献
+
+`trailofbits/skills`、`ComposioHQ/awesome-claude-skills`、`better-auth/skills` 等众多社区技能仓库。
+
+---
+
+## 常见问题
+
+### 技能没有触发
+
+- 检查 `description` 是否包含用户自然会说的关键词
+- 用 `What skills are available?` 确认技能已加载
+- 尝试直接用 `/skill-name` 调用
+
+### 技能触发太频繁
+
+- 让 `description` 更具体
+- 添加 `disable-model-invocation: true` 仅允许手动调用
+
+### Claude 看不到我的所有技能
+
+技能描述会加载到上下文中，如果技能太多可能超出字符预算（上下文窗口的 2%，回退值 16,000 字符）。运行 `/context` 检查是否有被排除的技能。
+
+可通过环境变量 `SLASH_COMMAND_TOOL_CHAR_BUDGET` 覆盖限制。
