@@ -1,3 +1,8 @@
 name = "claude-code-apidoc"
 pages_build_output_dir = "./dist"
 compatibility_date = "2024-12-01"
+
+# Cloudflare Pages handles deployment automatically via Git integration.
+# Do NOT set a deploy command in the Pages dashboard.
+# Build command: npm run build
+# Build output directory: dist
