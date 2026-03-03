@@ -1,0 +1,484 @@
+---
+title: 安装配置
+description: 在 Windows、macOS、Linux 上安装和配置 Claude Code
+---
+
+import { Tabs, TabItem, Steps, Aside } from '@astrojs/starlight/components';
+
+## 系统要求
+
+| 项目 | 要求 |
+|------|------|
+| **操作系统** | Windows 10+、macOS 10.15+、Ubuntu 20.04+ / Debian 10+ |
+| **Node.js** | 18.0 或更高版本 |
+| **磁盘空间** | 至少 2GB 可用空间 |
+| **内存** | 建议 4GB 以上 |
+
+<Aside type="tip">
+Windows 用户可直接使用 PowerShell 或 CMD，无需安装 WSL2。
+</Aside>
+
+---
+
+## 第一步：安装 Node.js
+
+<Tabs>
+<TabItem label="Windows">
+
+### 方法一：官方安装包（推荐）
+
+<Steps>
+1. 访问 [Node.js 官网](https://nodejs.org/) 下载 **LTS 版本**的 Windows 安装包（`.msi` 文件）
+
+2. 双击运行安装程序，按提示完成安装
+   - 选择安装路径（建议保持默认）
+   - **务必勾选 "Add to PATH"**
+
+3. 打开 **PowerShell** 或 **CMD**，验证安装：
+   ```powershell
+   node --version
+   npm --version
+   ```
+</Steps>
+
+### 方法二：使用 Winget
+
+```powershell
+winget install OpenJS.NodeJS
+```
+
+### 方法三：使用 Chocolatey
+
+```powershell
+# 安装 Chocolatey（如果未安装，需管理员权限）
+Set-ExecutionPolicy Bypass -Scope Process -Force
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+
+# 安装 Node.js
+choco install nodejs
+```
+
+</TabItem>
+<TabItem label="macOS">
+
+### 方法一：使用 Homebrew（推荐）
+
+<Steps>
+1. 安装 Xcode 命令行工具和 Homebrew：
+   ```bash
+   sudo xcode-select --install
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   ```
+
+2. 安装 Node.js：
+   ```bash
+   brew install node
+   ```
+
+3. 验证安装：
+   ```bash
+   node --version
+   npm --version
+   ```
+</Steps>
+
+### 方法二：官方安装包
+
+访问 [Node.js 官网](https://nodejs.org/) 下载 macOS 安装包（`.pkg` 文件），双击安装即可。
+
+</TabItem>
+<TabItem label="Linux">
+
+### Ubuntu / Debian
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo bash -
+sudo apt-get install -y nodejs
+node --version
+```
+
+### CentOS / RHEL / Fedora
+
+```bash
+curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo bash -
+sudo yum install -y nodejs
+node --version
+```
+
+### 使用 nvm（推荐，适用于所有发行版）
+
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+source ~/.bashrc
+nvm install --lts
+node --version
+```
+
+</TabItem>
+</Tabs>
+
+<Aside>
+确保 Node.js 版本 ≥ 18.0，运行 `node --version` 检查。
+</Aside>
+
+---
+
+## 第二步：安装 Claude Code
+
+<Tabs>
+<TabItem label="Windows">
+
+打开 **PowerShell** 或 **CMD**：
+
+```powershell
+npm install -g @anthropic-ai/claude-code
+claude --version
+```
+
+</TabItem>
+<TabItem label="macOS">
+
+打开 **终端**：
+
+```bash
+npm install -g @anthropic-ai/claude-code
+claude --version
+```
+
+</TabItem>
+<TabItem label="Linux">
+
+```bash
+npm install -g @anthropic-ai/claude-code
+claude --version
+```
+
+<Aside type="caution">
+如果提示权限错误，使用 `sudo npm install -g @anthropic-ai/claude-code`，或通过 nvm 管理 Node.js 以避免权限问题。
+</Aside>
+
+</TabItem>
+</Tabs>
+
+<Aside type="tip">
+如果之前安装过其他中转客户端 CLI，建议先卸载以避免端口冲突：
+```bash
+npm ls -g @anthropic-ai/claude-code   # 检查是否已安装
+npm uninstall -g @anthropic-ai/claude-code  # 卸载
+```
+</Aside>
+
+---
+
+## 第三步：配置环境变量
+
+获取你的认证信息：
+- **API 地址**（`ANTHROPIC_BASE_URL`）：你的 API 服务地址
+- **Auth Token**（`ANTHROPIC_AUTH_TOKEN`）：你的认证密钥
+
+### 临时配置（当前会话有效）
+
+<Tabs>
+<TabItem label="Windows CMD">
+
+```cmd
+set ANTHROPIC_BASE_URL=https://your-api-url.com/api
+set ANTHROPIC_AUTH_TOKEN=your-token-here
+cd your-project-folder
+claude
+```
+
+</TabItem>
+<TabItem label="Windows PowerShell">
+
+```powershell
+$env:ANTHROPIC_BASE_URL = "https://your-api-url.com/api"
+$env:ANTHROPIC_AUTH_TOKEN = "your-token-here"
+cd your-project-folder
+claude
+```
+
+</TabItem>
+<TabItem label="macOS / Linux">
+
+```bash
+export ANTHROPIC_BASE_URL="https://your-api-url.com/api"
+export ANTHROPIC_AUTH_TOKEN="your-token-here"
+cd your-project-folder
+claude
+```
+
+</TabItem>
+</Tabs>
+
+### 永久配置（推荐）
+
+<Tabs>
+<TabItem label="Windows">
+
+**方法一：通过系统属性**
+
+<Steps>
+1. 右键点击 **此电脑** → **属性** → **高级系统设置**
+2. 点击 **环境变量**
+3. 在"用户变量"中点击 **新建**，分别添加：
+   - 变量名 `ANTHROPIC_BASE_URL`，值为你的 API 地址
+   - 变量名 `ANTHROPIC_AUTH_TOKEN`，值为你的 Token
+4. 点击 **确定** 保存，重启终端生效
+</Steps>
+
+**方法二：通过 PowerShell**
+
+```powershell
+# 为当前用户永久设置
+[Environment]::SetEnvironmentVariable("ANTHROPIC_BASE_URL", "https://your-api-url.com/api", "User")
+[Environment]::SetEnvironmentVariable("ANTHROPIC_AUTH_TOKEN", "your-token-here", "User")
+
+# 验证
+[Environment]::GetEnvironmentVariable("ANTHROPIC_BASE_URL", "User")
+```
+
+</TabItem>
+<TabItem label="macOS">
+
+将环境变量写入 shell 配置文件（macOS 默认使用 Zsh）：
+
+```bash
+echo 'export ANTHROPIC_BASE_URL="https://your-api-url.com/api"' >> ~/.zshrc
+echo 'export ANTHROPIC_AUTH_TOKEN="your-token-here"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+</TabItem>
+<TabItem label="Linux">
+
+```bash
+# Bash 用户
+echo 'export ANTHROPIC_BASE_URL="https://your-api-url.com/api"' >> ~/.bashrc
+echo 'export ANTHROPIC_AUTH_TOKEN="your-token-here"' >> ~/.bashrc
+source ~/.bashrc
+
+# Zsh 用户
+echo 'export ANTHROPIC_BASE_URL="https://your-api-url.com/api"' >> ~/.zshrc
+echo 'export ANTHROPIC_AUTH_TOKEN="your-token-here"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+</TabItem>
+</Tabs>
+
+永久配置完成后，以后只需在项目目录中运行 `claude` 即可启动。
+
+---
+
+## 第四步：首次启动
+
+```bash
+cd your-project-folder
+claude
+```
+
+按照提示依次完成：
+
+<Steps>
+1. 选择你喜欢的 **主题**
+2. 确认 **安全须知**
+3. 使用默认 **Terminal 配置**
+4. **信任工作目录**
+</Steps>
+
+完成后即可开始与 Claude 对话！
+
+---
+
+## VS Code 插件配置
+
+新版 Claude Code VS Code 插件要求强制登录，可通过创建配置文件解决：
+
+<Tabs>
+<TabItem label="macOS / Linux">
+
+```bash
+mkdir -p ~/.claude && touch ~/.claude/config.json
+nano ~/.claude/config.json
+```
+
+</TabItem>
+<TabItem label="Windows CMD">
+
+```cmd
+mkdir %USERPROFILE%\.claude
+echo. > %USERPROFILE%\.claude\config.json
+notepad %USERPROFILE%\.claude\config.json
+```
+
+</TabItem>
+<TabItem label="Windows PowerShell">
+
+```powershell
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude"
+New-Item -ItemType File -Force -Path "$env:USERPROFILE\.claude\config.json"
+notepad "$env:USERPROFILE\.claude\config.json"
+```
+
+</TabItem>
+</Tabs>
+
+写入以下内容并保存：
+
+```json
+{
+  "primaryApiKey": "your-api-key"
+}
+```
+
+保存后**重启 VS Code**，插件即可正常使用。
+
+---
+
+## 配置文件说明
+
+### CLAUDE.md
+
+在项目根目录创建 `CLAUDE.md` 文件，为 Claude 提供项目级指令：
+
+```markdown
+# 项目说明
+
+- 这是一个 React + TypeScript 项目
+- 使用 pnpm 作为包管理器
+- 测试命令: pnpm test
+- 构建命令: pnpm build
+```
+
+### 配置层级
+
+| 层级 | 路径 | 用途 |
+|------|------|------|
+| 全局 | `~/.claude/CLAUDE.md` | 个人全局偏好 |
+| 项目 | `项目根目录/CLAUDE.md` | 项目级指令（可提交到 Git） |
+| 本地 | `项目根目录/.claude/CLAUDE.md` | 本地私有指令（不提交） |
+
+---
+
+## 常见问题
+
+### `node` 命令无法识别
+
+<Tabs>
+<TabItem label="Windows">
+
+```powershell
+# 检查 PATH
+echo $env:PATH
+
+# 手动添加（临时）
+$env:PATH += ";C:\Program Files\nodejs"
+```
+
+建议重新安装 Node.js 并确保勾选 **Add to PATH**。
+
+</TabItem>
+<TabItem label="macOS / Linux">
+
+```bash
+which node
+
+# 如果使用 nvm
+source ~/.bashrc
+nvm use --lts
+```
+
+</TabItem>
+</Tabs>
+
+### npm 安装速度慢
+
+```bash
+# 切换国内镜像源
+npm config set registry https://registry.npmmirror.com
+
+# 恢复官方源
+npm config set registry https://registry.npmjs.org
+```
+
+### PowerShell 执行策略限制（Windows）
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+### 防火墙阻止连接（Windows）
+
+<Steps>
+1. 打开 **Windows 防火墙设置**
+2. 点击"允许应用或功能通过 Windows 防火墙"
+3. 找到 **Node.js** 并勾选"专用"和"公用"网络
+</Steps>
+
+---
+
+## 验证配置
+
+<Tabs>
+<TabItem label="Windows CMD">
+
+```cmd
+echo %ANTHROPIC_BASE_URL%
+echo %ANTHROPIC_AUTH_TOKEN%
+claude --version
+```
+
+</TabItem>
+<TabItem label="Windows PowerShell">
+
+```powershell
+echo $env:ANTHROPIC_BASE_URL
+echo $env:ANTHROPIC_AUTH_TOKEN
+claude --version
+```
+
+</TabItem>
+<TabItem label="macOS / Linux">
+
+```bash
+echo $ANTHROPIC_BASE_URL
+echo $ANTHROPIC_AUTH_TOKEN
+claude --version
+```
+
+</TabItem>
+</Tabs>
+
+输出正确的环境变量值和版本号，说明一切就绪！
+
+---
+
+## 推荐终端工具
+
+<Tabs>
+<TabItem label="Windows">
+
+建议安装 **Windows Terminal** 获得更好的体验：
+
+```powershell
+winget install Microsoft.WindowsTerminal
+```
+
+</TabItem>
+<TabItem label="macOS">
+
+推荐使用 [iTerm2](https://iterm2.com/) 或系统自带终端。
+
+</TabItem>
+<TabItem label="Linux">
+
+系统自带终端即可，或安装 [Alacritty](https://alacritty.org/)、Kitty 等现代终端。
+
+</TabItem>
+</Tabs>
+
+## 下一步
+
+安装完成后，前往 [基本用法](/tutorials/basic-usage/) 了解如何高效使用 Claude Code。

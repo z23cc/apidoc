@@ -1,0 +1,360 @@
+---
+title: Installation
+description: Install and configure Claude Code on Windows, macOS, and Linux
+---
+
+import { Tabs, TabItem, Steps, Aside } from '@astrojs/starlight/components';
+
+## System Requirements
+
+| Item | Requirement |
+|------|-------------|
+| **OS** | Windows 10+, macOS 10.15+, Ubuntu 20.04+ / Debian 10+ |
+| **Node.js** | 18.0 or higher |
+| **Disk Space** | At least 2GB free |
+| **Memory** | 4GB+ recommended |
+
+<Aside type="tip">
+Windows users can use PowerShell or CMD directly — WSL2 is not required.
+</Aside>
+
+---
+
+## Step 1: Install Node.js
+
+<Tabs>
+<TabItem label="Windows">
+
+### Option A: Official Installer (Recommended)
+
+<Steps>
+1. Visit [Node.js website](https://nodejs.org/) and download the **LTS** Windows installer (`.msi`)
+
+2. Run the installer and follow the prompts
+   - Use the default install path
+   - **Make sure "Add to PATH" is checked**
+
+3. Open **PowerShell** or **CMD** to verify:
+   ```powershell
+   node --version
+   npm --version
+   ```
+</Steps>
+
+### Option B: Using Winget
+
+```powershell
+winget install OpenJS.NodeJS
+```
+
+### Option C: Using Chocolatey
+
+```powershell
+# Install Chocolatey (if not installed, requires admin)
+Set-ExecutionPolicy Bypass -Scope Process -Force
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+
+# Install Node.js
+choco install nodejs
+```
+
+</TabItem>
+<TabItem label="macOS">
+
+### Option A: Using Homebrew (Recommended)
+
+<Steps>
+1. Install Xcode CLI tools and Homebrew:
+   ```bash
+   sudo xcode-select --install
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   ```
+
+2. Install Node.js:
+   ```bash
+   brew install node
+   ```
+
+3. Verify installation:
+   ```bash
+   node --version
+   npm --version
+   ```
+</Steps>
+
+### Option B: Official Installer
+
+Download the macOS installer (`.pkg`) from [nodejs.org](https://nodejs.org/) and run it.
+
+</TabItem>
+<TabItem label="Linux">
+
+### Ubuntu / Debian
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo bash -
+sudo apt-get install -y nodejs
+node --version
+```
+
+### CentOS / RHEL / Fedora
+
+```bash
+curl -fsSL https://rpm.nodesource.com/setup_lts.x | sudo bash -
+sudo yum install -y nodejs
+node --version
+```
+
+### Using nvm (Recommended for all distros)
+
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+source ~/.bashrc
+nvm install --lts
+node --version
+```
+
+</TabItem>
+</Tabs>
+
+---
+
+## Step 2: Install Claude Code
+
+<Tabs>
+<TabItem label="Windows">
+
+```powershell
+npm install -g @anthropic-ai/claude-code
+claude --version
+```
+
+</TabItem>
+<TabItem label="macOS">
+
+```bash
+npm install -g @anthropic-ai/claude-code
+claude --version
+```
+
+</TabItem>
+<TabItem label="Linux">
+
+```bash
+npm install -g @anthropic-ai/claude-code
+claude --version
+```
+
+<Aside type="caution">
+If you get permission errors, use `sudo npm install -g @anthropic-ai/claude-code`, or use nvm to manage Node.js.
+</Aside>
+
+</TabItem>
+</Tabs>
+
+---
+
+## Step 3: Configure Environment Variables
+
+You'll need:
+- **API URL** (`ANTHROPIC_BASE_URL`): Your API endpoint
+- **Auth Token** (`ANTHROPIC_AUTH_TOKEN`): Your authentication key
+
+### Temporary (Current Session Only)
+
+<Tabs>
+<TabItem label="Windows CMD">
+
+```cmd
+set ANTHROPIC_BASE_URL=https://your-api-url.com/api
+set ANTHROPIC_AUTH_TOKEN=your-token-here
+cd your-project-folder
+claude
+```
+
+</TabItem>
+<TabItem label="Windows PowerShell">
+
+```powershell
+$env:ANTHROPIC_BASE_URL = "https://your-api-url.com/api"
+$env:ANTHROPIC_AUTH_TOKEN = "your-token-here"
+cd your-project-folder
+claude
+```
+
+</TabItem>
+<TabItem label="macOS / Linux">
+
+```bash
+export ANTHROPIC_BASE_URL="https://your-api-url.com/api"
+export ANTHROPIC_AUTH_TOKEN="your-token-here"
+cd your-project-folder
+claude
+```
+
+</TabItem>
+</Tabs>
+
+### Permanent (Recommended)
+
+<Tabs>
+<TabItem label="Windows">
+
+**Via System Properties:**
+
+<Steps>
+1. Right-click **This PC** → **Properties** → **Advanced system settings**
+2. Click **Environment Variables**
+3. Under "User variables", click **New** and add:
+   - `ANTHROPIC_BASE_URL` = your API URL
+   - `ANTHROPIC_AUTH_TOKEN` = your token
+4. Click **OK**, restart your terminal
+</Steps>
+
+**Via PowerShell:**
+
+```powershell
+[Environment]::SetEnvironmentVariable("ANTHROPIC_BASE_URL", "https://your-api-url.com/api", "User")
+[Environment]::SetEnvironmentVariable("ANTHROPIC_AUTH_TOKEN", "your-token-here", "User")
+```
+
+</TabItem>
+<TabItem label="macOS">
+
+```bash
+echo 'export ANTHROPIC_BASE_URL="https://your-api-url.com/api"' >> ~/.zshrc
+echo 'export ANTHROPIC_AUTH_TOKEN="your-token-here"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+</TabItem>
+<TabItem label="Linux">
+
+```bash
+# Bash
+echo 'export ANTHROPIC_BASE_URL="https://your-api-url.com/api"' >> ~/.bashrc
+echo 'export ANTHROPIC_AUTH_TOKEN="your-token-here"' >> ~/.bashrc
+source ~/.bashrc
+
+# Zsh
+echo 'export ANTHROPIC_BASE_URL="https://your-api-url.com/api"' >> ~/.zshrc
+echo 'export ANTHROPIC_AUTH_TOKEN="your-token-here"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+</TabItem>
+</Tabs>
+
+---
+
+## Step 4: First Launch
+
+```bash
+cd your-project-folder
+claude
+```
+
+Follow the prompts:
+
+<Steps>
+1. Choose your preferred **theme**
+2. Accept the **safety notice**
+3. Use default **terminal config**
+4. **Trust the working directory**
+</Steps>
+
+You're ready to start coding with Claude!
+
+---
+
+## VS Code Extension Setup
+
+The Claude Code VS Code extension requires login. Create a config file to set it up:
+
+<Tabs>
+<TabItem label="macOS / Linux">
+
+```bash
+mkdir -p ~/.claude && touch ~/.claude/config.json
+nano ~/.claude/config.json
+```
+
+</TabItem>
+<TabItem label="Windows CMD">
+
+```cmd
+mkdir %USERPROFILE%\.claude
+echo. > %USERPROFILE%\.claude\config.json
+notepad %USERPROFILE%\.claude\config.json
+```
+
+</TabItem>
+<TabItem label="Windows PowerShell">
+
+```powershell
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude"
+New-Item -ItemType File -Force -Path "$env:USERPROFILE\.claude\config.json"
+notepad "$env:USERPROFILE\.claude\config.json"
+```
+
+</TabItem>
+</Tabs>
+
+Add the following content:
+
+```json
+{
+  "primaryApiKey": "your-api-key"
+}
+```
+
+Save and **restart VS Code**.
+
+---
+
+## Troubleshooting
+
+### `node` command not found
+
+<Tabs>
+<TabItem label="Windows">
+
+```powershell
+echo $env:PATH
+$env:PATH += ";C:\Program Files\nodejs"
+```
+
+Reinstall Node.js and ensure **Add to PATH** is checked.
+
+</TabItem>
+<TabItem label="macOS / Linux">
+
+```bash
+which node
+# If using nvm:
+source ~/.bashrc
+nvm use --lts
+```
+
+</TabItem>
+</Tabs>
+
+### Slow npm installs
+
+```bash
+npm config set registry https://registry.npmmirror.com    # China mirror
+npm config set registry https://registry.npmjs.org         # Restore default
+```
+
+### PowerShell execution policy (Windows)
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+---
+
+## Next Steps
+
+After installation, head to [Basic Usage](/en/tutorials/basic-usage/) to learn how to use Claude Code effectively.
