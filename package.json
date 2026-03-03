@@ -16,7 +16,6 @@
     "sharp": "^0.34.2"
   },
   "devDependencies": {
-    "@astrojs/cloudflare": "^12.6.12",
     "wrangler": "^4.69.0"
   }
 }
