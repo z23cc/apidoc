@@ -243,151 +243,18 @@ agent: Explore
 
 SkillKit 是 AI Agent 技能的开源包管理器，可在 **44+ 工具**之间安装、翻译和共享技能。
 
-### 安装
-
-<Tabs>
-<TabItem label="npm">
-
 ```bash
-npm install -g skillkit
-```
-
-</TabItem>
-<TabItem label="pnpm">
-
-```bash
-pnpm add -g skillkit
-```
-
-</TabItem>
-<TabItem label="无需安装">
-
-```bash
-npx skillkit@latest
-```
-
-</TabItem>
-</Tabs>
-
-### 快速开始
-
-```bash
+npx skillkit@latest                    # 无需安装，直接运行
 skillkit init                          # 检测 Agent，创建目录
-skillkit recommend                     # 获取智能推荐
-skillkit install anthropics/skills     # 从市场安装
+skillkit install anthropics/skills     # 从 15,000+ 技能市场安装
 skillkit sync                          # 部署到你的 Agent
 ```
 
-### 支持的 Agent
+SkillKit 还提供跨平台翻译、智能推荐、安全扫描、MCP 集成、REST API、记忆系统、工作流编排、CI/CD 集成等完整功能。
 
-| Agent | 格式 | 目录 |
-|-------|------|------|
-| Claude Code | SKILL.md | `.claude/skills/` |
-| Cursor | .mdc | `.cursor/skills/` |
-| Codex | SKILL.md | `.codex/skills/` |
-| Gemini CLI | SKILL.md | `.gemini/skills/` |
-| GitHub Copilot | Markdown | `.github/skills/` |
-| Windsurf | Markdown | `.windsurf/skills/` |
-| Devin | Markdown | `.devin/skills/` |
-
-加上 Aider、Amazon Q、Cody 等 **37+ 更多 Agent**。
-
-### 核心命令
-
-```bash
-# 安装和管理
-skillkit install <source>              # 安装技能（GitHub/GitLab/本地路径）
-skillkit remove <skills>               # 移除技能
-skillkit translate <skill> --to cursor # 翻译技能格式
-skillkit sync                          # 同步到所有 Agent
-
-# 发现
-skillkit marketplace                   # 浏览技能市场（15,000+ 技能）
-skillkit recommend                     # 基于项目的智能推荐
-skillkit find <query>                  # 快速搜索
-
-# AI 生成
-skillkit generate                      # AI 生成技能向导
-skillkit primer --all-agents           # 自动生成 Agent 指令文件
-```
-
-### 跨平台翻译
-
-写一次，部署到所有 Agent：
-
-```bash
-# 为 Claude 编写，部署到 Cursor
-skillkit translate my-skill --to cursor
-
-# 翻译所有技能到 Windsurf 格式
-skillkit translate --all --to windsurf
-```
-
-### 智能推荐
-
-SkillKit 分析你的项目，检测技术栈，推荐相关技能：
-
-```bash
-skillkit recommend
-# 92% vercel-react-best-practices
-# 87% tailwind-v4-patterns
-# 85% nextjs-app-router
-```
-
-### MCP 集成
-
-配置 MCP 服务器让 Agent 在运行时发现技能：
-
-```json
-{
-  "mcpServers": {
-    "skillkit": {
-      "command": "npx",
-      "args": ["@skillkit/mcp"]
-    }
-  }
-}
-```
-
-### 记忆系统
-
-捕获会话中的学习成果：
-
-```bash
-skillkit memory compress               # 压缩会话经验
-skillkit memory search "auth patterns" # 搜索记忆
-skillkit memory export auth-patterns   # 导出记忆为技能
-```
-
-### 团队协作
-
-通过 Git 可提交的 `.skills` 清单共享：
-
-```bash
-skillkit manifest init                 # 初始化清单
-skillkit manifest add anthropics/skills  # 添加技能
-git commit -m "add team skills"        # 提交到版本控制
-# 团队成员运行：
-skillkit manifest install              # 同步安装
-```
-
----
-
-## 技能来源
-
-### 官方合作方
-
-| 仓库 | 说明 |
-|------|------|
-| `anthropics/skills` | 官方 Claude Code 技能 |
-| `vercel-labs/agent-skills` | Next.js 和 React 技能 |
-| `expo/skills` | Expo 移动开发技能 |
-| `supabase/agent-skills` | 数据库和认证技能 |
-| `stripe/ai` | 支付集成模式 |
-
-### 社区贡献
-
-`trailofbits/skills`、`ComposioHQ/awesome-claude-skills`、`better-auth/skills` 等众多社区技能仓库。
+<Aside type="tip">
+详细的 SkillKit 教程请查看 [SkillKit 跨平台管理](/tutorials/skillkit/)，涵盖安装、市场、翻译、推荐、Primer、测试、配置等所有功能。
+</Aside>
 
 ---
 

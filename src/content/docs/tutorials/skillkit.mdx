@@ -1,0 +1,767 @@
+---
+title: SkillKit 跨平台管理
+description: 使用 SkillKit 在 44+ AI Agent 之间安装、翻译和共享技能
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## 什么是 SkillKit？
+
+SkillKit 是 AI Agent 技能的**开源包管理器**。不同 Agent 使用不同格式——Claude Code 用 `.claude/skills/`，Cursor 用 `.mdc`，Copilot 用 `.github/skills/`。SkillKit 让你**写一次技能，部署到 44 个 Agent**。
+
+<CardGrid>
+  <Card title="15,000+ 技能" icon="open-book">
+    从精选市场安装技能，涵盖 PDF 处理、代码审查等。
+  </Card>
+  <Card title="跨平台翻译" icon="puzzle">
+    自动在 44 种 Agent 格式之间转换，无需手动改写。
+  </Card>
+  <Card title="智能推荐" icon="magnifier">
+    分析项目技术栈，推荐最相关的技能。
+  </Card>
+  <Card title="安全扫描" icon="warning">
+    46+ 检测规则，安装前扫描提示注入、硬编码密钥等威胁。
+  </Card>
+</CardGrid>
+
+---
+
+## 安装
+
+<Tabs>
+<TabItem label="无需安装（推荐）">
+
+```bash
+npx skillkit@latest
+```
+
+</TabItem>
+<TabItem label="全局安装">
+
+```bash
+npm install -g skillkit    # npm
+pnpm add -g skillkit       # pnpm
+yarn global add skillkit   # yarn
+bun add -g skillkit        # bun
+```
+
+`skillkit` 和 `sk` 均可作为命令别名。
+
+</TabItem>
+</Tabs>
+
+**要求**：Node.js 18+（TUI 需要 Bun 1.2+）
+
+验证安装：
+
+```bash
+skillkit --version
+```
+
+---
+
+## 快速开始
+
+<Steps>
+1. 初始化项目：
+   ```bash
+   cd my-project
+   skillkit init
+   ```
+   `init` 会自动检测你的 AI Agent、创建技能目录、保存偏好。
+
+2. 获取推荐：
+   ```bash
+   skillkit recommend
+   ```
+
+3. 安装技能：
+   ```bash
+   skillkit install anthropics/skills
+   ```
+
+4. 部署同步：
+   ```bash
+   skillkit sync
+   ```
+</Steps>
+
+### init 创建的内容
+
+| Agent | 技能目录 | 配置文件 |
+|-------|---------|---------|
+| Claude Code | `.claude/skills/` | `.claude/config.json` |
+| Cursor | `.cursor/skills/` | `.cursor/config.mdc` |
+| Codex | `.codex/skills/` | `AGENTS.md` |
+| GitHub Copilot | `.github/skills/` | — |
+| Universal | `skills/` | `AGENTS.md` |
+
+```bash
+skillkit init --agent cursor   # 指定 Agent
+skillkit init --list           # 显示所有 44 个支持的 Agent
+skillkit init --quiet          # 静默模式（CI 用）
+```
+
+---
+
+## 技能生命周期
+
+技能经过 6 个阶段：
+
+| 阶段 | 说明 |
+|------|------|
+| 发现 | 扫描目录查找 SKILL.md 文件 |
+| 质量评估 | 产生 0-100 分（A-F 等级） |
+| 解析 | 提取 YAML frontmatter 和 Markdown 内容 |
+| 翻译 | 转换为 Agent 特定格式 |
+| 安装 | 部署到 Agent 目录并跟踪元数据 |
+| 测试 | 14+ 断言类型验证技能 |
+
+### 质量评估
+
+技能在四个维度评分：
+
+| 维度 | 分值 | 评估内容 |
+|------|------|----------|
+| 结构 | 25 分 | Frontmatter 完整性、Markdown 分节 |
+| 清晰度 | 30 分 | 描述质量、指令精确度 |
+| 具体性 | 30 分 | 具体示例、可操作步骤 |
+| 高级 | 15 分 | 测试覆盖、版本信息、示例 |
+
+等级：A (90-100)、B (80-89)、C (70-79)、D (60-69)、F (低于 60)
+
+---
+
+## 技能市场
+
+浏览和安装 15,000+ 精选技能：
+
+```bash
+skillkit marketplace                        # 浏览市场
+skillkit marketplace search "react hooks"   # 搜索
+skillkit marketplace --tags typescript,testing  # 按标签过滤
+skillkit marketplace refresh                # 刷新索引
+```
+
+### 从市场安装
+
+```bash
+skillkit install anthropics/skills                        # 安装整个仓库
+skillkit install anthropics/skills --skills pdf,xlsx      # 指定技能
+skillkit install anthropics/skills --agent claude-code,cursor  # 指定 Agent
+```
+
+### 安装来源
+
+```bash
+skillkit install anthropics/skills          # GitHub
+skillkit install gitlab:team/skills         # GitLab
+skillkit install ./my-local-skills          # 本地路径
+```
+
+### 发布技能
+
+**自托管（推荐）**——生成 RFC 8615 well-known URI 结构：
+
+```bash
+skillkit create my-skill          # 创建技能
+skillkit validate my-skill        # 验证
+skillkit publish ./my-skill --output ./public  # 生成托管结构
+```
+
+生成的目录：
+
+```
+.well-known/skills/
+  index.json              # 技能清单，用于自动发现
+  my-skill/
+    SKILL.md              # 技能内容
+```
+
+部署到你的域名后，用户可以通过 `skillkit add https://your-domain.com` 安装。
+
+**提交到 SkillKit 市场**：
+
+```bash
+skillkit publish submit    # 打开 GitHub Issue 等待审核
+```
+
+### 官方技能来源
+
+| 仓库 | 说明 |
+|------|------|
+| `anthropics/skills` | PDF、XLSX、DOCX 处理 |
+| `vercel-labs/agent-skills` | React/Next.js 最佳实践 |
+| `expo/skills` | Expo 移动开发 |
+| `supabase/agent-skills` | 数据库和认证 |
+| `stripe/ai` | 支付集成模式 |
+
+---
+
+## 跨平台翻译
+
+SkillKit 使用适配器模式在 44 种 Agent 格式间自动转换：
+
+```bash
+skillkit translate react-patterns --to cursor     # 单个技能
+skillkit translate --all --to windsurf            # 所有技能
+skillkit translate my-skill --to codex --dry-run  # 预览模式
+```
+
+### 批量翻译
+
+```bash
+skillkit agent translate --source ./my-skills --to cursor
+skillkit agent translate --source ./skills --to cursor --recursive
+```
+
+### 格式映射
+
+| 源格式 | 目标格式 | 说明 |
+|--------|---------|------|
+| SKILL.md | .mdc | Cursor 格式 |
+| SKILL.md | Markdown | GitHub Copilot |
+| .mdc | SKILL.md | 反向转换 |
+
+<Aside>
+每个适配器实现 `getConfigPath()`（返回技能目录）和 `generateConfig()`（转换内容格式）。
+</Aside>
+
+---
+
+## 智能推荐
+
+SkillKit 分析你的项目结构、依赖和代码模式来推荐技能：
+
+```bash
+skillkit recommend                     # 基本推荐
+skillkit recommend --search "auth"     # 按关键词过滤
+skillkit recommend --category security # 按分类过滤
+skillkit recommend --min-score 80      # 最低分过滤
+```
+
+### 可解释推荐
+
+```bash
+skillkit recommend --explain
+```
+
+输出示例：
+
+```
+vercel-react-best-practices (Score: 92)
+├── Matched: React, TypeScript, Next.js
+├── Your stack: Next.js 14, React 18
+└── Path: Frontend > React > Best Practices
+```
+
+### LLM 推理推荐
+
+```bash
+skillkit recommend --reasoning    # 基于 LLM 的语义推荐
+```
+
+### 评分维度
+
+| 信号 | 权重 | 说明 |
+|------|------|------|
+| 技术栈匹配 | — | 框架、语言、工具 |
+| 质量评分 | 0-100 | 技能质量等级 |
+| 流行度 | — | GitHub stars + 安装量 |
+| 任务相关性 | — | 与当前任务的匹配度 |
+
+---
+
+## Primer：自动生成 Agent 指令
+
+Primer 分析代码库，自动为所有 44 个 Agent 生成优化指令：
+
+```bash
+skillkit primer                              # 分析当前项目
+skillkit primer --agent claude,cursor,windsurf  # 指定 Agent
+skillkit primer --all-agents                 # 所有 44 个 Agent
+skillkit primer --dry-run                    # 预览不写入
+```
+
+### 检测内容
+
+| 类别 | 检测项 |
+|------|--------|
+| 技术栈 | React、Next.js、Vue、TypeScript、Python 等框架和语言 |
+| 构建工具 | Vite、Webpack、Turbopack、esbuild |
+| 项目模式 | 架构（Monorepo/微服务）、代码风格、目录结构 |
+| 最佳实践 | 测试设置、Linting、文档、Git 工作流 |
+
+### 生成结果
+
+| Agent | 生成文件 |
+|-------|---------|
+| Claude Code | `.claude/CLAUDE.md` |
+| Cursor | `.cursor/.cursorrules` |
+| GitHub Copilot | `.github/copilot-instructions.md` |
+| Codex | `.codex/instructions.md` |
+| + 41 更多 | 各自原生格式 |
+
+### 增量更新和 CI 集成
+
+```bash
+skillkit primer --incremental    # 仅在检测到变更时更新
+skillkit primer --force          # 强制重新生成
+```
+
+<Aside type="tip">
+可以创建 `.skillkit/primer-config.json` 自定义检测规则、排除目录和 Agent 优先级。
+</Aside>
+
+---
+
+## 工作流编排
+
+将技能组合为多步骤流程：
+
+```bash
+skillkit workflow list           # 列出工作流
+skillkit workflow run <name>     # 运行工作流
+skillkit workflow create <name>  # 创建工作流
+```
+
+### 工作流定义
+
+```yaml
+name: feature-development
+description: 完整功能开发工作流
+steps:
+  - name: plan
+    skill: planning
+  - name: implement
+    skill: coding-standards
+  - name: test
+    skill: testing-patterns
+  - name: review
+    skill: code-review
+```
+
+### 条件执行和并行执行
+
+```yaml
+steps:
+  # 条件步骤
+  - name: security
+    skill: security-audit
+    condition: "files.any('**/*.ts')"
+
+  # 并行步骤
+  - name: checks
+    parallel:
+      - skill: linting
+      - skill: testing
+```
+
+---
+
+## 测试框架
+
+SkillKit 内置测试框架，支持 14+ 断言类型：
+
+```bash
+skillkit test              # 运行所有测试
+skillkit test ./my-skill   # 测试指定技能
+skillkit test --tags unit  # 按标签过滤
+skillkit test --json       # CI 输出格式
+```
+
+### 测试文件
+
+在技能目录中创建 `test.yaml`：
+
+```yaml
+name: my-skill-tests
+skill: my-skill
+tests:
+  - name: validates input
+    input: |
+      Process this file
+    assertions:
+      - contains: "processed"
+      - not_contains: "error"
+```
+
+### 断言类型
+
+| 断言 | 说明 |
+|------|------|
+| `contains` | 文本包含 |
+| `not_contains` | 文本不包含 |
+| `matches` | 正则匹配 |
+| `starts_with` | 前缀检查 |
+| `ends_with` | 后缀检查 |
+| `has_section` | Markdown 分节存在 |
+| `has_code_block` | 代码块存在 |
+| `word_count_min` / `max` | 词数范围 |
+| `no_todos` | 无 TODO 注释 |
+| `has_frontmatter` | YAML frontmatter 存在 |
+
+---
+
+## 安全扫描
+
+安装前扫描技能中的威胁——提示注入、硬编码密钥、命令注入等：
+
+```bash
+skillkit scan ./my-skill                     # 46+ 检测规则
+skillkit scan ./my-skill --format sarif      # GitHub Code Scanning 格式
+skillkit scan ./my-skill --fail-on high      # CI 门禁
+```
+
+---
+
+## MCP 服务器
+
+通过 Model Context Protocol 让 Agent 在运行时原生发现技能：
+
+<Tabs>
+<TabItem label="Claude Desktop">
+
+添加到 `~/Library/Application Support/Claude/claude_desktop_config.json`：
+
+```json
+{
+  "mcpServers": {
+    "skillkit": {
+      "command": "npx",
+      "args": ["@skillkit/mcp"]
+    }
+  }
+}
+```
+
+</TabItem>
+<TabItem label="Cursor">
+
+添加到项目 `.cursor/mcp.json`：
+
+```json
+{
+  "mcpServers": {
+    "skillkit": {
+      "command": "npx",
+      "args": ["@skillkit/mcp"]
+    }
+  }
+}
+```
+
+</TabItem>
+<TabItem label="通用">
+
+```bash
+npx @skillkit/mcp    # stdio 传输，兼容任何 MCP 客户端
+```
+
+</TabItem>
+</Tabs>
+
+### 可用工具
+
+连接后 Agent 获得 4 个工具：
+
+| 工具 | 说明 |
+|------|------|
+| `search_skills` | 搜索技能，按相关性排序 |
+| `get_skill` | 获取特定技能的完整详情 |
+| `recommend_skills` | 基于技术栈的个性化推荐 |
+| `list_categories` | 浏览所有分类及数量 |
+
+还暴露两个只读资源：`skills://trending`（Top 20）和 `skills://categories`。
+
+---
+
+## REST API
+
+启动 HTTP 服务器用于运行时技能发现：
+
+```bash
+skillkit serve                    # 启动在 http://localhost:3737
+skillkit serve --port 8080        # 自定义端口
+```
+
+### 主要端点
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/search?q=...` | 搜索技能 |
+| POST | `/search` | 带过滤器搜索 |
+| GET | `/skills/:owner/:repo/:id` | 获取特定技能 |
+| GET | `/trending?limit=20` | 热门技能 |
+| GET | `/categories` | 技能分类 |
+| GET | `/health` | 服务器健康检查 |
+| GET | `/docs` | Swagger UI |
+| GET | `/openapi.json` | OpenAPI 规范 |
+
+### 排名算法
+
+| 信号 | 分值 | 说明 |
+|------|------|------|
+| 内容 | 40 分 | 有描述和 SKILL.md 内容 |
+| 查询匹配 | 30 分 | 名称/描述与搜索词的匹配度 |
+| 流行度 | 15 分 | GitHub stars + 安装量（对数缩放） |
+| 引用 | 15 分 | 有示例文件、文档或资源 |
+
+限流：每 IP 每分钟 60 次请求。内置 LRU 内存缓存。
+
+---
+
+## 会话智能
+
+### 记忆系统
+
+捕获会话学习成果，永久保存：
+
+```bash
+skillkit memory compress                # 压缩会话经验
+skillkit memory search "auth patterns"  # 搜索记忆
+skillkit memory export auth-patterns    # 导出为技能
+```
+
+### 会话追踪
+
+```bash
+skillkit timeline                # 统一事件流
+skillkit session handoff         # Agent 间上下文传递
+skillkit lineage                 # 技能影响图谱
+skillkit session explain         # 人类可读的会话摘要
+skillkit activity                # 技能活动日志
+```
+
+---
+
+## 配置
+
+SkillKit 使用 5 层配置（优先级从低到高）：
+
+1. 代码中的默认值
+2. 全局用户偏好 (`~/.skillkit/preferences.json`)
+3. 项目设置 (`skillkit.yaml`)
+4. 环境变量
+5. CLI 标志
+
+### 项目配置
+
+在项目根目录创建 `skillkit.yaml`：
+
+```yaml
+version: 1
+agent: cursor              # 覆盖自动检测
+autoSync: true             # 变更时自动同步
+enabledSkills:
+  - pdf
+  - xlsx
+  - react-patterns
+sources:
+  - anthropics/skills
+  - vercel-labs/agent-skills
+```
+
+### 环境变量
+
+| 变量 | 用途 |
+|------|------|
+| `SKILLKIT_AGENT` | 覆盖默认 Agent |
+| `SKILLKIT_DIR` | 自定义 SkillKit 目录 |
+| `SKILLKIT_DEBUG` | 启用调试日志 |
+
+### 配置文件
+
+```bash
+skillkit settings --set agent=cursor
+skillkit settings --set autoSync=true
+skillkit settings --get agent
+```
+
+### 配置 Profile
+
+为不同环境创建不同配置：
+
+```yaml
+profiles:
+  development:
+    agent: claude
+    autoSync: true
+  production:
+    agent: universal
+    autoSync: false
+```
+
+```bash
+skillkit --profile production sync
+```
+
+---
+
+## Mesh 网络
+
+跨机器分布 Agent，使用加密 P2P：
+
+```bash
+skillkit mesh init       # 初始化
+skillkit mesh discover   # 发现节点
+```
+
+---
+
+## 自定义 Agent
+
+创建和管理自定义 AI 子 Agent：
+
+```bash
+skillkit agent list              # 列出 Agent
+skillkit agent create <name>     # 创建 Agent
+skillkit agent translate         # 翻译格式
+skillkit agent validate          # 验证
+```
+
+### Agent 定义
+
+```yaml
+name: my-agent
+description: 自定义任务 Agent
+format: skill.md
+skillsDir: .my-agent/skills/
+capabilities:
+  - code-generation
+  - code-review
+triggers:
+  - pattern: "create component"
+    action: generate-component
+```
+
+---
+
+## CI/CD 集成
+
+<Tabs>
+<TabItem label="GitHub Actions">
+
+```yaml
+name: SkillKit
+on: [push, pull_request]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install -g skillkit
+      - run: skillkit validate
+      - run: skillkit test --json > results.json
+```
+
+</TabItem>
+<TabItem label="GitLab CI">
+
+```yaml
+validate-skills:
+  image: node:20
+  script:
+    - npm install -g skillkit
+    - skillkit validate
+    - skillkit test
+```
+
+</TabItem>
+<TabItem label="Pre-commit">
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: skillkit-validate
+        name: Validate Skills
+        entry: skillkit validate
+        language: system
+```
+
+</TabItem>
+</Tabs>
+
+```bash
+skillkit cicd init --provider github   # 生成 CI 模板
+skillkit cicd init --provider gitlab
+```
+
+---
+
+## 团队协作
+
+通过 Git 可提交的 `.skills` 清单文件共享技能：
+
+```bash
+skillkit manifest init                 # 创建 .skills 文件
+skillkit manifest add anthropics/skills  # 添加技能
+git commit -m "add team skills"
+```
+
+团队成员运行 `skillkit manifest install` 即可同步。
+
+### 清单文件格式
+
+```yaml
+version: 1
+skills:
+  - source: anthropics/skills
+    skills: [pdf, xlsx]
+  - source: vercel-labs/agent-skills
+    skills: [react-patterns]
+```
+
+---
+
+## Terminal UI
+
+交互式终端界面管理技能：
+
+```bash
+skillkit ui
+```
+
+快捷键：`h` 主页 · `m` 市场 · `r` 推荐 · `t` 翻译 · `i` 已安装 · `s` 同步 · `q` 退出
+
+<Aside>
+TUI 需要 Bun 运行时：`bun add -g @gmickel/flow-next-tui`
+</Aside>
+
+---
+
+## Chrome 扩展
+
+从浏览器直接将网页保存为技能：
+
+<Steps>
+1. 构建扩展：`pnpm --filter @skillkit/extension build`
+2. Chrome → `chrome://extensions` → 加载已解压的扩展 → 选择 `packages/extension/dist/`
+3. 点击扩展图标或右键 → "Save page as Skill"
+</Steps>
+
+扩展将页面 URL 发送到 SkillKit API 进行服务端提取，生成的 SKILL.md 自动下载。然后运行 `skillkit install ~/Downloads/skillkit-skills/my-skill` 部署到所有 Agent。
+
+---
+
+## 支持的 Agent（44 个）
+
+| Agent | 格式 | 目录 |
+|-------|------|------|
+| Claude Code | SKILL.md | `.claude/skills/` |
+| Cursor | .mdc | `.cursor/skills/` |
+| Codex | SKILL.md | `.codex/skills/` |
+| Gemini CLI | SKILL.md | `.gemini/skills/` |
+| OpenCode | SKILL.md | `.opencode/skills/` |
+| GitHub Copilot | Markdown | `.github/skills/` |
+| Windsurf | Markdown | `.windsurf/skills/` |
+| Devin | Markdown | `.devin/skills/` |
+| Aider | SKILL.md | `.aider/skills/` |
+| Sourcegraph Cody | SKILL.md | `.cody/skills/` |
+| Amazon Q | SKILL.md | `.amazonq/skills/` |
+
+另外还有 33 个：Amp、Antigravity、Augment Code、Bolt、Clawdbot、Cline、CodeBuddy、CodeGPT、CommandCode、Continue、Crush、Droid、Factory、Goose、Kilo Code、Kiro CLI、Lovable、MCPJam、Mux、Neovate、OpenHands、Pi、PlayCode、Qoder、Qwen、Replit Agent、Roo Code、Tabby、Tabnine、Trae、Vercel、Zencoder、Universal。

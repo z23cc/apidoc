@@ -1,0 +1,729 @@
+---
+title: SkillKit Cross-platform Manager
+description: Install, translate, and share skills across 44+ AI agents with SkillKit
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## What is SkillKit?
+
+SkillKit is the **open source package manager** for AI agent skills. Different agents use different formats — Claude Code uses `.claude/skills/`, Cursor uses `.mdc`, Copilot uses `.github/skills/`. SkillKit lets you **write a skill once, deploy it to 44 agents**.
+
+<CardGrid>
+  <Card title="15,000+ Skills" icon="open-book">
+    Install from a curated marketplace covering PDF processing, code review, and more.
+  </Card>
+  <Card title="Cross-platform Translation" icon="puzzle">
+    Auto-convert between 44 agent formats — no manual rewriting.
+  </Card>
+  <Card title="Smart Recommendations" icon="magnifier">
+    Analyzes your project stack and suggests the most relevant skills.
+  </Card>
+  <Card title="Security Scanning" icon="warning">
+    46+ detection rules scan for prompt injection, hardcoded secrets, and more before install.
+  </Card>
+</CardGrid>
+
+---
+
+## Installation
+
+<Tabs>
+<TabItem label="No install needed (Recommended)">
+
+```bash
+npx skillkit@latest
+```
+
+</TabItem>
+<TabItem label="Global install">
+
+```bash
+npm install -g skillkit    # npm
+pnpm add -g skillkit       # pnpm
+yarn global add skillkit   # yarn
+bun add -g skillkit        # bun
+```
+
+Both `skillkit` and `sk` work as command aliases.
+
+</TabItem>
+</Tabs>
+
+**Requirements**: Node.js 18+ (Bun 1.2+ for the TUI)
+
+Verify:
+
+```bash
+skillkit --version
+```
+
+---
+
+## Quick Start
+
+<Steps>
+1. Initialize your project:
+   ```bash
+   cd my-project
+   skillkit init
+   ```
+   `init` auto-detects your AI agent, creates the skills folder, and saves preferences.
+
+2. Get recommendations:
+   ```bash
+   skillkit recommend
+   ```
+
+3. Install skills:
+   ```bash
+   skillkit install anthropics/skills
+   ```
+
+4. Deploy and sync:
+   ```bash
+   skillkit sync
+   ```
+</Steps>
+
+### What init creates
+
+| Agent | Skills Directory | Config |
+|-------|-----------------|--------|
+| Claude Code | `.claude/skills/` | `.claude/config.json` |
+| Cursor | `.cursor/skills/` | `.cursor/config.mdc` |
+| Codex | `.codex/skills/` | `AGENTS.md` |
+| GitHub Copilot | `.github/skills/` | — |
+| Universal | `skills/` | `AGENTS.md` |
+
+```bash
+skillkit init --agent cursor   # Specify agent
+skillkit init --list           # Show all 44 supported agents
+skillkit init --quiet          # Silent mode (for CI)
+```
+
+---
+
+## Skill Lifecycle
+
+Skills progress through 6 stages:
+
+| Stage | Description |
+|-------|-------------|
+| Discovery | Scans directories for SKILL.md files |
+| Quality Evaluation | Produces 0-100 scores (grades A-F) |
+| Parsing | Extracts YAML frontmatter and Markdown content |
+| Translation | Converts to agent-specific formats |
+| Installation | Deploys to agent directories with metadata tracking |
+| Testing | 14+ assertion types validate skills |
+
+### Quality Evaluation
+
+Skills are scored across four weighted dimensions:
+
+| Dimension | Points | What It Measures |
+|-----------|--------|-----------------|
+| Structure | 25 | Frontmatter completeness, markdown sections |
+| Clarity | 30 | Description quality, instruction precision |
+| Specificity | 30 | Concrete examples, actionable steps |
+| Advanced | 15 | Test coverage, version info, examples |
+
+Grades: A (90-100), B (80-89), C (70-79), D (60-69), F (below 60)
+
+---
+
+## Marketplace
+
+Browse and install from 15,000+ curated skills:
+
+```bash
+skillkit marketplace                        # Browse
+skillkit marketplace search "react hooks"   # Search
+skillkit marketplace --tags typescript,testing  # Filter by tags
+skillkit marketplace refresh                # Refresh index
+```
+
+### Install from Marketplace
+
+```bash
+skillkit install anthropics/skills                        # Full repo
+skillkit install anthropics/skills --skills pdf,xlsx      # Specific skills
+skillkit install anthropics/skills --agent claude-code,cursor  # Specific agents
+```
+
+### Install Sources
+
+```bash
+skillkit install anthropics/skills          # GitHub
+skillkit install gitlab:team/skills         # GitLab
+skillkit install ./my-local-skills          # Local path
+```
+
+### Publish Skills
+
+**Self-host (Recommended)** — generate RFC 8615 well-known URI structure:
+
+```bash
+skillkit create my-skill
+skillkit validate my-skill
+skillkit publish ./my-skill --output ./public
+```
+
+Creates:
+
+```
+.well-known/skills/
+  index.json              # Skill manifest for auto-discovery
+  my-skill/
+    SKILL.md
+```
+
+Deploy to your domain. Users install via `skillkit add https://your-domain.com`.
+
+**Submit to marketplace**:
+
+```bash
+skillkit publish submit    # Opens GitHub issue for review
+```
+
+### Official Skill Sources
+
+| Repository | Description |
+|------------|-------------|
+| `anthropics/skills` | PDF, XLSX, DOCX processing |
+| `vercel-labs/agent-skills` | React/Next.js best practices |
+| `expo/skills` | Mobile development with Expo |
+| `supabase/agent-skills` | Database and auth |
+| `stripe/ai` | Payment integration patterns |
+
+---
+
+## Cross-platform Translation
+
+SkillKit uses an adapter pattern to auto-convert between 44 agent formats:
+
+```bash
+skillkit translate react-patterns --to cursor     # Single skill
+skillkit translate --all --to windsurf            # All skills
+skillkit translate my-skill --to codex --dry-run  # Preview mode
+```
+
+### Batch Translation
+
+```bash
+skillkit agent translate --source ./my-skills --to cursor
+skillkit agent translate --source ./skills --to cursor --recursive
+```
+
+### Format Mapping
+
+| Source | Target | Notes |
+|--------|--------|-------|
+| SKILL.md | .mdc | Cursor format |
+| SKILL.md | Markdown | GitHub Copilot |
+| .mdc | SKILL.md | Reverse conversion |
+
+---
+
+## Smart Recommendations
+
+SkillKit analyzes your project structure, dependencies, and code patterns:
+
+```bash
+skillkit recommend                     # Basic recommendations
+skillkit recommend --search "auth"     # Filter by keyword
+skillkit recommend --category security # Filter by category
+skillkit recommend --min-score 80      # Minimum score filter
+```
+
+### Explainable Recommendations
+
+```bash
+skillkit recommend --explain
+```
+
+```
+vercel-react-best-practices (Score: 92)
+├── Matched: React, TypeScript, Next.js
+├── Your stack: Next.js 14, React 18
+└── Path: Frontend > React > Best Practices
+```
+
+### LLM-based Reasoning
+
+```bash
+skillkit recommend --reasoning    # Semantic LLM-based discovery
+```
+
+---
+
+## Primer: Auto-generate Agent Instructions
+
+Primer analyzes your codebase and generates optimized instructions for all 44 agents:
+
+```bash
+skillkit primer                              # Analyze current project
+skillkit primer --agent claude,cursor,windsurf  # Specific agents
+skillkit primer --all-agents                 # All 44 agents
+skillkit primer --dry-run                    # Preview without writing
+```
+
+### What Primer Detects
+
+| Category | Detection Items |
+|----------|----------------|
+| Tech Stack | React, Next.js, Vue, TypeScript, Python, etc. |
+| Build Tools | Vite, Webpack, Turbopack, esbuild |
+| Project Patterns | Architecture (monorepo/microservices), code style, directory structure |
+| Best Practices | Testing setup, linting, documentation, Git workflow |
+
+### Generated Files
+
+| Agent | Generated File |
+|-------|---------------|
+| Claude Code | `.claude/CLAUDE.md` |
+| Cursor | `.cursor/.cursorrules` |
+| GitHub Copilot | `.github/copilot-instructions.md` |
+| Codex | `.codex/instructions.md` |
+| + 41 more | Native format for each |
+
+```bash
+skillkit primer --incremental    # Update only when changes detected
+skillkit primer --force          # Force regeneration
+```
+
+---
+
+## Workflow Orchestration
+
+Compose skills into multi-step processes:
+
+```bash
+skillkit workflow list           # List workflows
+skillkit workflow run <name>     # Run workflow
+skillkit workflow create <name>  # Create workflow
+```
+
+### Workflow Definition
+
+```yaml
+name: feature-development
+description: Complete feature development workflow
+steps:
+  - name: plan
+    skill: planning
+  - name: implement
+    skill: coding-standards
+  - name: test
+    skill: testing-patterns
+  - name: review
+    skill: code-review
+```
+
+### Conditional and Parallel Execution
+
+```yaml
+steps:
+  # Conditional step
+  - name: security
+    skill: security-audit
+    condition: "files.any('**/*.ts')"
+
+  # Parallel steps
+  - name: checks
+    parallel:
+      - skill: linting
+      - skill: testing
+```
+
+---
+
+## Testing Framework
+
+Built-in testing with 14+ assertion types:
+
+```bash
+skillkit test              # Run all tests
+skillkit test ./my-skill   # Test specific skill
+skillkit test --tags unit  # Filter by tag
+skillkit test --json       # CI output format
+```
+
+### Test File
+
+Create `test.yaml` alongside your skill:
+
+```yaml
+name: my-skill-tests
+skill: my-skill
+tests:
+  - name: validates input
+    input: |
+      Process this file
+    assertions:
+      - contains: "processed"
+      - not_contains: "error"
+```
+
+### Assertion Types
+
+| Assertion | Description |
+|-----------|-------------|
+| `contains` | Text present |
+| `not_contains` | Text absent |
+| `matches` | Regex match |
+| `starts_with` / `ends_with` | Prefix/suffix check |
+| `has_section` | Markdown section exists |
+| `has_code_block` | Code block with language |
+| `word_count_min` / `max` | Word count range |
+| `no_todos` | No TODO comments |
+| `has_frontmatter` | YAML frontmatter present |
+
+---
+
+## Security Scanning
+
+Scan skills for threats before installation — prompt injection, hardcoded secrets, command injection:
+
+```bash
+skillkit scan ./my-skill                     # 46+ detection rules
+skillkit scan ./my-skill --format sarif      # GitHub Code Scanning format
+skillkit scan ./my-skill --fail-on high      # CI gate
+```
+
+---
+
+## MCP Server
+
+Native agent discovery via Model Context Protocol:
+
+<Tabs>
+<TabItem label="Claude Desktop">
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "skillkit": {
+      "command": "npx",
+      "args": ["@skillkit/mcp"]
+    }
+  }
+}
+```
+
+</TabItem>
+<TabItem label="Cursor">
+
+Add to `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "skillkit": {
+      "command": "npx",
+      "args": ["@skillkit/mcp"]
+    }
+  }
+}
+```
+
+</TabItem>
+<TabItem label="Any MCP client">
+
+```bash
+npx @skillkit/mcp    # stdio transport
+```
+
+</TabItem>
+</Tabs>
+
+### Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `search_skills` | Search skills, ranked by relevance |
+| `get_skill` | Get full details for a specific skill |
+| `recommend_skills` | Personalized recommendations based on stack |
+| `list_categories` | Browse all categories with counts |
+
+Also exposes read-only resources: `skills://trending` (Top 20) and `skills://categories`.
+
+---
+
+## REST API
+
+Start an HTTP server for runtime skill discovery:
+
+```bash
+skillkit serve                    # Start at http://localhost:3737
+skillkit serve --port 8080        # Custom port
+```
+
+### Key Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/search?q=...` | Search skills |
+| POST | `/search` | Search with filters |
+| GET | `/skills/:owner/:repo/:id` | Get specific skill |
+| GET | `/trending?limit=20` | Trending skills |
+| GET | `/categories` | Skill categories |
+| GET | `/health` | Server health check |
+| GET | `/docs` | Swagger UI |
+| GET | `/openapi.json` | OpenAPI spec |
+
+### Ranking Algorithm
+
+| Signal | Points | What It Measures |
+|--------|--------|-----------------|
+| Content | 40 | Has description and SKILL.md body |
+| Query match | 30 | Name/description match to search |
+| Popularity | 15 | GitHub stars + installs (log-scaled) |
+| References | 15 | Has example files, docs, or resources |
+
+Rate limit: 60 requests/minute/IP. Built-in LRU memory cache.
+
+---
+
+## Session Intelligence
+
+### Memory System
+
+Capture session learnings permanently:
+
+```bash
+skillkit memory compress                # Compress session learnings
+skillkit memory search "auth patterns"  # Search memory
+skillkit memory export auth-patterns    # Export as a skill
+```
+
+### Session Tracking
+
+```bash
+skillkit timeline                # Unified event stream
+skillkit session handoff         # Agent-to-agent context transfer
+skillkit lineage                 # Skill impact graph
+skillkit session explain         # Human-readable session summary
+skillkit activity                # Skill activity log
+```
+
+---
+
+## Configuration
+
+SkillKit uses 5-layer configuration (lowest to highest priority):
+
+1. Default values in code
+2. Global user preferences (`~/.skillkit/preferences.json`)
+3. Project settings (`skillkit.yaml`)
+4. Environment variables
+5. CLI flags
+
+### Project Configuration
+
+Create `skillkit.yaml` in your project root:
+
+```yaml
+version: 1
+agent: cursor              # Override auto-detection
+autoSync: true             # Sync on changes
+enabledSkills:
+  - pdf
+  - xlsx
+  - react-patterns
+sources:
+  - anthropics/skills
+  - vercel-labs/agent-skills
+```
+
+### Environment Variables
+
+| Variable | Purpose |
+|----------|---------|
+| `SKILLKIT_AGENT` | Override default agent |
+| `SKILLKIT_DIR` | Custom SkillKit directory |
+| `SKILLKIT_DEBUG` | Enable debug logging |
+
+### Configuration Profiles
+
+```yaml
+profiles:
+  development:
+    agent: claude
+    autoSync: true
+  production:
+    agent: universal
+    autoSync: false
+```
+
+```bash
+skillkit --profile production sync
+```
+
+---
+
+## CI/CD Integration
+
+<Tabs>
+<TabItem label="GitHub Actions">
+
+```yaml
+name: SkillKit
+on: [push, pull_request]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install -g skillkit
+      - run: skillkit validate
+      - run: skillkit test --json > results.json
+```
+
+</TabItem>
+<TabItem label="GitLab CI">
+
+```yaml
+validate-skills:
+  image: node:20
+  script:
+    - npm install -g skillkit
+    - skillkit validate
+    - skillkit test
+```
+
+</TabItem>
+<TabItem label="Pre-commit">
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: skillkit-validate
+        name: Validate Skills
+        entry: skillkit validate
+        language: system
+```
+
+</TabItem>
+</Tabs>
+
+```bash
+skillkit cicd init --provider github   # Generate CI templates
+skillkit cicd init --provider gitlab
+```
+
+---
+
+## Team Collaboration
+
+Share skills via a Git-committable `.skills` manifest:
+
+```bash
+skillkit manifest init
+skillkit manifest add anthropics/skills
+git commit -m "add team skills"
+```
+
+Team members run `skillkit manifest install` to sync.
+
+### Manifest Format
+
+```yaml
+version: 1
+skills:
+  - source: anthropics/skills
+    skills: [pdf, xlsx]
+  - source: vercel-labs/agent-skills
+    skills: [react-patterns]
+```
+
+---
+
+## Terminal UI
+
+Interactive terminal interface for skill management:
+
+```bash
+skillkit ui
+```
+
+Keys: `h` Home · `m` Marketplace · `r` Recommend · `t` Translate · `i` Installed · `s` Sync · `q` Quit
+
+---
+
+## Chrome Extension
+
+Save any webpage as a skill from your browser:
+
+<Steps>
+1. Build: `pnpm --filter @skillkit/extension build`
+2. Chrome → `chrome://extensions` → Load unpacked → select `packages/extension/dist/`
+3. Click the extension icon or right-click → "Save page as Skill"
+</Steps>
+
+The extension sends the page URL to the SkillKit API for server-side extraction. The resulting SKILL.md downloads automatically. Then run `skillkit install ~/Downloads/skillkit-skills/my-skill` to deploy.
+
+---
+
+## Mesh Network
+
+Distribute agents across machines with encrypted P2P:
+
+```bash
+skillkit mesh init       # Initialize
+skillkit mesh discover   # Discover peers
+```
+
+---
+
+## Custom Agents
+
+Create and manage custom AI sub-agents:
+
+```bash
+skillkit agent list              # List agents
+skillkit agent create <name>     # Create agent
+skillkit agent translate         # Translate format
+skillkit agent validate          # Validate
+```
+
+### Agent Definition
+
+```yaml
+name: my-agent
+description: Custom task agent
+format: skill.md
+skillsDir: .my-agent/skills/
+capabilities:
+  - code-generation
+  - code-review
+triggers:
+  - pattern: "create component"
+    action: generate-component
+```
+
+---
+
+## Supported Agents (44)
+
+| Agent | Format | Directory |
+|-------|--------|-----------|
+| Claude Code | SKILL.md | `.claude/skills/` |
+| Cursor | .mdc | `.cursor/skills/` |
+| Codex | SKILL.md | `.codex/skills/` |
+| Gemini CLI | SKILL.md | `.gemini/skills/` |
+| OpenCode | SKILL.md | `.opencode/skills/` |
+| GitHub Copilot | Markdown | `.github/skills/` |
+| Windsurf | Markdown | `.windsurf/skills/` |
+| Devin | Markdown | `.devin/skills/` |
+| Aider | SKILL.md | `.aider/skills/` |
+| Sourcegraph Cody | SKILL.md | `.cody/skills/` |
+| Amazon Q | SKILL.md | `.amazonq/skills/` |
+
+Plus 33 more: Amp, Antigravity, Augment Code, Bolt, Clawdbot, Cline, CodeBuddy, CodeGPT, CommandCode, Continue, Crush, Droid, Factory, Goose, Kilo Code, Kiro CLI, Lovable, MCPJam, Mux, Neovate, OpenHands, Pi, PlayCode, Qoder, Qwen, Replit Agent, Roo Code, Tabby, Tabnine, Trae, Vercel, Zencoder, Universal.

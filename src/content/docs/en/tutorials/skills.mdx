@@ -244,151 +244,18 @@ Research $ARGUMENTS thoroughly:
 
 SkillKit is the open source package manager for AI agent skills. Write a skill once, deploy to **44+ agents** — Claude, Cursor, Copilot, Windsurf, Devin, Codex, and more.
 
-### Installation
-
-<Tabs>
-<TabItem label="npm">
-
 ```bash
-npm install -g skillkit
-```
-
-</TabItem>
-<TabItem label="pnpm">
-
-```bash
-pnpm add -g skillkit
-```
-
-</TabItem>
-<TabItem label="No install">
-
-```bash
-npx skillkit@latest
-```
-
-</TabItem>
-</Tabs>
-
-### Quick Start
-
-```bash
+npx skillkit@latest                    # No install needed
 skillkit init                          # Detect agents, create dirs
-skillkit recommend                     # Get smart suggestions
-skillkit install anthropics/skills     # Install from marketplace
+skillkit install anthropics/skills     # Install from 15,000+ skill marketplace
 skillkit sync                          # Deploy to your agents
 ```
 
-### Supported Agents
+SkillKit also provides cross-platform translation, smart recommendations, security scanning, MCP integration, REST API, memory system, workflow orchestration, CI/CD integration, and more.
 
-| Agent | Format | Directory |
-|-------|--------|-----------|
-| Claude Code | SKILL.md | `.claude/skills/` |
-| Cursor | .mdc | `.cursor/skills/` |
-| Codex | SKILL.md | `.codex/skills/` |
-| Gemini CLI | SKILL.md | `.gemini/skills/` |
-| GitHub Copilot | Markdown | `.github/skills/` |
-| Windsurf | Markdown | `.windsurf/skills/` |
-| Devin | Markdown | `.devin/skills/` |
-
-Plus Aider, Amazon Q, Cody, and **37+ more agents**.
-
-### Core Commands
-
-```bash
-# Install and manage
-skillkit install <source>              # Install skills (GitHub/GitLab/local)
-skillkit remove <skills>               # Remove skills
-skillkit translate <skill> --to cursor # Translate skill format
-skillkit sync                          # Sync to all agents
-
-# Discovery
-skillkit marketplace                   # Browse marketplace (15,000+ skills)
-skillkit recommend                     # Project-based smart recommendations
-skillkit find <query>                  # Quick search
-
-# AI generation
-skillkit generate                      # AI skill generation wizard
-skillkit primer --all-agents           # Auto-generate agent instruction files
-```
-
-### Cross-platform Translation
-
-Write once, deploy everywhere:
-
-```bash
-# Write for Claude, deploy to Cursor
-skillkit translate my-skill --to cursor
-
-# Translate all skills to Windsurf format
-skillkit translate --all --to windsurf
-```
-
-### Smart Recommendations
-
-SkillKit analyzes your project, detects your stack, and suggests relevant skills:
-
-```bash
-skillkit recommend
-# 92% vercel-react-best-practices
-# 87% tailwind-v4-patterns
-# 85% nextjs-app-router
-```
-
-### MCP Integration
-
-Configure MCP server for runtime skill discovery:
-
-```json
-{
-  "mcpServers": {
-    "skillkit": {
-      "command": "npx",
-      "args": ["@skillkit/mcp"]
-    }
-  }
-}
-```
-
-### Memory System
-
-Capture session learnings:
-
-```bash
-skillkit memory compress               # Compress session learnings
-skillkit memory search "auth patterns" # Search memory
-skillkit memory export auth-patterns   # Export memory as a skill
-```
-
-### Team Collaboration
-
-Share skills via a Git-committable `.skills` manifest:
-
-```bash
-skillkit manifest init                 # Initialize manifest
-skillkit manifest add anthropics/skills  # Add skills
-git commit -m "add team skills"        # Commit to version control
-# Team members run:
-skillkit manifest install              # Sync install
-```
-
----
-
-## Skill Sources
-
-### Official Partners
-
-| Repository | Description |
-|------------|-------------|
-| `anthropics/skills` | Official Claude Code skills |
-| `vercel-labs/agent-skills` | Next.js and React skills |
-| `expo/skills` | Mobile development with Expo |
-| `supabase/agent-skills` | Database and auth skills |
-| `stripe/ai` | Payment integration patterns |
-
-### Community
-
-`trailofbits/skills`, `ComposioHQ/awesome-claude-skills`, `better-auth/skills`, and many more community skill repositories.
+<Aside type="tip">
+For the full SkillKit tutorial, see [SkillKit Cross-platform Manager](/en/tutorials/skillkit/) covering installation, marketplace, translation, recommendations, Primer, testing, configuration, and all features.
+</Aside>
 
 ---
 
