@@ -7,9 +7,9 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: 'Claude Code API 教程',
-			defaultLocale: 'zh-cn',
+			defaultLocale: 'root',
 			locales: {
-				'zh-cn': {
+				root: {
 					label: '简体中文',
 					lang: 'zh-CN',
 				},

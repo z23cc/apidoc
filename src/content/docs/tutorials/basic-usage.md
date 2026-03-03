@@ -95,4 +95,4 @@ Claude Code 可以直接操作你的文件：
 
 ## 下一步
 
-了解更多 [常用命令](/zh-cn/tutorials/commands/) 来提高你的开发效率。
+了解更多 [常用命令](/tutorials/commands/) 来提高你的开发效率。

@@ -90,4 +90,4 @@ claude config set theme dark
 
 ## 下一步
 
-安装完成后，前往 [基本用法](/zh-cn/tutorials/basic-usage/) 了解如何高效使用 Claude Code。
+安装完成后，前往 [基本用法](/tutorials/basic-usage/) 了解如何高效使用 Claude Code。

@@ -37,4 +37,4 @@ Claude Code 默认使用最新的 Claude 模型：
 
 ## 下一步
 
-准备好开始了吗？前往 [安装配置](/zh-cn/guides/installation/) 页面开始安装 Claude Code。
+准备好开始了吗？前往 [安装配置](/guides/installation/) 页面开始安装 Claude Code。
