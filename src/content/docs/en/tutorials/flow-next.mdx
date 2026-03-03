@@ -1,0 +1,363 @@
+---
+title: Flow-Next Task Orchestration
+description: Plan-driven AI agent orchestration and task management with Flow-Next
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## What is Flow-Next?
+
+Flow-Next is a **zero-dependency AI agent orchestration plugin** designed for Claude Code, with full support for Factory Droid, Codex CLI, and OpenCode. It uses a **plan-first workflow** with built-in task tracking, dependency graphs, context re-anchoring, and cross-model reviews.
+
+All state lives in your project's `.flow/` directory — no external services needed.
+
+<CardGrid>
+  <Card title="Zero Dependencies" icon="rocket">
+    Bundled flowctl.py — no external CLI, no npm packages. Just Python 3.
+  </Card>
+  <Card title="Re-anchoring" icon="approve-check-circle">
+    Before every task, re-reads epic specs and git state to prevent context drift.
+  </Card>
+  <Card title="Cross-model Review" icon="magnifier">
+    Uses a different AI model for code review — two models catch what one misses.
+  </Card>
+  <Card title="Non-invasive" icon="close">
+    No hooks, no daemons, no CLAUDE.md edits. Delete .flow/ to fully uninstall.
+  </Card>
+</CardGrid>
+
+---
+
+## Installation
+
+<Tabs>
+<TabItem label="Claude Code (Recommended)">
+
+<Steps>
+1. Add the plugin marketplace:
+   ```bash
+   /plugin marketplace add https://github.com/gmickel/gmickel-claude-marketplace
+   ```
+
+2. Install Flow-Next:
+   ```bash
+   /plugin install flow-next
+   ```
+</Steps>
+
+</TabItem>
+<TabItem label="Factory Droid">
+
+```bash
+droid plugin marketplace add https://github.com/gmickel/gmickel-claude-marketplace
+```
+
+Then install flow-next from the plugin UI.
+
+</TabItem>
+<TabItem label="Codex CLI">
+
+```bash
+git clone https://github.com/gmickel/gmickel-claude-marketplace
+./scripts/install-codex.sh flow-next
+```
+
+Installs 20 multi-agent roles to `~/.codex/`.
+
+</TabItem>
+</Tabs>
+
+**Requirements:**
+- Python 3.8+ and git
+- (Optional) Codex CLI or RepoPrompt (macOS) for cross-model reviews
+
+---
+
+## Core Workflow: Plan → Work → Ship
+
+Flow-Next's workflow has three phases:
+
+### Step 1: Plan
+
+```bash
+/flow-next:plan
+```
+
+The planning phase runs **7 research scouts in parallel**, gathering context from multiple sources:
+
+| Scout | Purpose | Model |
+|-------|---------|-------|
+| `repo-scout` | Finds existing patterns and conventions | Opus |
+| `practice-scout` | Gathers modern best practices | Opus |
+| `docs-scout` | Finds relevant framework docs | Opus |
+| `github-scout` | Cross-repo code search | Opus |
+| `epic-scout` | Detects epic dependencies | Haiku |
+| `docs-gap-scout` | Identifies docs needing updates | Haiku |
+| `memory-scout` | Retrieves project learnings | Haiku |
+
+Planning produces `.flow/specs/fn-N.md` containing the epic specification and dependency-ordered task graph.
+
+<Aside type="tip">
+Optionally run `/flow-next:interview` before planning to conduct a deep requirements interview with 40+ questions to surface requirements and design decisions.
+</Aside>
+
+### Step 2: Work
+
+```bash
+/flow-next:work fn-1       # Execute entire epic
+/flow-next:work fn-1.1     # Execute single task
+```
+
+Each task execution loop:
+
+<Steps>
+1. **Re-anchor**: Re-read epic spec + task spec + git state
+2. **Implement**: Follow existing code patterns
+3. **Test**: Verify acceptance criteria
+4. **Review**: Run impl-review
+5. **Record**: Log summary + evidence via flowctl
+6. **Sync**: plan-sync updates downstream tasks
+</Steps>
+
+<Aside>
+You can work **task-by-task** for maximum control, or throw the **entire epic** at Flow-Next. Both get re-anchoring, reviews, and evidence recording.
+</Aside>
+
+### Step 3: Ship
+
+```bash
+/flow-next:epic-review
+```
+
+After all tasks are done, run epic review to:
+- Extract all requirements from the spec
+- Verify each requirement against the code
+- Fix gaps inline (loops until passing)
+- Set status to `ship`, epic closes
+
+---
+
+## Command Reference
+
+| Command | Description |
+|---------|-------------|
+| `/flow-next:plan` | Research and produce epic with dependency-ordered tasks |
+| `/flow-next:work` | Execute tasks one by one with re-anchoring |
+| `/flow-next:interview` | Deep interview to flesh out spec (optional) |
+| `/flow-next:plan-review` | Carmack-level plan review |
+| `/flow-next:impl-review` | Carmack-level implementation review |
+| `/flow-next:epic-review` | Epic completion review |
+| `/flow-next:prime` | Assess codebase agent-readiness |
+| `/flow-next:sync` | Update downstream tasks after implementation drift |
+| `/flow-next:ralph-init` | Scaffold autonomous operation loop (Ralph mode) |
+
+### flowctl CLI
+
+Skills call flowctl automatically. You can also use it directly:
+
+```bash
+# Setup
+flowctl init                          # Create .flow/ directory
+flowctl detect                        # Check if initialized
+
+# Workflow
+flowctl ready --epic fn-1             # Check ready/blocked tasks
+flowctl start fn-1.1                  # Claim a task
+flowctl done fn-1.1 --summary-file s.md  # Complete a task
+
+# Validation
+flowctl validate --all                # CI gate
+```
+
+---
+
+## .flow/ Directory Structure
+
+```
+.flow/
+├── meta.json              # Schema version
+├── config.json            # Opt-in feature config
+├── epics/
+│   └── fn-1.json
+├── specs/
+│   └── fn-1.md            # Epic plan document
+├── tasks/
+│   ├── fn-1.1.json        # Task metadata + dependencies
+│   ├── fn-1.1.md          # Task spec + completion record
+│   └── ...
+└── memory/                # Optional
+    ├── pitfalls.md        # Auto-captured from NEEDS_WORK reviews
+    ├── conventions.md     # Project conventions
+    └── decisions.md       # Architectural decisions
+```
+
+<Aside type="tip">
+One file per task for merge-friendly structure. All state lives in `.flow/` — delete it to fully uninstall.
+</Aside>
+
+---
+
+## Key Features
+
+### Context Re-anchoring
+
+Before every task, Flow-Next forces a re-read of the epic spec, task spec, and git state, pulling the agent back to the source of truth.
+
+- **Task-level re-anchoring**: Automatic before each task starts
+- **Post-compaction re-anchoring**: Also re-anchors after context summarization
+- **Result**: No hallucinated scope creep or forgotten requirements
+
+### Cross-model Review
+
+Uses a different AI model for review, leveraging model diversity as a safety net:
+
+<Tabs>
+<TabItem label="Codex CLI (Cross-platform)">
+
+```bash
+npm i -g @openai/codex && codex auth
+```
+
+- Works on Linux, macOS, Windows
+- GPT 5.2 High reasoning by default
+- Context hints: symbols + references
+- Session continuity across fix cycles
+
+</TabItem>
+<TabItem label="RepoPrompt (macOS)">
+
+- Visual context builder UI
+- Any model via RepoPrompt interface
+- Full file context, not patches
+- Token-efficient codebase exploration
+
+</TabItem>
+</Tabs>
+
+Configure review backend:
+```bash
+flowctl config set review.backend codex    # or rp
+```
+
+### Multi-user Safety
+
+- **Scan-based IDs**: Scans existing files to allocate next ID — no shared counters
+- **Soft claims**: Tasks track assignee to prevent duplicate work
+- **Actor resolution**: Auto-detects from git email, `FLOW_ACTOR` env, or `$USER`
+
+```bash
+# Actor A claims task
+flowctl start fn-1.1                    # Sets assignee
+
+# Actor B tries same task
+flowctl start fn-1.1                    # Error: claimed by actor-a@example.com
+flowctl start fn-1.1 --force            # Override
+```
+
+---
+
+## Optional Features
+
+### Plan-Sync
+
+Automatically syncs downstream task specs when implementation drifts from the plan:
+
+```bash
+flowctl config set planSync.enabled true
+flowctl config set planSync.crossEpic true    # Cross-epic sync (off by default)
+```
+
+### Memory System
+
+Persistent learnings that survive context compaction:
+
+```bash
+flowctl config set memory.enabled true
+flowctl memory init
+```
+
+Memory types:
+- `pitfalls.md` — Auto-captured from NEEDS_WORK reviews
+- `conventions.md` — Project patterns not in CLAUDE.md
+- `decisions.md` — Architectural choices with rationale
+
+---
+
+## Ralph Mode (Autonomous)
+
+Ralph Mode is **opt-in autonomous operation** that orchestrates complete development cycles on top of the plan/work loop.
+
+```bash
+# Scaffold autonomous harness
+/flow-next:ralph-init
+
+# Run one iteration (interactive)
+./scripts/ralph/ralph_once.sh
+
+# Run overnight loop
+./scripts/ralph/ralph.sh
+```
+
+### How It Works
+
+<Steps>
+1. `flowctl next` selects the next work unit (plan gate or work gate)
+2. Launches a fresh Claude session (clean context window)
+3. Executes plan or work task until passing
+4. Records attempt count, auto-blocks stuck tasks
+5. Loops until all epics are complete
+</Steps>
+
+### Configuration
+
+Edit `scripts/ralph/config.env`:
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `BRANCH_MODE` | Branch strategy | `new` |
+| `PLAN_REVIEW` | Plan review backend | `codex` / `rp` / `none` |
+| `WORK_REVIEW` | Work review backend | `codex` / `rp` / `none` |
+| `MAX_ITERATIONS` | Max iterations | `25` |
+| `YOLO` | Skip permission prompts | `0` (safe default) |
+
+<Aside type="caution">
+`YOLO=1` skips permission prompts. Only use in sandbox/container environments with no secrets.
+</Aside>
+
+---
+
+## Agent Readiness Assessment
+
+Use `/flow-next:prime` to assess whether your codebase is ready for agent collaboration:
+
+```bash
+/flow-next:prime                # Full assessment + interactive fixes
+/flow-next:prime --report-only  # Report only
+```
+
+Covers 6 assessment pillars:
+
+| Pillar | What It Checks |
+|--------|----------------|
+| Style & Validation | Linters, formatters, type checking, pre-commit |
+| Build System | Build commands, CI, lock files |
+| Testing | Test framework, coverage, E2E |
+| Documentation | README, CLAUDE.md, ADRs |
+| Dev Environment | .env.example, Docker, devcontainer |
+| Code Quality | CONTRIBUTING, PR templates, CODEOWNERS |
+
+Maturity levels: `Minimal (<30%)` → `Functional (30-49%)` → `Standardized (50-69%)` → `Optimized (70-84%)` → `Autonomous (85%+)`
+
+---
+
+## Uninstall
+
+```bash
+# Uninstall Flow-Next
+rm -rf .flow/
+
+# If Ralph Mode was enabled
+rm -rf scripts/ralph/
+```
+
+No hooks. No config. No traces.

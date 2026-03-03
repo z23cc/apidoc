@@ -1,0 +1,363 @@
+---
+title: Flow-Next 任务编排
+description: 使用 Flow-Next 实现 AI Agent 的计划驱动任务编排与管理
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## 什么是 Flow-Next？
+
+Flow-Next 是一个**零依赖的 AI Agent 编排插件**，专为 Claude Code 设计，同时支持 Factory Droid、Codex CLI 和 OpenCode。它采用**计划驱动**的工作流，内置任务跟踪、依赖图谱、上下文重锚定和跨模型审查功能。
+
+所有状态存储在项目的 `.flow/` 目录中，无需外部服务。
+
+<CardGrid>
+  <Card title="零依赖" icon="rocket">
+    内置 flowctl.py，无需安装额外 CLI 或 npm 包，仅需 Python 3。
+  </Card>
+  <Card title="上下文重锚定" icon="approve-check-circle">
+    每个任务执行前自动重读 epic 规格和 git 状态，防止上下文漂移。
+  </Card>
+  <Card title="跨模型审查" icon="magnifier">
+    使用不同 AI 模型进行代码审查，两个模型能发现单个模型遗漏的问题。
+  </Card>
+  <Card title="非侵入式" icon="close">
+    无 hooks、无守护进程、无 CLAUDE.md 修改。删除 .flow/ 即可完全卸载。
+  </Card>
+</CardGrid>
+
+---
+
+## 安装
+
+<Tabs>
+<TabItem label="Claude Code（推荐）">
+
+<Steps>
+1. 添加插件市场：
+   ```bash
+   /plugin marketplace add https://github.com/gmickel/gmickel-claude-marketplace
+   ```
+
+2. 安装 Flow-Next：
+   ```bash
+   /plugin install flow-next
+   ```
+</Steps>
+
+</TabItem>
+<TabItem label="Factory Droid">
+
+```bash
+droid plugin marketplace add https://github.com/gmickel/gmickel-claude-marketplace
+```
+
+然后在插件界面中选择安装 flow-next。
+
+</TabItem>
+<TabItem label="Codex CLI">
+
+```bash
+git clone https://github.com/gmickel/gmickel-claude-marketplace
+./scripts/install-codex.sh flow-next
+```
+
+安装后会配置 20 个多 Agent 角色到 `~/.codex/`。
+
+</TabItem>
+</Tabs>
+
+**系统要求：**
+- Python 3.8+ 和 git
+- （可选）Codex CLI 或 RepoPrompt（macOS）用于跨模型审查
+
+---
+
+## 核心工作流：Plan → Work → Ship
+
+Flow-Next 的工作流分为三个阶段：
+
+### 第一步：Plan（规划）
+
+```bash
+/flow-next:plan
+```
+
+规划阶段会**并行启动 7 个研究 Scout**，从多个维度收集上下文：
+
+| Scout | 功能 | 模型 |
+|-------|------|------|
+| `repo-scout` | 发现现有代码模式和约定 | Opus |
+| `practice-scout` | 收集现代最佳实践 | Opus |
+| `docs-scout` | 查找相关框架文档 | Opus |
+| `github-scout` | 跨仓库代码搜索 | Opus |
+| `epic-scout` | 检测 epic 间的依赖关系 | Haiku |
+| `docs-gap-scout` | 识别需要更新的文档 | Haiku |
+| `memory-scout` | 检索项目经验教训 | Haiku |
+
+规划完成后会生成 `.flow/specs/fn-N.md` 文件，包含 epic 规格和按依赖排序的任务图。
+
+<Aside type="tip">
+可以在规划前使用 `/flow-next:interview` 进行深度需求访谈，提出 40+ 个问题来明确需求和设计决策。
+</Aside>
+
+### 第二步：Work（执行）
+
+```bash
+/flow-next:work fn-1       # 执行整个 epic
+/flow-next:work fn-1.1     # 执行单个任务
+```
+
+每个任务的执行循环：
+
+<Steps>
+1. **重锚定**：重读 epic 规格 + 任务规格 + git 状态
+2. **实现**：按照现有代码模式编写代码
+3. **测试**：验证验收标准
+4. **审查**：运行 impl-review
+5. **记录**：通过 flowctl 记录完成证据
+6. **同步**：plan-sync 更新下游任务
+</Steps>
+
+<Aside>
+你可以选择**逐个任务**执行以获得最大控制，或将**整个 epic** 交给 Flow-Next 自动处理。两种方式都有重锚定、审查和证据记录的保障。
+</Aside>
+
+### 第三步：Ship（交付）
+
+```bash
+/flow-next:epic-review
+```
+
+所有任务完成后，运行 epic 审查：
+- 从规格中提取所有需求
+- 逐一验证每个需求是否在代码中实现
+- 发现差距则自动修复（循环直到通过）
+- 设置状态为 `ship`，epic 关闭
+
+---
+
+## 命令参考
+
+| 命令 | 说明 |
+|------|------|
+| `/flow-next:plan` | 研究并生成带依赖排序任务的 epic |
+| `/flow-next:work` | 按任务逐个执行，包含重锚定 |
+| `/flow-next:interview` | 深度访谈以完善规格（可选） |
+| `/flow-next:plan-review` | Carmack 级别的计划审查 |
+| `/flow-next:impl-review` | Carmack 级别的实现审查 |
+| `/flow-next:epic-review` | Epic 完成度审查 |
+| `/flow-next:prime` | 评估代码库 Agent 就绪度 |
+| `/flow-next:sync` | 实现偏离后同步下游任务 |
+| `/flow-next:ralph-init` | 搭建自主运行循环（Ralph 模式） |
+
+### flowctl CLI
+
+Skills 会自动调用 flowctl，你也可以直接使用：
+
+```bash
+# 初始化
+flowctl init                          # 创建 .flow/ 目录
+flowctl detect                        # 检查是否已初始化
+
+# 工作流
+flowctl ready --epic fn-1             # 查看就绪/阻塞的任务
+flowctl start fn-1.1                  # 认领任务
+flowctl done fn-1.1 --summary-file s.md  # 完成任务
+
+# 验证
+flowctl validate --all                # CI 验证门禁
+```
+
+---
+
+## .flow/ 目录结构
+
+```
+.flow/
+├── meta.json              # schema 版本
+├── config.json            # 可选功能配置
+├── epics/
+│   └── fn-1.json
+├── specs/
+│   └── fn-1.md            # epic 规划文档
+├── tasks/
+│   ├── fn-1.1.json        # 任务元数据 + 依赖
+│   ├── fn-1.1.md          # 任务规格 + 完成记录
+│   └── ...
+└── memory/                # 可选
+    ├── pitfalls.md        # 从 NEEDS_WORK 审查中自动捕获
+    ├── conventions.md     # 项目约定
+    └── decisions.md       # 架构决策
+```
+
+<Aside type="tip">
+每个任务一个文件，便于 git 合并。所有状态都在 `.flow/` 中，删除即可完全卸载。
+</Aside>
+
+---
+
+## 关键特性详解
+
+### 上下文重锚定
+
+每个任务执行前，Flow-Next 会强制重读 epic 规格、任务规格和 git 状态，将 Agent 拉回原始需求。
+
+- **任务级重锚定**：每个任务开始时自动执行
+- **压缩后重锚定**：上下文被压缩/总结后也会重新锚定
+- **结果**：不再有幻觉式的范围蔓延或遗忘需求
+
+### 跨模型审查
+
+使用不同的 AI 模型进行审查，利用模型多样性作为安全网：
+
+<Tabs>
+<TabItem label="Codex CLI（跨平台）">
+
+```bash
+npm i -g @openai/codex && codex auth
+```
+
+- 支持 Linux、macOS、Windows
+- 默认使用 GPT 5.2 High 推理
+- 带上下文提示：符号 + 引用
+- 修复周期间保持会话连续性
+
+</TabItem>
+<TabItem label="RepoPrompt（macOS）">
+
+- 可视化上下文构建器 UI
+- 通过 RepoPrompt 界面支持任意模型
+- 完整文件上下文（非补丁）
+- Token 高效的代码库探索
+
+</TabItem>
+</Tabs>
+
+配置审查后端：
+```bash
+flowctl config set review.backend codex    # 或 rp
+```
+
+### 多用户协作
+
+- **扫描式 ID**：扫描现有文件分配下一个 ID，无共享计数器
+- **软认领**：任务记录 assignee，防止重复工作
+- **Actor 解析**：自动从 git email、`FLOW_ACTOR` 环境变量或 `$USER` 检测
+
+```bash
+# Actor A 认领任务
+flowctl start fn-1.1                    # 设置 assignee
+
+# Actor B 尝试同一任务
+flowctl start fn-1.1                    # 错误：已被 actor-a@example.com 认领
+flowctl start fn-1.1 --force            # 强制覆盖
+```
+
+---
+
+## 可选功能
+
+### Plan-Sync（计划同步）
+
+当实现偏离计划时，自动同步下游任务规格：
+
+```bash
+flowctl config set planSync.enabled true
+flowctl config set planSync.crossEpic true    # 跨 epic 同步（默认关闭）
+```
+
+### Memory System（记忆系统）
+
+持久化学习内容，在上下文压缩后仍然存活：
+
+```bash
+flowctl config set memory.enabled true
+flowctl memory init
+```
+
+记忆类型：
+- `pitfalls.md` — 从 NEEDS_WORK 审查中自动捕获
+- `conventions.md` — 不在 CLAUDE.md 中的项目约定
+- `decisions.md` — 带理由的架构决策
+
+---
+
+## Ralph 模式（自主运行）
+
+Ralph 模式是**可选的自主运行模式**，在 plan/work 循环之上编排完整的开发周期。
+
+```bash
+# 搭建自主运行框架
+/flow-next:ralph-init
+
+# 运行单次迭代（交互式）
+./scripts/ralph/ralph_once.sh
+
+# 运行通宵循环
+./scripts/ralph/ralph.sh
+```
+
+### 工作原理
+
+<Steps>
+1. `flowctl next` 选择下一个工作单元（plan 或 work）
+2. 启动全新的 Claude 会话（干净的上下文窗口）
+3. 执行 plan 或 work 任务直到通过
+4. 记录尝试次数，卡住时自动阻塞任务
+5. 循环直到所有 epic 完成
+</Steps>
+
+### 配置
+
+编辑 `scripts/ralph/config.env`：
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `BRANCH_MODE` | 分支策略 | `new` |
+| `PLAN_REVIEW` | 计划审查后端 | `codex` / `rp` / `none` |
+| `WORK_REVIEW` | 实现审查后端 | `codex` / `rp` / `none` |
+| `MAX_ITERATIONS` | 最大迭代次数 | `25` |
+| `YOLO` | 跳过权限提示 | `0`（安全默认） |
+
+<Aside type="caution">
+`YOLO=1` 会跳过权限提示，仅在沙箱/容器环境中使用，确保环境中无敏感信息。
+</Aside>
+
+---
+
+## Agent 就绪度评估
+
+使用 `/flow-next:prime` 评估你的代码库是否为 Agent 协作做好了准备：
+
+```bash
+/flow-next:prime              # 完整评估 + 交互式修复
+/flow-next:prime --report-only  # 仅生成报告
+```
+
+评估涵盖 6 大支柱：
+
+| 支柱 | 检查内容 |
+|------|----------|
+| 样式与验证 | Linter、Formatter、类型检查、pre-commit |
+| 构建系统 | 构建命令、CI、lock 文件 |
+| 测试 | 测试框架、覆盖率、E2E |
+| 文档 | README、CLAUDE.md、ADR |
+| 开发环境 | .env.example、Docker、devcontainer |
+| 代码质量 | CONTRIBUTING、PR 模板、CODEOWNERS |
+
+成熟度分级：`Minimal (<30%)` → `Functional (30-49%)` → `Standardized (50-69%)` → `Optimized (70-84%)` → `Autonomous (85%+)`
+
+---
+
+## 卸载
+
+```bash
+# 卸载 Flow-Next
+rm -rf .flow/
+
+# 如果启用了 Ralph 模式
+rm -rf scripts/ralph/
+```
+
+无 hooks、无配置、无残留。
