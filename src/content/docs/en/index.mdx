@@ -1,26 +1,19 @@
 ---
-title: Claude Code API Tutorial
-description: Learn how to use Claude Code — Anthropic's official CLI tool
-template: splash
-hero:
-  tagline: A comprehensive guide to Claude Code, from basics to advanced usage
-  image:
-    file: ../../../assets/houston.webp
-  actions:
-    - text: Get Started
-      link: /en/guides/introduction/
-      icon: right-arrow
-      variant: primary
-    - text: API Reference
-      link: /en/reference/api-overview/
-      variant: minimal
+title: Introduction
+description: DaMeng Relay Station - Claude Code Tutorial
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
-## Why Claude Code?
+Welcome to DaMeng Relay Station! This tutorial will help you get started with Claude Code, covering everything from installation to daily usage.
 
-<CardGrid stagger>
+## What is Claude Code?
+
+Claude Code is Anthropic's official command-line interface (CLI) tool that lets you interact with Claude AI directly in your terminal for various software engineering tasks.
+
+## Core Features
+
+<CardGrid>
   <Card title="Terminal Native" icon="terminal">
     Interact with Claude directly in your terminal, seamlessly integrated into your dev workflow.
   </Card>
@@ -33,4 +26,21 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
   <Card title="Extensible" icon="add-document">
     Support for MCP servers, custom skills, and hooks for flexible extensibility.
   </Card>
+</CardGrid>
+
+## Supported Models
+
+| Model | Description |
+|-------|-------------|
+| **Claude Opus 4.6** | Most capable, ideal for complex tasks |
+| **Claude Sonnet 4.6** | Balanced performance and speed |
+| **Claude Haiku 4.5** | Fastest, ideal for simple tasks |
+
+## Quick Start
+
+<CardGrid>
+  <LinkCard title="Installation" description="Install Claude Code on Windows, macOS, and Linux" href="/en/guides/installation/" />
+  <LinkCard title="Basic Usage" description="Learn essential Claude Code operations and tips" href="/en/tutorials/basic-usage/" />
+  <LinkCard title="Commands" description="Claude Code CLI command reference" href="/en/tutorials/commands/" />
+  <LinkCard title="API Reference" description="Claude Code tools and API overview" href="/en/reference/api-overview/" />
 </CardGrid>

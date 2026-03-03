@@ -1,26 +1,19 @@
 ---
-title: Claude Code API 教程
-description: 学习如何使用 Claude Code — Anthropic 官方 CLI 工具
-template: splash
-hero:
-  tagline: 全面的 Claude Code 使用指南，从入门到精通
-  image:
-    file: ../../assets/houston.webp
-  actions:
-    - text: 快速开始
-      link: /guides/introduction/
-      icon: right-arrow
-      variant: primary
-    - text: API 参考
-      link: /reference/api-overview/
-      variant: minimal
+title: 简介
+description: 大梦中转站 Claude Code 使用教程
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
-## 为什么选择 Claude Code？
+欢迎使用大梦中转站！本教程将帮助你快速上手 Claude Code，从安装配置到日常使用，全面覆盖。
 
-<CardGrid stagger>
+## 什么是 Claude Code？
+
+Claude Code 是 Anthropic 推出的官方命令行工具（CLI），让你可以直接在终端中与 Claude AI 进行交互式对话，完成各种软件工程任务。
+
+## 核心特性
+
+<CardGrid>
   <Card title="终端原生" icon="terminal">
     直接在终端中与 Claude 交互，无缝融入开发工作流。
   </Card>
@@ -33,4 +26,21 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
   <Card title="可扩展" icon="add-document">
     支持 MCP 服务器、自定义技能和 Hooks，灵活扩展功能。
   </Card>
+</CardGrid>
+
+## 支持的模型
+
+| 模型 | 说明 |
+|------|------|
+| **Claude Opus 4.6** | 最强大的模型，适合复杂任务 |
+| **Claude Sonnet 4.6** | 平衡性能和速度 |
+| **Claude Haiku 4.5** | 最快速度，适合简单任务 |
+
+## 快速开始
+
+<CardGrid>
+  <LinkCard title="安装配置" description="在 Windows、macOS、Linux 上安装 Claude Code" href="/guides/installation/" />
+  <LinkCard title="基本用法" description="学习 Claude Code 的基本操作和使用技巧" href="/tutorials/basic-usage/" />
+  <LinkCard title="常用命令" description="Claude Code CLI 命令速查" href="/tutorials/commands/" />
+  <LinkCard title="API 参考" description="Claude Code 工具体系和 API 概览" href="/reference/api-overview/" />
 </CardGrid>

@@ -6,7 +6,7 @@ import starlight from '@astrojs/starlight';
 export default defineConfig({
 	integrations: [
 		starlight({
-			title: 'Claude Code API 教程',
+			title: '大梦中转站使用教程',
 			defaultLocale: 'root',
 			locales: {
 				root: {
