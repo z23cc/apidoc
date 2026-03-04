@@ -1,0 +1,218 @@
+---
+title: "第三方工具"
+description: "社区 GUI、TUI、配置管理器、Token 追踪器和替代界面"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+本页面收录**社区构建的 Claude Code 扩展工具**。每个工具均已通过其公开仓库或包注册中心进行验证，仅包含有公开源代码（GitHub、npm、PyPI）的工具。
+
+<Aside>
+本页面不包含：互补 AI 工具（见 AI 生态系统教程）、DIY 监控脚本、MCP 服务器推荐（见 MCP 生态系统教程）。
+</Aside>
+
+---
+
+## Token 与成本追踪
+
+### ccusage
+
+Claude Code 最成熟的成本追踪工具。解析本地会话数据，生成按天、月、会话或 5 小时计费窗口的成本报告。
+
+| 属性 | 详情 |
+|------|------|
+| **来源** | [npm: ccusage](https://www.npmjs.com/package/ccusage) / [ccusage.com](https://ccusage.com) |
+| **安装** | `bunx ccusage`（最快）或 `npx ccusage` |
+| **语言** | TypeScript (Node.js 18+) |
+
+**核心功能**：
+
+- `ccusage daily` / `ccusage monthly` / `ccusage session` -- 聚合成本报告
+- `ccusage blocks --live` -- 实时监控 5 小时计费窗口
+- `--breakdown` 按模型分类（Opus/Sonnet/Haiku）
+- JSON 输出（`--json`）支持编程访问
+- MCP 服务器集成（`@ccusage/mcp`）
+- macOS Widget 和 Raycast 扩展
+
+**局限性**：依赖本地 JSONL 解析；成本估算可能与 Anthropic 官方账单有差异。无团队聚合功能。
+
+---
+
+### ccburn
+
+Python TUI 可视化 Token 燃烧率追踪工具，显示相对于 Claude 计费窗口的消耗速率图表。
+
+| 属性 | 详情 |
+|------|------|
+| **来源** | [GitHub: JuanjoFuchs/ccburn](https://github.com/JuanjoFuchs/ccburn) |
+| **安装** | `pip install ccburn` |
+| **语言** | Python 3.10+ (Rich + Plotext) |
+
+**何时选择 ccburn 而非 ccusage**：如果你更喜欢可视化燃烧率图表，或工具链基于 Python。
+
+---
+
+### RTK（Rust Token Killer）
+
+CLI 代理工具，在命令输出**到达** Claude 上下文之前进行过滤。446 Stars，r/ClaudeAI 700+ 赞。
+
+| 属性 | 详情 |
+|------|------|
+| **来源** | [GitHub: rtk-ai/rtk](https://github.com/rtk-ai/rtk) |
+| **安装** | `brew install rtk-ai/tap/rtk` 或 `cargo install rtk` |
+| **语言** | Rust（独立二进制） |
+
+**核心功能**：
+- `rtk git log`（92% 减少）、`rtk git status`（76% 减少）、`rtk git diff`（56% 减少）
+- 支持 vitest、prisma、pnpm、pytest、go test、cargo 等
+- `rtk gain` -- Token 节省分析
+- `rtk discover` -- 发现错过的优化机会
+
+<Aside type="tip">
+RTK **减少** Token 消耗（预处理），ccusage/ccburn **监控** Token 消耗（后处理）。两者配合使用效果最佳。
+</Aside>
+
+---
+
+## 会话管理
+
+### claude-code-viewer
+
+基于 Web 的 Claude Code 对话历史浏览 UI（JSONL 文件）。
+
+| 属性 | 详情 |
+|------|------|
+| **安装** | `npx @kimuson/claude-code-viewer` |
+| **语言** | TypeScript (Node.js 18+) |
+
+**核心功能**：
+- 项目浏览器，显示会话计数和元数据
+- 完整对话展示，带语法高亮
+- 工具使用结果内联显示
+- 通过 SSE 实时更新
+
+**局限性**：只读（无法编辑或恢复会话）。
+
+---
+
+### Entire CLI
+
+代理原生平台，支持 Git 集成的会话捕获、可回溯检查点和治理层。
+
+| 属性 | 详情 |
+|------|------|
+| **来源** | [GitHub: entireio/cli](https://github.com/entireio/cli) / [entire.io](https://entire.io) |
+| **创始人** | Thomas Dohmke（前 GitHub CEO），$6000 万融资 |
+
+**核心功能**：
+
+| 场景 | 为什么选择 Entire CLI |
+|------|----------------------|
+| **合规（SOC2、HIPAA）** | 完整审计追踪：提示 → 推理 → 输出 |
+| **多代理工作流** | 代理切换时保留上下文 |
+| **调试 AI 决策** | 回溯到检查点，检查推理过程 |
+| **治理** | 生产变更前的审批门 |
+
+**Entire CLI vs claude-code-viewer**：
+
+| 特性 | claude-code-viewer | Entire CLI |
+|------|-------------------|-----------|
+| **用途** | 只读历史查看 | 主动会话管理 + 回放 |
+| **回放** | 不支持 | 支持（回溯到检查点） |
+| **治理** | 不支持 | 支持（审批门、权限） |
+| **多代理** | 不支持 | 支持（代理交接） |
+
+---
+
+## 配置管理
+
+### claude-code-config
+
+管理 `~/.claude.json` 配置的 TUI 工具，专注于 MCP 服务器管理。
+
+| 属性 | 详情 |
+|------|------|
+| **安装** | `pip install claude-code-config` |
+| **语言** | Python (Textual TUI) |
+
+**局限性**：仅限 `~/.claude.json` 范围，不管理 hooks 或 slash commands。
+
+---
+
+### AIBlueprint
+
+CLI 脚手架工具，生成预配置的 Claude Code 设置（hooks、commands、statusline、工作流自动化）。
+
+| 属性 | 详情 |
+|------|------|
+| **安装** | `npx aiblueprint-cli` |
+| **语言** | TypeScript |
+
+**局限性**：配置选择偏主观。部分功能需要付费。不读取现有配置（从零开始生成）。
+
+---
+
+## 替代界面
+
+<CardGrid>
+  <Card title="Claude Chic" icon="laptop">
+    基于 claude-agent-sdk 的风格化终端 UI。彩色消息、可折叠工具块、Git worktree 管理、vim 键绑定。安装：`uvx claudechic`。Alpha 状态。
+  </Card>
+  <Card title="Toad" icon="laptop">
+    通用 AI 编码代理终端前端，支持 12+ 代理（Claude Code、Gemini CLI 等）。统一界面、Shell 集成、`@` 文件注入。作者：Will McGugan（Rich & Textual 作者）。
+  </Card>
+  <Card title="Conductor" icon="laptop">
+    macOS 桌面应用，通过 git worktrees 并行编排多个 Claude Code 实例。统一 diff 查看器、GitHub/Linear 集成。仅 macOS。
+  </Card>
+  <Card title="Claude Code GUI" icon="laptop">
+    第三方 VS Code 扩展（非 Anthropic 官方），在 Claude Code 之上添加图形层。注意区分 Anthropic 的官方扩展。
+  </Card>
+</CardGrid>
+
+---
+
+## 多代理编排
+
+用于运行**多个并发 Claude Code 实例**的工具：
+
+| 工具 | 类型 | 核心特性 |
+|------|------|----------|
+| [Gas Town](https://github.com/steveyegge/gastown) | 多代理工作区 | Steve Yegge 的代理优先工作区管理器 |
+| [multiclaude](https://github.com/dlorenc/multiclaude) | 多代理生成器 | tmux + git worktrees（383+ Stars） |
+| [agent-chat](https://github.com/justinabrahms/agent-chat) | 监控 UI | Gas Town/multiclaude 的实时 SSE 监控 |
+| Conductor | 桌面应用 | macOS 并行代理（上文已列出） |
+
+---
+
+## 插件生态
+
+Claude Code 的插件系统支持社区构建的扩展：
+
+- **[claude-plugins.dev](https://claude-plugins.dev)** -- 11,989 插件，63,065 技能已索引
+- **[claudemarketplaces.com](https://claudemarketplaces.com)** -- 自动扫描 GitHub 的市场插件
+- **[agentskills.io](https://agentskills.io)** -- 开放标准代理技能（26+ 平台）
+
+---
+
+## 已知空白
+
+| 空白 | 描述 |
+|------|------|
+| **可视化 Skills 编辑器** | 没有 GUI 创建/编辑 `.claude/skills/`，需手动编辑 YAML/Markdown |
+| **可视化 Hooks 编辑器** | 没有 GUI 管理 `settings.json` 中的 hooks |
+| **统一管理面板** | 没有单一仪表板整合配置、会话、成本和 MCP 管理 |
+| **每个 MCP 服务器的 Profiler** | 无法单独衡量每个 MCP 服务器的 Token 成本 |
+| **跨平台配置同步** | 没有工具在多台机器间同步 Claude Code 配置 |
+
+---
+
+## 按角色推荐
+
+| 角色 | 推荐工具 | 理由 |
+|------|----------|------|
+| **独立开发者** | ccusage + claude-code-viewer | 成本意识 + 会话历史回顾 |
+| **小团队（2-5 人）** | ccusage + Conductor/multiclaude | 成本追踪 + 并行开发 |
+| **企业级** | ccusage (MCP) + 自定义仪表板 | 编程化成本数据 + 审计追踪 |
+| **Python 为主** | ccburn + Claude Chic | 原生 Python 生态工具 |
+| **多代理用户** | Toad 或 Conductor | 统一代理管理 |
+| **配置密集型** | claude-code-config + AIBlueprint | TUI 配置管理 + 脚手架 |

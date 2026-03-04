@@ -1,0 +1,670 @@
+---
+title: Claude-Mem Persistent Memory
+description: Use the Claude-Mem plugin for persistent memory across sessions
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## What is Claude-Mem?
+
+Claude-Mem is a **persistent memory compression system** plugin for Claude Code. It automatically captures tool usage observations, generates semantic summaries, and makes them available to future sessions — enabling Claude to maintain continuity of knowledge about projects even after sessions end or reconnect.
+
+<CardGrid>
+  <Card title="Persistent Memory" icon="open-book">
+    Context automatically saved and restored across sessions — Claude never "forgets."
+  </Card>
+  <Card title="Fully Automatic" icon="approve-check-circle">
+    No manual intervention required. Automatically captures, processes, and injects context.
+  </Card>
+  <Card title="Privacy Control" icon="warning">
+    Use &lt;private&gt; tags to exclude sensitive content from storage.
+  </Card>
+  <Card title="Multilingual" icon="translate">
+    Supports 28 languages including Chinese, Japanese, French, Spanish, and more.
+  </Card>
+</CardGrid>
+
+---
+
+## Quick Install
+
+<Steps>
+1. Run the following commands in your Claude Code terminal:
+   ```bash
+   /plugin marketplace add thedotmack/claude-mem
+   /plugin install claude-mem
+   ```
+
+2. Restart Claude Code. Context from previous sessions will automatically appear in new sessions.
+</Steps>
+
+<Aside type="caution">
+Claude-Mem is published on npm, but `npm install -g claude-mem` installs the SDK/library only — it does not register plugin hooks or start the worker service. Always install via the `/plugin` commands above.
+</Aside>
+
+### System Requirements
+
+| Component | Requirement |
+|-----------|-------------|
+| Node.js | 18.0.0 or higher |
+| Claude Code | Latest version with plugin support |
+| Bun | JavaScript runtime (auto-installed if missing) |
+| SQLite 3 | Persistent storage (bundled) |
+
+### Install from Source
+
+```bash
+git clone https://github.com/thedotmack/claude-mem.git
+cd claude-mem
+npm install
+npm run build
+npm run worker:start    # Manual start (usually auto-starts)
+npm run worker:status   # Check status
+```
+
+### Data Directory
+
+Data is stored in `~/.claude-mem/`:
+
+| File | Description |
+|------|-------------|
+| `claude-mem.db` | SQLite database |
+| `.worker.pid` | PID file |
+| `.worker.port` | Port file |
+| `logs/worker-*.log` | Log files |
+| `settings.json` | Configuration |
+
+Override with environment variable: `export CLAUDE_MEM_DATA_DIR=/custom/path`
+
+---
+
+## How It Works
+
+```
+┌──────────────────────────────────────────────────────┐
+│ Session Start → Inject context from last 10 sessions │
+└──────────────────────────────────────────────────────┘
+                         ↓
+┌──────────────────────────────────────────────────────┐
+│ User Prompts → Create session, save user prompts     │
+└──────────────────────────────────────────────────────┘
+                         ↓
+┌──────────────────────────────────────────────────────┐
+│ Tool Executions → Capture observations               │
+└──────────────────────────────────────────────────────┘
+                         ↓
+┌──────────────────────────────────────────────────────┐
+│ Worker Processes → Extract learnings via Agent SDK   │
+└──────────────────────────────────────────────────────┘
+                         ↓
+┌──────────────────────────────────────────────────────┐
+│ Session Ends → Generate summary, ready for next      │
+└──────────────────────────────────────────────────────┘
+```
+
+### Core Components
+
+| Component | Description |
+|-----------|-------------|
+| 4 Lifecycle Hooks | SessionStart, UserPromptSubmit, PostToolUse, Stop |
+| Smart Install | Cached dependency checker (pre-hook script) |
+| Worker Service | HTTP API on port 37777 managed by Bun |
+| SQLite Database | Stores sessions, observations, summaries with FTS5 search |
+| MCP Search Tools | Query historical context with natural language |
+| Web Viewer UI | Real-time visualization with SSE and infinite scroll |
+
+### What Gets Captured
+
+Every time Claude uses a tool, claude-mem captures and extracts:
+
+| Field | Description |
+|-------|-------------|
+| Title | Brief description of what happened |
+| Narrative | Detailed explanation |
+| Facts | Key learnings as bullet points |
+| Concepts | Relevant tags and categories |
+| Type | Classification (decision, bugfix, feature, etc.) |
+| Files | Which files were read or modified |
+
+### Session Summaries
+
+When Claude finishes responding (triggering the Stop hook), a summary is automatically generated with:
+
+- **Request** — What you asked for
+- **Investigated** — What Claude explored
+- **Learned** — Key discoveries and insights
+- **Completed** — What was accomplished
+- **Next Steps** — What to do next
+
+---
+
+## Progressive Disclosure
+
+Context injection uses a three-layer progressive disclosure strategy for efficient token usage:
+
+### Layer 1: Index Display (Session Start)
+
+Shows observation titles with token cost estimates, grouped chronologically.
+
+**Token cost**: ~50-200 tokens
+
+### Layer 2: On-Demand Details (MCP Tools)
+
+Ask naturally: "What bugs did we fix?" or "How did we implement X?"
+
+Claude auto-invokes MCP search tools to fetch full details.
+
+**Token cost**: ~100-500 tokens per observation
+
+### Layer 3: Perfect Recall (Code Access)
+
+Read source files directly when full information is needed.
+
+---
+
+## MCP Search Tools
+
+Claude-Mem provides 4 MCP tools following a token-efficient 3-layer workflow:
+
+### The 3-Layer Workflow
+
+```
+Search → Get compact index with IDs (~50-100 tokens/result)
+    ↓
+Timeline → Get context around interesting results
+    ↓
+Get Observations → Fetch full details ONLY for filtered IDs
+```
+
+Achieves ~**10x token savings** compared to traditional RAG approaches.
+
+### search — Search Memory Index
+
+Search your memory and get a compact index with IDs.
+
+```bash
+search(query="authentication bug", type="bugfix", limit=10)
+```
+
+**Parameters**: `query`, `limit`, `offset`, `type` (bugfix/feature/decision/discovery/refactor/change), `project`, `dateStart`, `dateEnd`, `orderBy`
+
+### timeline — Get Chronological Context
+
+Get a chronological view of observations around a specific point or query.
+
+```bash
+timeline(anchor=12345, depth_before=5, depth_after=5)
+# Or search-based
+timeline(query="implemented JWT auth", depth_before=3, depth_after=3)
+```
+
+### get_observations — Fetch Full Details
+
+Fetch complete observation details by IDs. Always batch multiple IDs in a single call.
+
+```bash
+get_observations(ids=[123, 456, 789])
+```
+
+### Common Use Cases
+
+**Debugging Issues**:
+```
+1. search(query="error database connection", type="bugfix", limit=10)
+2. timeline(anchor=312, depth_before=3, depth_after=3)
+3. get_observations(ids=[312, 489])
+```
+
+**Understanding Decisions**:
+```
+1. search(query="authentication", type="decision", limit=5)
+2. get_observations(ids=[<relevant_ids>])
+```
+
+---
+
+## Claude Desktop MCP Integration
+
+Access your claude-mem memory database in Claude Desktop through MCP tools.
+
+### Configuration
+
+<Tabs>
+<TabItem label="macOS">
+
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "mcp-search": {
+      "command": "node",
+      "args": [
+        "/Users/YOUR_USERNAME/.claude/plugins/marketplaces/thedotmack/plugin/scripts/mcp-server.cjs"
+      ]
+    }
+  }
+}
+```
+
+</TabItem>
+<TabItem label="Windows">
+
+Edit `%APPDATA%\Claude\claude_desktop_config.json` with the same format but Windows paths.
+
+</TabItem>
+</Tabs>
+
+After restarting Claude Desktop, you can search past work with natural language queries.
+
+---
+
+## Private Tags
+
+Use `<private>` tags for fine-grained control over what doesn't get persisted.
+
+### Usage
+
+```xml
+<private>
+This content will not be stored in memory
+</private>
+```
+
+Claude can see and use this content during the current session, but it won't be saved as an observation.
+
+### Use Cases
+
+**Sensitive Information**:
+```xml
+Please analyze this error:
+<private>
+Error: Database connection failed
+Host: internal-db-prod.company.com
+User: admin_user
+</private>
+What might be causing this?
+```
+
+**Temporary Context**:
+```xml
+<private>
+Background: This is a hotfix for production, deadline is tomorrow
+</private>
+Help me fix this bug quickly.
+```
+
+### Technical Details
+
+| Filtered | Not Filtered |
+|----------|--------------|
+| User prompt storage | Session summaries |
+| Tool input parameters | Claude's responses |
+| Tool response output | |
+| All searchable content | |
+
+<Aside>
+Tags are stripped during storage, not from the live conversation. Claude sees full content including &lt;private&gt; tags during the session.
+</Aside>
+
+---
+
+## Folder Context Files
+
+Claude-Mem can automatically generate `CLAUDE.md` files in project folders, providing directory-level context.
+
+<Aside type="caution">
+This feature is disabled by default. Enable it in settings.
+</Aside>
+
+### Enable
+
+Edit `~/.claude-mem/settings.json`:
+
+```json
+{
+  "CLAUDE_MEM_FOLDER_CLAUDEMD_ENABLED": "true"
+}
+```
+
+### Generated Content
+
+Each folder's `CLAUDE.md` contains an activity timeline:
+
+```markdown
+<claude-mem-context>
+# Recent Activity
+
+### Jan 4, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #1234 | 4:30 PM | 🔵 | Implemented user authentication | ~250 |
+| #1235 | " | 🔴 | Fixed login redirect bug | ~180 |
+</claude-mem-context>
+```
+
+**User content preservation**: Content outside `<claude-mem-context>` tags is preserved during regeneration.
+
+**Project root exclusion**: Directories containing `.git` are excluded to avoid overwriting hand-written project documentation.
+
+### Cleanup Mode
+
+```bash
+# Preview (dry run)
+bun scripts/regenerate-claude-md.ts --clean --dry-run
+
+# Actually clean
+bun scripts/regenerate-claude-md.ts --clean
+```
+
+---
+
+## Memory Export/Import
+
+Share knowledge across claude-mem installations with automatic duplicate prevention.
+
+### Export
+
+```bash
+# Export Windows-related memories
+npx tsx scripts/export-memories.ts "windows" windows-memories.json
+
+# Export bug fixes
+npx tsx scripts/export-memories.ts "bugfix" bugfixes.json
+
+# Filter by project
+npx tsx scripts/export-memories.ts "auth" auth.json --project=myapp
+```
+
+### Import
+
+```bash
+npx tsx scripts/import-memories.ts windows-memories.json
+```
+
+Re-importing automatically skips existing records.
+
+### Safety Features
+
+- Duplicate prevention — won't re-import existing records
+- Transactional — all-or-nothing imports
+- Read-only export — export script opens database in read-only mode
+- Dependency ordering — sessions imported before observations/summaries
+
+---
+
+## Manual Recovery
+
+Recover observations stuck in the processing queue after worker crashes or system restarts.
+
+### CLI Tool
+
+```bash
+# Interactive check and recovery
+bun scripts/check-pending-queue.ts
+
+# Auto-process without prompts
+bun scripts/check-pending-queue.ts --process
+
+# Limit to 5 sessions
+bun scripts/check-pending-queue.ts --process --limit 5
+```
+
+### HTTP API
+
+```bash
+# Check queue status
+curl http://localhost:37777/api/pending-queue
+
+# Trigger recovery
+curl -X POST http://localhost:37777/api/pending-queue/process \
+  -H "Content-Type: application/json" \
+  -d '{"sessionLimit": 10}'
+```
+
+### Queue States
+
+| State | Description |
+|-------|-------------|
+| pending | Queued, waiting to process |
+| processing | Currently being processed by SDK agent |
+| processed | Completed successfully |
+| failed | Failed after 3 retry attempts |
+
+Messages in `processing` state for more than 5 minutes are considered stuck and automatically reset to `pending`.
+
+---
+
+## AI Providers
+
+Claude-Mem supports three AI providers for observation extraction:
+
+<Tabs>
+<TabItem label="Claude (Default)">
+
+Uses Claude Agent SDK. Default choice for Claude Code subscribers.
+
+```json
+{
+  "CLAUDE_MEM_PROVIDER": "claude",
+  "CLAUDE_MEM_MODEL": "sonnet"
+}
+```
+
+Available model shorthands: `haiku` (fast), `sonnet` (balanced, default), `opus` (most capable)
+
+</TabItem>
+<TabItem label="Gemini (Free)">
+
+Google Gemini API with generous free tier.
+
+```json
+{
+  "CLAUDE_MEM_PROVIDER": "gemini",
+  "CLAUDE_MEM_GEMINI_API_KEY": "your-api-key",
+  "CLAUDE_MEM_GEMINI_MODEL": "gemini-2.5-flash-lite"
+}
+```
+
+| Model | Free RPM | Notes |
+|-------|----------|-------|
+| gemini-2.5-flash-lite | 10 | Default, recommended |
+| gemini-2.5-flash | 5 | Higher capability |
+| gemini-3-flash-preview | 5 | Latest model |
+
+<Aside type="tip">
+Get a free API Key at [Google AI Studio](https://aistudio.google.com) — no credit card required. Enable billing to unlock higher rate limits (1000-4000 RPM).
+</Aside>
+
+</TabItem>
+<TabItem label="OpenRouter">
+
+Unified API to access 100+ models, including several free options.
+
+```json
+{
+  "CLAUDE_MEM_PROVIDER": "openrouter",
+  "CLAUDE_MEM_OPENROUTER_API_KEY": "sk-or-v1-your-key",
+  "CLAUDE_MEM_OPENROUTER_MODEL": "xiaomi/mimo-v2-flash:free"
+}
+```
+
+**Recommended free models**:
+
+| Model | Parameters | Context |
+|-------|-----------|---------|
+| Xiaomi MiMo-V2-Flash | 309B (MoE) | 256K |
+| Gemini 2.0 Flash | — | 1M |
+| DeepSeek R1 | 671B | 64K |
+| Llama 3.1 70B | 70B | 128K |
+
+</TabItem>
+</Tabs>
+
+**Provider switching**: Switch providers anytime without restarting. If the selected provider errors, it automatically falls back to Claude SDK.
+
+---
+
+## Cursor IDE Integration
+
+Claude-Mem also supports Cursor IDE — **no Claude Code subscription required**.
+
+### Installation
+
+<Tabs>
+<TabItem label="Cursor Users (No Claude Code)">
+
+```bash
+git clone https://github.com/thedotmack/claude-mem.git
+cd claude-mem && bun install && bun run build
+bun run cursor:setup    # Interactive setup wizard
+```
+
+</TabItem>
+<TabItem label="Claude Code Users">
+
+```bash
+/plugin marketplace add thedotmack/claude-mem
+/plugin install claude-mem
+claude-mem cursor install
+```
+
+</TabItem>
+</Tabs>
+
+### Quick Commands
+
+| Command | Description |
+|---------|-------------|
+| `bun run cursor:setup` | Interactive setup wizard |
+| `bun run cursor:install` | Install Cursor hooks |
+| `bun run cursor:uninstall` | Remove Cursor hooks |
+| `bun run cursor:status` | Check hook installation status |
+
+---
+
+## Mode System
+
+Claude-Mem uses a flexible mode system to adapt behavior and language.
+
+### Configuration
+
+```json
+{
+  "CLAUDE_MEM_MODE": "code--zh"
+}
+```
+
+### Available Modes
+
+| Mode | ID | Description |
+|------|-----|-------------|
+| Code (Default) | `code` | Standard software development |
+| Code Chill | `code--chill` | Fewer observations, only records important items |
+| Email Investigation | `email-investigation` | Email analysis mode |
+
+### Multilingual Code Modes
+
+Use `code--language_code` format to switch languages:
+
+| Language | Mode ID |
+|----------|---------|
+| Chinese | `code--zh` |
+| Japanese | `code--ja` |
+| Korean | `code--ko` |
+| French | `code--fr` |
+| German | `code--de` |
+| Spanish | `code--es` |
+| Russian | `code--ru` |
+
+28 languages supported in total. Modes use the `--` separator for inheritance — child modes override specific parent mode settings.
+
+---
+
+## Endless Mode (Beta)
+
+Experimental biomimetic memory architecture that dramatically extends Claude's context retention.
+
+<Aside type="caution">
+Endless Mode is experimental and not included in the stable release. You must manually switch to the beta branch.
+</Aside>
+
+### The Problem
+
+In standard Claude Code sessions, tool outputs accumulate in the context window. After ~50 tool uses, the context fills up (~200k tokens), forcing a new session. This is O(N&sup2;) complexity.
+
+### How It Works
+
+Endless Mode uses a two-tier memory system:
+
+| Tier | Storage | Content |
+|------|---------|---------|
+| Working Memory | Context window | Compressed observations (~500 tokens each) |
+| Archive Memory | Disk transcript | Full tool outputs (searchable) |
+
+After each tool use, it blocks until the worker generates a compressed observation, replacing the full output. This transforms O(N&sup2;) scaling into O(N).
+
+### How to Enable
+
+```bash
+cd ~/.claude/plugins/marketplaces/thedotmack/
+git checkout beta/endless-mode
+npm install
+npm run worker:restart
+```
+
+---
+
+## Configuration Reference
+
+### Core Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `CLAUDE_MEM_MODEL` | `sonnet` | AI model |
+| `CLAUDE_MEM_PROVIDER` | `claude` | AI provider |
+| `CLAUDE_MEM_MODE` | `code` | Active mode |
+| `CLAUDE_MEM_CONTEXT_OBSERVATIONS` | `50` | Number of observations to inject |
+| `CLAUDE_MEM_WORKER_PORT` | `37777` | Worker service port |
+| `CLAUDE_MEM_SKIP_TOOLS` | `ListMcpResourcesTool,...` | Tools to exclude |
+
+### System Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `CLAUDE_MEM_DATA_DIR` | `~/.claude-mem` | Data directory |
+| `CLAUDE_MEM_LOG_LEVEL` | `INFO` | Log level |
+
+---
+
+## Troubleshooting
+
+### Worker Service Not Starting
+
+```bash
+npm run worker:status     # Check status
+npm run worker:logs       # View logs
+npm run worker:restart    # Restart
+lsof -i :37777           # Check port usage
+```
+
+### Web Viewer Not Loading
+
+```bash
+curl http://localhost:37777/health    # Verify health
+npm run worker:restart               # Restart worker
+```
+
+### No Context Appearing
+
+- Ensure worker is running: `npm run worker:status`
+- Visit `http://localhost:37777` to check for observations
+- Verify your API key is configured correctly
+
+### Install Cache Issues
+
+```bash
+rm ~/.claude/plugins/marketplaces/thedotmack/.install-version
+cd ~/.claude/plugins/marketplaces/thedotmack && npm install --force
+```

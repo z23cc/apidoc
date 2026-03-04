@@ -1,0 +1,423 @@
+---
+title: "AI Code Traceability & Attribution"
+description: "Standards, tools, and compliance strategies for AI-generated code attribution"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+As AI-generated code becomes ubiquitous, projects need clear attribution policies. This guide covers industry standards (LLVM, Ghostty, Fedora), practical tools, and implementation templates.
+
+---
+
+## Why Traceability Matters Now
+
+### AI Code Halflife
+
+Research on git-ai tracked repositories reveals a striking metric: the **AI Code Halflife** is approximately **3.33 years** (median). This means half of AI-generated code gets replaced within 3.33 years -- faster than typical code churn.
+
+Why? AI code often:
+- Lacks deep understanding of project architecture
+- Uses generic patterns that do not fit specific contexts
+- Requires rework when requirements evolve
+- Gets replaced as developers understand the problem better
+
+### Four Drivers for Traceability
+
+| Driver | Concern | Stakeholder |
+|--------|---------|-------------|
+| **Audit & Compliance** | SOC2, HIPAA, regulated industries need provenance | Legal, Security |
+| **Code Review Efficiency** | AI code often needs more scrutiny | Maintainers |
+| **Legal/Copyright** | Training data provenance, license ambiguity | Legal |
+| **Debugging** | Understanding "why" behind AI choices | Developers |
+
+### The Attribution Gap
+
+Most AI coding tools (Copilot, Cursor, ChatGPT) leave **no trace** in version control. This creates:
+- Silent AI contributions indistinguishable from human code
+- Review burden imbalance (reviewers do not know what needs extra scrutiny)
+- Compliance gaps (auditors cannot verify AI usage)
+
+<Aside>
+Claude Code defaults to `Co-Authored-By: Claude` trailers, but this is just one point on a broader spectrum.
+</Aside>
+
+---
+
+## The Disclosure Spectrum
+
+Not all projects need the same level of attribution. Choose based on your context:
+
+| Level | Method | When to Use | Example |
+|-------|--------|-------------|---------|
+| **None** | No disclosure | Personal projects, experiments | Side project |
+| **Minimal** | `Co-Authored-By` trailer | Casual OSS, small teams | Small utility library |
+| **Standard** | `Assisted-by` trailer + PR disclosure | Team projects, active OSS | Framework contributions |
+| **Full** | git-ai + prompt preservation | Enterprise, compliance, research | Regulated industry code |
+
+### Choosing Your Level
+
+<Steps>
+1. Is this code audited? -> Standard or Full
+2. Do contributors need credit separately from AI? -> Standard+
+3. Is legal provenance important? -> Full
+4. Is this a learning project? -> Minimal is fine
+5. Public OSS with active maintainers? -> Check their policy
+</Steps>
+
+---
+
+## Attribution Methods
+
+### Co-Authored-By (Claude Code Default)
+
+The simplest method. Claude Code automatically adds this to commits:
+
+```
+feat: implement user authentication
+
+Implemented JWT-based auth with refresh tokens.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+```
+
+| Pros | Cons |
+|------|------|
+| Zero friction (automatic) | Does not distinguish extent of AI involvement |
+| Standard Git trailer (recognized by GitHub, GitLab) | No prompt/context preservation |
+| Shows in contributor graphs | Binary (AI helped or did not) |
+
+### Assisted-by Trailer (LLVM Standard)
+
+LLVM's January 2026 policy introduced a more nuanced trailer:
+
+```
+commit abc123
+Author: Jane Developer <jane@example.com>
+
+Implement RISC-V vector extension support
+
+Assisted-by: Claude (Anthropic)
+```
+
+| Aspect | Co-Authored-By | Assisted-by |
+|--------|---------------|-------------|
+| Implication | AI as co-author | Human author, AI assisted |
+| Credit | Shared authorship | Human primary author |
+| Responsibility | Ambiguous | Human accountable |
+
+### PR/MR Disclosure (Ghostty Pattern)
+
+Ghostty (terminal emulator) requires disclosure at the PR level, not commit level:
+
+```markdown
+## AI Assistance
+
+This PR was developed with assistance from Claude (Anthropic).
+Specifically:
+- Initial algorithm structure
+- Test case generation
+- Documentation drafting
+
+All code has been reviewed and understood by the author.
+```
+
+**Advantages**:
+- More context than trailers
+- Allows nuanced disclosure
+- Easier for reviewers to assess
+- Does not clutter commit history
+
+### Checkpoint Tracking (git-ai / Entire CLI)
+
+The most comprehensive approach. Creates "checkpoints" that:
+- Track which tool generated which lines
+- Enable metrics like AI Code Halflife
+- Optionally preserve prompt context
+- Survive rebase, squash, and cherry-pick
+
+---
+
+## Industry Policy Reference
+
+### LLVM "Human-in-the-Loop" (January 2026)
+
+**Core Principles**:
+1. **Human Accountability**: A human must review, understand, and take responsibility
+2. **Disclosure Required**: `Assisted-by:` trailer for significant AI assistance
+3. **No Autonomous Agents**: Fully autonomous AI contributions forbidden
+4. **Good-First-Issues Protected**: AI may not solve issues tagged for newcomers
+
+**"Extractive Contributions" Concept**:
+- **Additive**: You wrote code, AI helped refine -> OK with disclosure
+- **Extractive**: AI generates from training data -> Risky, needs extra scrutiny
+
+### Ghostty Mandatory Disclosure (August 2025)
+
+**What Requires Disclosure**:
+- AI-generated code (any amount)
+- AI-assisted research for understanding codebase
+- AI-suggested algorithms or approaches
+- AI-drafted documentation or comments
+
+**What Does Not Need Disclosure**:
+- Trivial autocomplete (single keywords)
+- IDE syntax helpers
+- Grammar/spell checking
+
+### Fedora Contributor Accountability (October 2025)
+
+- Uses RFC 2119 language: MUST, SHOULD, MAY
+- Contributors MUST take accountability for AI-generated content
+- AI is FORBIDDEN for governance (voting, proposals, policy)
+- "Substantial" AI use requires disclosure
+
+### Policy Comparison
+
+| Aspect | LLVM | Ghostty | Fedora |
+|--------|------|---------|--------|
+| **Disclosure method** | `Assisted-by` trailer | PR description | PR/commit description |
+| **Trigger** | "Significant" AI help | Any AI tool use | "Substantial" AI use |
+| **Enforcement** | Social | Social | Social |
+| **Autonomous AI** | Forbidden | Implicitly forbidden | Forbidden for governance |
+| **Newcomer protection** | Yes | No | No |
+| **Scope** | Code + RFCs | Code + docs | All contributions |
+
+---
+
+## Tools & Automation
+
+### Entire CLI
+
+Founded February 2026 by Thomas Dohmke (former GitHub CEO) with $60M funding.
+
+**What it does**:
+- Captures AI agent sessions as versioned **Checkpoints** in Git repositories
+- Stores prompts, reasoning, tool usage, and file changes with full context
+- Creates searchable, auditable record of how code was written
+- Enables session replay via rewindable checkpoints
+- Supports agent-to-agent handoffs with context preservation
+
+```bash
+# 1. Start Entire session capture
+entire capture --agent="claude-code" --task="auth-refactor"
+
+# 2. Work normally in Claude Code
+claude
+
+# 3. Create named checkpoint
+entire checkpoint --name="jwt-implemented"
+
+# 4. View session history
+entire log
+
+# 5. Rewind to any checkpoint if needed
+entire rewind --to="jwt-implemented"
+```
+
+| Scenario | Value |
+|----------|-------|
+| Compliance/Audit | Full traceability: prompts -> reasoning -> code |
+| Multi-Agent Workflows | Context preserved across agent switches |
+| Debugging | Rewind to checkpoint, inspect prompts/reasoning |
+| Team Handoffs | New developer resumes with full AI session history |
+
+### Automated Attribution Hook
+
+Add `Assisted-by` trailer automatically when Claude Code commits:
+
+```bash
+# .claude/hooks/post-commit.sh
+#!/bin/bash
+
+LAST_COMMIT=$(git log -1 --format="%H")
+COMMIT_MSG=$(git log -1 --format="%B")
+
+# Check if already has attribution trailer
+if echo "$COMMIT_MSG" | grep -q "Assisted-by:\|Co-Authored-By:"; then
+    exit 0
+fi
+
+# Append trailer
+git commit --amend -m "$COMMIT_MSG
+
+Assisted-by: Claude (Anthropic)"
+```
+
+### CI/CD Integration
+
+GitHub Action to verify disclosure:
+
+```yaml
+# .github/workflows/ai-disclosure-check.yml
+name: AI Disclosure Check
+
+on:
+  pull_request:
+    types: [opened, edited]
+
+jobs:
+  check-disclosure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check AI disclosure section
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body || '';
+            const hasDisclosure = body.includes('## AI Assistance') ||
+                                  body.includes('AI-generated') ||
+                                  body.includes('Assisted-by');
+
+            if (!hasDisclosure) {
+              core.warning('No AI disclosure section found.');
+            }
+```
+
+<Aside type="tip">
+This is a soft check (warning, not failure). Hard enforcement risks false positives.
+</Aside>
+
+---
+
+## Security Implications
+
+### PromptPwnd Vulnerability
+
+**Attack vector**:
+1. Attacker adds malicious instructions in a file (hidden comment, README, etc.)
+2. Developer uses AI assistant that reads repository files
+3. AI follows malicious instructions (exfiltrate secrets, inject backdoors)
+4. Developer unknowingly commits compromised code
+
+**Mitigations**:
+
+| Mitigation | Effectiveness | Implementation |
+|------------|---------------|----------------|
+| Sandbox AI execution | High | Use Claude Code container mode |
+| Review AI-generated diffs | Medium | Always review before commit |
+| Restrict file access | Medium | Configure allowed paths |
+| Audit dependencies | Medium | Review new deps carefully |
+
+### Non-Determinism Risk
+
+Same prompt to same model can produce different code.
+
+| Concern | Mitigation |
+|---------|------------|
+| Cannot recreate exact AI output | Store prompts with commits |
+| Hard to understand "why this code" | Use git-ai checkpoints |
+| Auditors cannot verify AI generation claims | Preserve session logs |
+
+<Aside type="caution">
+For compliance-critical code, preserve: exact prompts used, model version, timestamp, and session context.
+</Aside>
+
+---
+
+## Implementation Guide
+
+### Quick Start (Solo Developer)
+
+<Steps>
+1. **Already using Claude Code?** You are done -- `Co-Authored-By` is automatic
+
+2. **Want more granularity?** Add to your commit template:
+
+   ```bash
+   git config --global commit.template ~/.gitmessage
+   ```
+
+   ```
+   # ~/.gitmessage
+   # Subject line
+
+   # Body
+
+   # Assisted-by: (tool name, if applicable)
+   ```
+
+3. **Want metrics?** Install git-ai:
+
+   ```bash
+   npm install -g git-ai
+   git-ai init
+   ```
+</Steps>
+
+### Team Adoption
+
+<Steps>
+1. **Add policy to CONTRIBUTING.md**
+
+2. **Create PR template** with AI disclosure checkbox
+
+3. **Discuss in team meeting**:
+   - What level of disclosure?
+   - Trailer format preference?
+   - CI enforcement (warning vs. block)?
+
+4. **Start with warnings, not blocks**: People forget, false positives frustrate, social enforcement often suffices
+
+5. **Review after 1 month**: Is disclosure happening? Are reviews finding issues?
+</Steps>
+
+### Enterprise/Compliance
+
+For regulated industries (finance, healthcare, government):
+
+| Step | Content |
+|------|---------|
+| Legal review first | IP implications of AI code, liability for AI errors, training data provenance |
+| Full tracking | git-ai + prompt preservation, session logs archived, model versions recorded |
+| Audit trail | Who approved AI code? What review was performed? Can we reproduce? |
+| Policy documentation | Written policy, developer training, regular compliance checks |
+| Consider restrictions | Certain codepaths AI-free? Mandatory human-only review for security-critical? Approval workflow for AI-heavy PRs? |
+
+---
+
+## Templates
+
+### Commit Message with Assisted-by
+
+```
+feat: implement rate limiting middleware
+
+Add token bucket algorithm for API rate limiting.
+Configurable per-endpoint limits with Redis backing.
+
+- Token bucket with configurable refill rate
+- Redis for distributed state
+- Graceful degradation if Redis unavailable
+
+Assisted-by: Claude (Anthropic)
+```
+
+### CONTRIBUTING.md Section
+
+```markdown
+## AI Assistance Disclosure
+
+If you use any AI tools to help with your contribution, please disclose this
+in your pull request description.
+
+### What to disclose
+- AI-generated code
+- AI-assisted research
+- AI-suggested approaches
+
+### What doesn't need disclosure
+- Trivial autocomplete
+- IDE syntax helpers
+- Grammar/spell checking
+```
+
+### PR Template
+
+```markdown
+## AI Assistance
+
+- [ ] No AI tools were used
+- [ ] AI was used for research only
+- [ ] AI generated some code (tool: ___)
+- [ ] AI generated most of the code (tool: ___)
+```

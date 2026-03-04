@@ -1,0 +1,424 @@
+---
+title: "会话管理"
+description: "Claude Code 的会话传送、多实例工作流和并行开发模式"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+本指南涵盖 Claude Code 的会话传送（Session Teleportation）和多实例工作流（Multi-Instance Workflows），帮助你在不同环境间无缝迁移会话，并实现大规模并行开发。
+
+---
+
+## 会话传送
+
+会话传送允许在云端（claude.ai/code）和本地（CLI）之间迁移编码会话。你可以在移动端/网页上开始工作，然后在本地继续。
+
+<Aside type="caution">
+会话传送目前处于 **Research Preview** 阶段。可能存在不完善之处。
+</Aside>
+
+### 演进时间线
+
+| 版本 | 功能 |
+|------|------|
+| **2.0.24** | 初始 Web → CLI 传送能力 |
+| **2.0.41** | 传送自动设置上游分支 |
+| **2.0.45** | `&` 前缀将任务发送到云端 |
+| **2.1.0** | `/teleport` 和 `/remote-env` 命令 |
+
+### 命令参考
+
+| 命令 | 用途 |
+|------|------|
+| `%` 或 `&` 前缀 | 将任务发送到云端（如 `% Fix the auth bug`） |
+| `claude --teleport` | 交互式选择可用会话 |
+| `claude --teleport <id>` | 按 ID 传送特定会话 |
+| `/teleport` | REPL 内命令，传送当前会话 |
+| `/tasks` | 监控后台任务状态 |
+| `/remote-env` | 配置云端环境设置 |
+| `Ctrl+B` | 将所有运行中的任务后台化 |
+
+### 前提条件
+
+- GitHub 账号已连接 + Claude GitHub App 已安装
+- 干净的 git 状态（0 个未提交更改）
+- 同一仓库（非 fork）
+- 分支已存在于远程
+- Web 和 CLI 使用同一个 Claude.ai 账号
+- CLI 版本 2.1.0+
+
+### 工作流示例
+
+```bash
+# 1. 在 Web 上开始任务（claude.ai/code）
+#    "Refactor the authentication middleware"
+
+# 2. 会话在云端沙箱中工作
+
+# 3. 稍后，在本地机器上：
+claude --teleport
+# → 交互式选择器显示可用会话
+
+# 4. 选择会话，Claude 同步：
+#    - 对话上下文
+#    - 文件更改（通过 git）
+#    - 任务状态
+
+# 5. 在本地继续工作（拥有完整文件系统访问权限）
+```
+
+### 环境支持
+
+| 环境 | 传送支持 |
+|------|---------|
+| CLI/终端 | 完整双向 |
+| VS Code | 通过终端（非 Chat 视图） |
+| Cursor | 通过终端 |
+| Web (claude.ai/code) | 仅出站（Web → 本地） |
+| iOS 应用 | 仅监控 |
+
+### 当前限制
+
+- **单向**：仅支持 Web → 本地（不能本地 → Web）
+- **仅 GitHub**：暂不支持 GitLab 或 Bitbucket
+- **需要订阅**：Pro、Max、Team Premium 或 Enterprise Premium
+- **速率限制**：并行会话按比例消耗速率限制
+- **Git 依赖**：同步需要干净的 git 状态
+
+### 故障排除
+
+| 问题 | 解决方案 |
+|------|---------|
+| "Uncommitted changes" | 传送前提交或 stash 更改 |
+| "Branch not found" | 先将本地分支推送到远程 |
+| "Session not found" | 确认两端使用同一个 Claude.ai 账号 |
+| "Teleport failed" | 检查网络连接，重试 |
+| 连接超时 | 使用 `claude --teleport <id>` 指定 ID |
+
+### 最佳实践
+
+<Steps>
+1. **频繁提交** — 干净的 git 状态是必需的
+2. **使用有意义的分支名** — 帮助识别会话
+3. **检查 /tasks** — 传送前验证后台任务状态
+4. **同一账号** — 确保 CLI 和 Web 使用同一个 Claude.ai 登录
+5. **推送分支** — 远程必须有该分支才能同步
+</Steps>
+
+---
+
+## 多实例工作流
+
+<Aside type="note">
+多实例编排是为管理 10+ 并发功能的团队准备的高级模式。需要模块化架构 + 预算 + 监控。**95% 的用户不需要这个** — 对大多数场景而言，1-2 个实例的顺序工作流更高效。
+</Aside>
+
+### 何时使用多实例
+
+| 场景 | 建议 | 月成本 | 理由 |
+|------|------|--------|------|
+| **独立开发者** | 不推荐 | - | 开销 &gt; 收益 |
+| **创业公司 &lt;10 开发者** | 可能 | $400-750 | 仅当架构模块化 + 有测试 |
+| **规模化 10-50 开发者** | 考虑 | $1,000-2,000 | Headless PM 框架 + 监控有价值 |
+| **企业 50+** | 推荐 | $2,000-5,000 | ROI 明确，预算充足 |
+
+### 不适合多实例的信号
+
+- **架构**：遗留单体、无测试、紧耦合
+- **预算**：月 API 成本 &lt;$500
+- **经验**：团队不熟悉 Claude Code 基础
+- **规模**：独立开发者或 &lt;3 人团队
+
+---
+
+## 实际案例：Boris Cherny（Interval）
+
+Boris Cherny，Claude Code 的创建者，分享了他并行编排 5-15 个 Claude 实例的工作流。
+
+### 配置
+
+- **5 个实例**在本地终端（iTerm2 标签页，编号 1-5）
+- **5-10 个实例**在 claude.ai/code（`--teleport` 与本地同步）
+- **Git worktree** 用于隔离（每个实例 = 独立检出）
+- **CLAUDE.md**：2.5k tokens，团队共享并版本化
+- **模型**：Opus 4.6（较慢但需要更少修正，自适应思考）
+- **Slash 命令**：`/commit-push-pr` 每天使用"数十次"
+
+### 成果（30 天，2026 年 1 月）
+
+| 指标 | 数值 |
+|------|------|
+| PR 合并 | **259 个** |
+| 提交 | **497 个** |
+| 新增行 | **40k 行** |
+| 删除行 | **38k 行**（重构为主） |
+| 月成本 | ~$500-1,000 API（Opus 定价） |
+
+<Aside type="caution">
+Boris 是 Claude Code 的创建者，拥有完美的架构、Anthropic 资源和理想条件。**这不代表普通团队的体验。**
+</Aside>
+
+### Boris 的关键洞察
+
+> **关于多实例**: "我把 Cowork 当作'执行者'，不是聊天工具：它直接操作文件、浏览器和工具。我把生产力看作并行性：多个任务同时运行，而我掌控结果。"
+
+> **关于 CLAUDE.md**: "我把 Claude.md 当作复利记忆：每个错误都变成团队的持久规则。"
+
+> **关于 Plan 优先**: "我运行 plan-first 工作流：一旦计划扎实，执行就变得干净得多。"
+
+### 团队模式（2026 年 2 月）
+
+- **Skill 作为组织知识**：每天做超过一次的事都变成 Skill 并纳入版本控制
+- **CLI 和脚本优于 MCP**：团队偏好 shell 脚本而非 MCP 服务器
+- **卡住时重新规划**：切回 Plan 模式，而不是硬推
+- **Claude 写自己的规则**：每次纠正后，指示 Claude 更新 CLAUDE.md
+
+---
+
+## 双实例规划模式（垂直分离）
+
+相对于 Boris 的**水平扩展**（5-15 个实例并行），另一种模式是**垂直分离**：使用两个 Claude 实例承担不同角色。
+
+### 何时使用
+
+| 场景 | 使用双实例？ | 月成本 |
+|------|------------|--------|
+| **独立开发者，规格密集** | 推荐 | $100-200 |
+| **小团队，复杂需求** | 推荐 | $150-300 |
+| **产品设计师编码** | 推荐 | $100-200 |
+| **高并发特性开发** | 不推荐，使用 Boris 模式 | $500-1K+ |
+
+### 架构
+
+```
+┌──────────────────┐
+│  Claude Zero     │  规划与审查
+│  (规划者)         │  - 探索代码库
+└────────┬─────────┘  - 撰写计划
+         │            - 审查实现
+         │            - 绝不直接编辑代码
+         ▼
+┌─────────────────┐
+│  Plans/Review/  │  人工审查检查点
+│  Plans/Active/  │
+└────────┬────────┘
+         │
+         ▼
+┌──────────────────┐
+│  Claude One      │  实现
+│  (实现者)         │  - 读取已批准的计划
+└──────────────────┘  - 编写代码
+                      - 提交更改
+```
+
+### 五步工作流
+
+<Steps>
+1. **规划（Claude Zero）**
+
+   ```
+   You (to Claude Zero): /plan
+   Implement JWT authentication for the API.
+   - Support access tokens (15min expiry)
+   - Support refresh tokens (7 day expiry)
+   - Middleware to validate tokens on protected routes
+   ```
+
+   Claude Zero 探索代码库，就需求采访你，然后将计划写入 `.claude/plans/Review/auth-jwt.md`。
+
+2. **人工审查**
+
+   审查计划：方法是否正确？需求是否完整覆盖？有无安全问题？
+
+   批准后：
+   ```bash
+   mv .claude/plans/Review/auth-jwt.md .claude/plans/Active/
+   ```
+
+3. **实现（Claude One）**
+
+   ```
+   You (to Claude One): Implement .claude/plans/Active/auth-jwt.md
+   ```
+
+   Claude One 读取计划文件，实现所有步骤，提交。
+
+4. **验证（Claude Zero）**
+
+   ```
+   You (to Claude Zero): Review the JWT implementation Claude One just completed.
+   ```
+
+   Claude Zero 审查：代码是否匹配计划？安全最佳实践是否遵循？测试是否覆盖成功标准？
+
+5. **归档**
+
+   ```bash
+   mv .claude/plans/Active/auth-jwt.md .claude/plans/Completed/
+   ```
+</Steps>
+
+### Boris 模式 vs 双实例模式
+
+| 维度 | Boris 模式 | 双实例模式 |
+|------|-----------|-----------|
+| **扩展方向** | 水平（5-15 实例，并行功能） | 垂直（2 实例，分离阶段） |
+| **主要目标** | 通过并行性提速 | 通过关注点分离提质 |
+| **月成本** | $500-1,000 | $100-200 |
+| **入门门槛** | 高 | 低（2 个终端 + Plans/ 目录） |
+| **适合对象** | 团队，高产出，10+ 开发者 | 独立开发者，规格密集 |
+| **隔离方式** | Git worktree | 角色分离 |
+| **最佳场景** | 每天发布 10+ 功能 | 复杂规格，质量优先 |
+
+<Aside type="tip">
+这两种模式**并非互斥**。你可以对复杂功能使用双实例模式（规划严谨性），对高频简单功能使用 Boris 模式（速度）。
+</Aside>
+
+### Agent-Ready 计划的最佳实践
+
+双实例效率的关键是**计划结构**。
+
+<Tabs>
+  <TabItem label="差：模糊">
+    ```markdown
+    ## Implementation
+    Add authentication to the API.
+    Update the routes.
+    Create middleware.
+    ```
+  </TabItem>
+  <TabItem label="好：Agent-Ready">
+    ```markdown
+    ## Implementation
+
+    ### Step 1: Create JWT utilities
+    **File**: src/auth/jwt.ts (new file, ~120 lines)
+    **Functions**:
+    - Line 10-30: generateAccessToken(userId: string): string
+    - Line 35-55: generateRefreshToken(userId: string): string
+
+    ### Step 2: Create auth middleware
+    **File**: src/middleware/auth.ts (new file, ~45 lines)
+    **Export**:
+    - Line 15-40: requireAuth middleware
+
+    ### Step 3: Protect routes
+    **File**: src/routes/api.ts
+    **Location**: Line 23
+    **Change**: Import requireAuth, apply to protected routes
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## 渐进式扩展实施指南
+
+不要一下跳到 10 个实例。逐步扩展，设置验证关卡。
+
+### 阶段 1：单实例精通（2-4 周）
+
+**目标**：扩展前，单实例成功率达到 &gt;80%。
+
+```bash
+# 1. 创建 CLAUDE.md (2-3k tokens)
+# 2. 实现反馈循环（自动测试、pre-commit hooks）
+# 3. 测量基线（PRs/月、测试通过率、合并时间）
+```
+
+**成功标准**：80%+ PR 无需大修即可合并。
+
+### 阶段 2：双实例测试（1 个月）
+
+**目标**：验证 2 个实例能提升吞吐量且不混乱。
+
+```bash
+# 1. 设置 git worktree
+/git-worktree feature/backend
+/git-worktree feature/frontend
+
+# 2. 并行开发（确保解耦，无文件重叠）
+# 3. 监控冲突率（>2% 则暂停修复架构）
+```
+
+**成功标准**：&lt;2% 合并冲突，产出较单实例提升 &gt;5%。
+
+### 阶段 3：多实例（阶段 2 成功后）
+
+**目标**：扩展到 3-5 个实例，使用编排框架。
+
+| 工具 | 范式 | 最佳场景 |
+|------|------|---------|
+| **手动（worktree）** | 无框架 | 2-3 实例，完全控制 |
+| **Gas Town** | 并行协调 | 5+ 实例，复杂并行任务 |
+| **multiclaude** | 自托管生成器 | 需要内网/隔离环境的团队 |
+| **Entire CLI** | 治理 + 交接 | 有合规需求的顺序工作流 |
+
+---
+
+## 监控与可观测性
+
+### 关键指标
+
+| 指标 | 工具 | 目标 | 警告信号 |
+|------|------|------|---------|
+| **合并冲突** | `git log --grep="Merge conflict"` | &lt;2% | &gt;5% |
+| **PRs/月** | GitHub Insights | 较基线 +3-5% | 持平或下降 |
+| **测试通过率** | CI/CD | &gt;95% | &lt;90% |
+| **API 成本** | 会话统计脚本 | 在预算内 | 超出 &gt;20% |
+
+### 回滚信号
+
+出现以下情况时停止多实例，回到顺序工作流：
+
+- 合并冲突 &gt;5% PR
+- CLAUDE.md 增长至 &gt;5k tokens（混乱信号）
+- 测试质量下降（覆盖率降低、不稳定测试增多）
+- 监督开销 &gt;30% 开发者时间
+- 团队反馈技能退化或挫败感
+
+---
+
+## 决策矩阵
+
+```
+新功能请求
+├─ 独立开发者？
+│  └─ 使用 Cursor ($20/月)
+│
+├─ 创业公司 &lt;10 开发者？
+│  ├─ 遗留代码无测试？
+│  │  └─ 先修复架构（1-2 个月）
+│  └─ 模块化 + 有测试？
+│     └─ 尝试 2 个实例（1 个月试点）
+│
+├─ 规模化 10-50 开发者？
+│  ├─ 预算 >$1k/月？
+│  │  └─ 部署 Headless PM 框架
+│  └─ 预算 <$1k/月？
+│     └─ 优化顺序工作流（更好的 prompt）
+│
+└─ 企业 50+ 开发者？
+   └─ Windsurf + 自定义编排
+```
+
+---
+
+## 成本收益分析
+
+### 直接 API 成本
+
+| 规模 | 模型 | 月成本 | 盈亏平衡产出增长 |
+|------|------|--------|----------------|
+| **5 开发者，各 2 实例** | Sonnet | $390-750 | 3-5% |
+| **10 开发者，2-3 实例** | Sonnet | $1,080-1,650 | 1.3-2% |
+| **Boris 规模（15 实例）** | Opus | $500-1,000 | 259 PRs/月即合理 |
+
+### 隐藏成本
+
+| 成本类型 | 影响 | 缓解 |
+|---------|------|------|
+| **协调开销** | 10-20% 时间管理实例 | Headless PM 框架 |
+| **合并冲突** | 5-15% 时间解决冲突 | Git worktree + 模块化架构 |
+| **上下文切换** | 认知负荷 × 实例数 | 限制每开发者 2-3 实例 |
+| **监督** | 必须审查所有自主输出 | 自动测试 + 代码审查 |

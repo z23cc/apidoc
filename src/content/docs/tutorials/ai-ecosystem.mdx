@@ -1,0 +1,350 @@
+---
+title: "AI 工具生态系统"
+description: "何时使用 Claude Code 与互补 AI 工具，以及如何链接它们优化工作流"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Claude Code 在代码库级别的上下文推理方面表现出色，但它并不是万能的。本指南帮助你理解何时使用 Claude Code、何时使用互补 AI 工具，以及如何将它们链接起来实现最优工作流。
+
+---
+
+## 核心理念：增强而非替代
+
+Claude Code 擅长的领域：
+- **跨整个代码库的上下文推理**
+- **多文件实现**，集成测试
+- **通过 CLAUDE.md 实现持久记忆**
+- **CLI 自动化**，用于 CI/CD 流水线
+- **最少监督下的智能任务完成**
+
+Claude Code 设计上不擅长的领域：
+- 带来源验证的实时网络搜索
+- 图像生成
+- PPT/幻灯片生成
+- 音频合成
+- 基于浏览器的原型设计
+
+**目标不是找"更好"的工具，而是为每个步骤链接正确的工具。**
+
+---
+
+## 互补性矩阵
+
+| 任务 | Claude Code | 更好的替代 | 原因 |
+|------|-------------|-----------|------|
+| **代码实现** | 最佳 | - | 上下文推理 + 文件编辑 |
+| **深度研究（带来源）** | 有限 | Perplexity Pro | 100+ 已验证来源 |
+| **图像 → 代码** | 有限 | Gemini 2.5+ | 卓越的视觉理解 |
+| **幻灯片生成** | 不支持 | Kimi.com | 原生 PPTX 导出 |
+| **音频概览** | 不支持 | NotebookLM | 播客式综合 |
+| **浏览器原型** | 不支持 | v0.dev, Bolt | 实时预览 |
+| **IDE 自动补全** | 不支持 | Copilot, Cursor | 内联建议 |
+
+---
+
+## 1. Perplexity AI（研究与溯源）
+
+### 何时使用 Perplexity 而非 Claude
+
+| 场景 | 用 Perplexity | 用 Claude |
+|------|--------------|-----------|
+| "X 的最新 API 是什么？" | 最佳 | 知识截止限制 |
+| "比较 5 个认证库" | 有来源引用 | 可能产生幻觉 |
+| "解释这个错误信息" | 通用回答 | 上下文化回答 |
+| "在我的代码库中实现认证" | 无法访问文件 | 完全访问 |
+
+### 集成模式：研究 → 规格 → 代码
+
+```
+1. PERPLEXITY（深度研究）
+   "研究 Next.js 15 中 JWT 刷新令牌的最佳实践。
+    包含安全注意事项、常见陷阱和库推荐。"
+   → 输出：带来源的 2000 字规格
+
+2. CLAUDE CODE
+   "按照 spec.md 实现 JWT 刷新令牌。
+    使用推荐的 jose 库。"
+   → 输出：可运行的实现 + 测试
+```
+
+### Claude WebSearch vs Perplexity
+
+| 特性 | Claude WebSearch | Perplexity Pro |
+|------|-----------------|----------------|
+| 来源数量 | ~5-10 | 100+（深度研究） |
+| 来源验证 | 基础 | 完整引用 |
+| 最适合 | 快速查询 | 全面研究 |
+| 费用 | 包含在内 | $20/月 |
+
+<Aside type="tip">
+快速事实查验用 Claude WebSearch。重大实现前的生态系统理解用 Perplexity 深度研究。
+</Aside>
+
+---
+
+## 2. Google Gemini（视觉理解）
+
+### 开发者用例
+
+- UI 原型 → HTML/CSS/React 代码（90%+ 保真度）
+- 图表解读（流程图 → Mermaid/代码）
+- 截图调试（"这为什么看起来不对？"）
+- 设计令牌提取（从图像中提取颜色、间距）
+
+### 集成模式：视觉 → 代码
+
+```
+1. GEMINI 2.5 PRO
+   上传：Figma 设计截图
+   提示："转换为使用 Tailwind CSS 的 React 组件"
+   → 输出：JSX + Tailwind 代码
+
+2. CLAUDE CODE
+   "为我们的 Next.js 项目优化这个组件。
+    添加 TypeScript 类型，使用我们的 Button 组件，
+    连接到认证上下文。"
+   → 输出：生产就绪的组件
+```
+
+---
+
+## 3. Kimi（PPT 与长文档生成）
+
+[Kimi](https://kimi.ai) 是 Moonshot AI 的助手，特点包括原生 PPTX 生成、128K+ Token 上下文、代码感知布局。
+
+### 集成模式：代码 → 演示文稿
+
+```
+1. CLAUDE CODE
+   "生成最近 5 次提交的变更摘要。
+    格式化为 Markdown，包含：概览、关键变更、
+    破坏性变更、迁移指南。"
+   → 输出：changes-summary.md
+
+2. KIMI
+   "从这个摘要创建 10 页演示文稿，
+    面向非技术利益相关者。使用商业友好的语言。"
+   → 输出：stakeholder-update.pptx
+```
+
+### 演示工具对比
+
+| 工具 | 优势 | 最适合 |
+|------|------|--------|
+| **Kimi** | 原生 PPTX，代码感知 | 技术演示 |
+| **Gamma.app** | 精美模板 | 商业演示 |
+| **Marp** | Markdown → 幻灯片 | 开发者演示 |
+
+---
+
+## 4. NotebookLM（综合与音频）
+
+### 开发者用例
+
+- 上传 50+ 文件 → 获得统一理解
+- 对代码库提问
+- 生成音频概览用于通勤学习（10-15 分钟"播客"）
+
+### 集成模式：代码库 → 音频入职
+
+<Steps>
+1. **导出**：通过 Claude Code 将所有文档合并为 `combined-docs.md`
+2. **上传到 NotebookLM**：添加为来源，点击"生成音频概览"
+3. **回到 Claude Code**：基于音频笔记深入理解具体流程
+</Steps>
+
+### NotebookLM MCP 集成
+
+可直接从 Claude Code 查询 NotebookLM 笔记本：
+
+```bash
+# 安装
+claude mcp add notebooklm npx notebooklm-mcp@latest
+
+# 配置 profile
+export NOTEBOOKLM_PROFILE=standard  # minimal | standard | full
+```
+
+| Profile | 工具数 | 用例 |
+|---------|--------|------|
+| `minimal` | 5 | 基础查询，Token 受限环境 |
+| `standard` | 10 | **推荐** -- 查询 + 库管理 |
+| `full` | 16 | 高级（浏览器控制、清理、重新认证） |
+
+---
+
+## 5. 语音转文本工具
+
+**理念**："氛围编程" -- 口述意图，让 AI 实现
+
+语音输入速度约为打字的 4 倍（~150 WPM vs ~40 WPM），且上下文更丰富。
+
+| 工具 | 处理方式 | 延迟 | 隐私 | 价格 |
+|------|----------|------|------|------|
+| **Wispr Flow** | 云端 | ~500ms | SOC 2 认证 | $12/月 |
+| **Superwhisper** | 本地 | 1-2s | 100% 离线 | ~$50 一次性 |
+| **MacWhisper** | 本地 | 可变 | 100% 离线 | $49 一次性 |
+
+---
+
+## 6. IDE 工具（Cursor、Windsurf、Cline）
+
+### 何时用 IDE 工具，何时用 Claude Code
+
+| 场景 | IDE 工具 | Claude Code |
+|------|----------|-------------|
+| 快速内联编辑 | 更快 | 上下文切换 |
+| 打字时自动补全 | 必备 | 不可用 |
+| 多文件重构 | 有限 | 更强 |
+| 理解大型代码库 | 有限 | 更好的上下文 |
+| CI/CD 自动化 | 手动 | 原生 |
+
+### 混合工作流
+
+```bash
+# 早晨会话（战略性）
+claude "审查认证模块并建议改进"
+
+# 编码期间（战术性）
+# 在 Cursor/VS Code 中使用 Copilot
+# 快速自动补全、内联建议
+
+# 提交前（验证）
+claude "审查我的变更并建议测试"
+```
+
+### 多 IDE 配置同步
+
+| 工具 | 配置文件 | 格式 |
+|------|----------|------|
+| Claude Code | `CLAUDE.md` | Markdown + @imports |
+| Cursor | `.cursorrules` | 纯 Markdown |
+| Codex/ChatGPT | `AGENTS.md` | AGENTS.md 标准 |
+| Copilot | `.github/copilot-instructions.md` | GitHub 特定 |
+
+<Aside type="caution">
+Claude Code 目前**不原生支持 AGENTS.md**。变通方案：`ln -s AGENTS.md .claude/CLAUDE.md`
+</Aside>
+
+---
+
+## 7. UI 原型工具（v0、Bolt、Lovable）
+
+| 工具 | 优势 | 技术栈 | 最适合 |
+|------|------|--------|--------|
+| **v0.dev** | Shadcn/Tailwind | React | 组件原型 |
+| **Bolt.new** | 完整应用脚手架 | 多种 | 快速 MVP |
+| **Lovable** | 设计转代码 | React | 设计师交接 |
+
+### 集成模式：原型 → 生产
+
+```
+1. V0.DEV
+   "一个带头像、统计数据和操作按钮的用户资料卡"
+   → 输出：React + Shadcn 组件预览
+
+2. CLAUDE CODE
+   "为我们的 Next.js 应用调整这个 v0 组件：
+    使用现有的 Button、Avatar 组件，
+    添加 TypeScript 类型，连接到 API。"
+   → 输出：集成好的生产级组件
+```
+
+---
+
+## 8. 工作流编排
+
+### 完整流水线
+
+```
+计划阶段
+├─ Perplexity：深度研究 → spec.md
+├─ Gemini：图表分析 → Mermaid + 计划
+└─ NotebookLM：文档综合 → 音频概览
+
+实现阶段
+├─ Claude Code：多文件实现 → 可运行代码 + 测试
+└─ IDE + Copilot：内联自动补全 → 优化代码
+
+交付阶段
+├─ Claude Code：PR 描述
+└─ Kimi：利益相关者演示文稿
+```
+
+---
+
+## 9. 成本与订阅策略
+
+### 按栈推荐
+
+<Tabs>
+  <TabItem label="最小栈（$40-70/月）">
+    - Claude Code（按使用付费）-- $20-50
+    - Perplexity Pro -- $20
+    - 其他：免费版
+  </TabItem>
+  <TabItem label="均衡栈（$80-110/月）">
+    - Claude Code -- $30-50
+    - Perplexity Pro -- $20
+    - Gemini Advanced -- $20
+    - Cursor Pro -- $20
+    - 免费：NotebookLM、Kimi
+  </TabItem>
+  <TabItem label="强力栈（$120-150/月）">
+    - Claude Code（重度使用）-- $50-80
+    - Perplexity Pro -- $20
+    - Gemini Advanced -- $20
+    - Cursor Pro -- $20
+    - v0 Pro -- $20
+    - 免费：NotebookLM、Kimi
+  </TabItem>
+</Tabs>
+
+### 成本优化技巧
+
+<Steps>
+1. 简单任务使用 Claude Code 的 Haiku 模型（`/model haiku`）
+2. 在 Perplexity 中批量研究会话以最大化深度研究
+3. 充分利用 Gemini Flash、NotebookLM、Kimi 的免费版
+4. 定期检查上下文使用情况（`/status`）避免浪费
+5. 谨慎使用 Opus -- 仅用于架构决策
+</Steps>
+
+---
+
+## 10. AI 编码代理矩阵
+
+[coding-agents-matrix.dev](https://coding-agents-matrix.dev) 提供 23 个 AI 编码代理的交互式对比，涵盖 11 项技术标准（开源、MCP 支持、Skills、Commands、Plan Mode 等）。
+
+| 矩阵（发现） | 本指南（精通） |
+|-------------|--------------|
+| "有哪些代理？" | "如何高效使用 Claude Code？" |
+| 23 个代理 x 浅层 | 1 个代理 x 深度 |
+| 技术规格 | 实用工作流和模板 |
+
+---
+
+## 快速参考卡
+
+### 工具决策矩阵
+
+| 我需要... | 使用 |
+|-----------|------|
+| 实现功能 | Claude Code |
+| 实现前研究 | Perplexity 深度研究 |
+| 设计转代码 | Gemini → Claude |
+| 创建演示文稿 | Claude → Kimi |
+| 理解新代码库 | NotebookLM → Claude |
+| 快速 UI 原型 | v0/Bolt → Claude |
+| 快速内联编辑 | IDE + Copilot |
+
+### 链接模式
+
+```
+研究 → 代码：     Perplexity → Claude Code
+视觉 → 代码：     Gemini → Claude Code
+原型 → 生产：     v0/Bolt → Claude Code
+代码 → 幻灯片：   Claude Code → Kimi
+文档 → 理解：     NotebookLM → Claude Code
+```

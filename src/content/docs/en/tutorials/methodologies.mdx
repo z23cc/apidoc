@@ -1,0 +1,351 @@
+---
+title: "AI-Assisted Development Methodologies"
+description: "Reference for 15 structured AI-assisted development methodologies including TDD, SDD, and BDD"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+This guide is a quick reference for 15 structured development methodologies that have emerged for AI-assisted development in 2025-2026. They are organized in a 6-tier pyramid from strategic orchestration down to optimization techniques.
+
+---
+
+## Decision Tree: What Do You Need?
+
+```
++-- "I want quality code"           --> TDD workflow
+|
++-- "I want to spec before code"    --> Spec-Driven Development
+|
++-- "I need to plan architecture"   --> Plan-Driven Development
+|
++-- "I'm iterating on something"    --> Iterative Refinement workflow
+|
++-- "I need methodology theory"     --> Continue reading below
+```
+
+---
+
+## The 15 Methodologies at a Glance
+
+### Quick Reference Table
+
+| Methodology | Level | Primary Focus | Team Size | Learning Curve |
+|-------------|-------|---------------|-----------|----------------|
+| BMAD | Orchestration | Governance | 10+ | High |
+| GSD | Orchestration | Workflow | Any | Medium |
+| SDD | Specification | Contracts | Any | Medium |
+| Doc-Driven | Specification | Alignment | Any | Low |
+| Req-Driven | Specification | Context | 5+ | Medium |
+| DDD | Specification | Domain | 5+ | Very High |
+| BDD | Behavior | Collaboration | 5+ | Medium |
+| ATDD | Behavior | Compliance | 5+ | Medium |
+| CDD | Behavior | APIs | 5+ | Medium |
+| FDD | Delivery | Features | 10+ | Medium |
+| Context Eng. | Delivery | AI sessions | Any | Low |
+| TDD | Implementation | Quality | Any | Low |
+| Eval-Driven | Implementation | AI outputs | Any | Medium |
+| Multi-Agent | Implementation | Complexity | Any | Medium |
+| Iterative | Optimization | Refinement | Any | Low |
+
+---
+
+## Tier 1: Strategic Orchestration
+
+<CardGrid>
+  <Card title="BMAD" icon="star">
+    Multi-agent governance with constitution as guardrail. For enterprise 10+ teams.
+  </Card>
+  <Card title="GSD" icon="rocket">
+    6-phase meta-prompting workflow with fresh contexts per task. For solo devs.
+  </Card>
+</CardGrid>
+
+**BMAD (Breakthrough Method for Agile AI-Driven Development)** inverts the traditional paradigm: documentation becomes the source of truth, not code. Uses specialized agents (Analyst, PM, Architect, Developer, QA) orchestrated with strict governance.
+
+- **Key concept**: Constitution.md as strategic guardrail
+- **When to use**: Complex enterprise projects needing governance
+- **When to avoid**: Small teams, MVPs, rapid prototyping
+
+**GSD (Get Shit Done)** addresses context rot through a systematic 6-phase workflow (Initialize -> Discuss -> Plan -> Execute -> Verify -> Complete) with fresh 200k-token contexts per task.
+
+---
+
+## Plan-First Workflow
+
+<Aside type="tip">
+"Once the plan is good, the code is good." -- Boris Cherny, creator of Claude Code
+</Aside>
+
+Not just a feature (`/plan` command) -- a systematic discipline.
+
+**When to plan first**:
+
+| Task Complexity | Plan First? | Why |
+|----------------|-------------|-----|
+| >3 files modified | Yes | Cross-file dependencies need architecture |
+| >50 lines changed | Yes | Enough complexity for mistakes |
+| Architectural changes | Yes | Impact analysis required |
+| Unfamiliar codebase | Yes | Need exploration before action |
+| Typo/obvious fix | No | Planning overhead > task time |
+| Single-line change | No | Just do it |
+
+<Steps>
+1. **Exploration phase** (Plan Mode via `Shift+Tab`)
+
+   Claude reads files, explores architecture. No edits allowed -- forces thinking before action.
+
+2. **Validation phase** (you review)
+
+   Plan exposes assumptions and gaps. Easier to correct direction now vs after 100 lines written.
+
+3. **Execution phase** (toggle back to Normal Mode with `Shift+Tab`)
+
+   Plan to code becomes mechanical translation. Fewer surprises, cleaner implementation.
+</Steps>
+
+**Integration with CLAUDE.md**:
+
+```markdown
+## Planning Policy
+- ALWAYS plan first: API changes, database migrations, new features
+- OPTIONAL planning: Bug fixes &lt;10 lines, test additions
+- NEVER skip: Changes affecting >2 modules
+```
+
+---
+
+## Tier 2: Specification & Architecture
+
+| Name | What | Best For | Claude Fit |
+|------|------|----------|------------|
+| **SDD** | Specs before code | APIs, contracts | Core pattern |
+| **Doc-Driven** | Docs = source of truth | Cross-team alignment | CLAUDE.md native |
+| **Req-Driven** | Rich artifact context (20+ artifacts) | Complex requirements | Heavy setup |
+| **DDD** | Domain language first | Business logic | Design-time |
+
+**SDD (Spec-Driven Development)** -- Specifications BEFORE code. One well-structured iteration equals 8 unstructured ones. CLAUDE.md IS your spec file.
+
+**DDD (Domain-Driven Design)** -- Aligns software with business language through:
+- **Ubiquitous Language**: Shared vocabulary in code
+- **Bounded Contexts**: Isolated domain boundaries
+- **Domain Distillation**: Core vs Support vs Generic domains
+
+---
+
+## Tier 3: Behavior & Acceptance
+
+| Name | What | Best For | Claude Fit |
+|------|------|----------|------------|
+| **BDD** | Given-When-Then scenarios | Stakeholder collaboration | Tests and specs |
+| **ATDD** | Acceptance criteria first | Compliance, regulated | Process-heavy |
+| **CDD** | API contracts as interface | Microservices | OpenAPI native |
+
+**BDD (Behavior-Driven Development)** -- Beyond testing: a collaboration process.
+
+```gherkin
+Feature: Order Management
+  Scenario: Cannot buy without stock
+    Given product with 0 stock
+    When customer attempts purchase
+    Then system refuses with error message
+```
+
+**ATDD (Acceptance Test-Driven Development)** -- Acceptance criteria defined BEFORE coding, collaboratively ("Three Amigos": Business, Dev, Test). Particularly effective in agentic development because agents need unambiguous success conditions.
+
+<Aside>
+Pass the Gherkin file to Claude Code: "Write failing tests for this feature file, then implement until they pass." The scenario writer role forces explicit scope before execution starts.
+</Aside>
+
+**CDD (Contract-Driven Development)** -- API contracts (OpenAPI specs) as executable interface between teams.
+
+---
+
+## Tier 4: Feature Delivery
+
+| Name | What | Best For | Claude Fit |
+|------|------|----------|------------|
+| **FDD** | Feature-by-feature delivery | Large teams 10+ | Structure |
+| **Context Eng.** | Context as first-class design | Long sessions | Fundamental |
+
+**FDD (Feature-Driven Development)** -- Five processes:
+1. Develop Overall Model
+2. Build Features List
+3. Plan by Feature
+4. Design by Feature
+5. Build by Feature
+
+Strict iteration: 2 weeks max per feature.
+
+**Context Engineering** -- Treat context as a design element:
+- Progressive Disclosure: Let agent discover incrementally
+- Memory Management: Conversation vs persistent memory
+- Dynamic Refresh: Rewrite TODO list before response
+
+---
+
+## Tier 5: Implementation
+
+<CardGrid>
+  <Card title="TDD" icon="approve-check">
+    Red-Green-Refactor. The classic cycle and core AI-assisted workflow.
+  </Card>
+  <Card title="Eval-Driven" icon="setting">
+    TDD for LLMs. Test agent behaviors via evaluations.
+  </Card>
+  <Card title="Multi-Agent" icon="list-format">
+    Orchestrate sub-agents. From single assistant to orchestrated team.
+  </Card>
+</CardGrid>
+
+### TDD (Test-Driven Development)
+
+The classic cycle:
+
+<Steps>
+1. **Red**: Write failing test
+2. **Green**: Minimal code to pass
+3. **Refactor**: Clean up, tests stay green
+</Steps>
+
+With Claude: Be explicit. "Write FAILING tests that don't exist yet."
+
+**Verification Loops** -- A broader pattern for autonomous iteration:
+
+| Domain | Verification Tool | What Claude "Sees" |
+|--------|-------------------|-------------------|
+| **Frontend** | Browser preview | Visual rendering, layout, interactions |
+| **Backend** | Tests (unit/integration) | Pass/fail status, error messages |
+| **Types** | TypeScript compiler | Type errors, incompatibilities |
+| **Style** | Linters (ESLint, Prettier) | Style violations, formatting issues |
+| **Security** | Static analyzers (Semgrep) | Vulnerability patterns |
+
+### Eval-Driven Development
+
+TDD for LLMs. Test agent behaviors via evals:
+- Code-based: `output == golden_answer`
+- LLM-based: Another Claude evaluates
+- Human grading: Reference, slow
+
+### Multi-Agent Orchestration
+
+From single assistant to orchestrated team:
+
+```
+Meta-Agent (Orchestrator)
++-- Analyst (requirements)
++-- Architect (design)
++-- Developer (code)
++-- Reviewer (validation)
+```
+
+### ADR-Driven Development
+
+Architecture Decision Records (ADRs) combined with Claude Code skills create a workflow where architectural decisions drive implementation directly.
+
+<Steps>
+1. **Document decision** in ADR format (context, decision, consequences)
+2. **Create implementation skill** (generic or specialized `implement-adr`)
+3. **Feed ADR as prompt** to skill with clear acceptance criteria
+4. **Claude executes** based on architectural guidance in ADR
+</Steps>
+
+---
+
+## Tier 6: Optimization
+
+| Name | What | Best For | Claude Fit |
+|------|------|----------|------------|
+| **Iterative Loops** | Autonomous refinement | Optimization | Core |
+| **Fresh Context** | Reset per task, state in files | Long autonomous sessions | Power users |
+| **Prompt Engineering** | Technique foundation | Everything | Prerequisite |
+
+**Iterative Refinement Loops** -- Autonomous convergence:
+1. Execute prompt
+2. Observe result
+3. If result is not "DONE" -> refine and repeat
+
+**Prompt Engineering** -- Foundations for ALL Claude usage:
+- Zero-Shot Chain of Thought: "Think step by step"
+- Few-Shot Learning: 2-3 examples of expected pattern
+- Structured Prompts: XML tags for organization
+- Position Matters: For long docs, place question at end
+
+**Fresh Context Pattern (Ralph Loop)** -- Solves context rot by spawning fresh agent instances per task. State persists in git + progress files, not chat history. Ideal for long autonomous sessions.
+
+---
+
+## SDD Tools Reference
+
+Three tools have emerged to formalize Spec-Driven Development:
+
+| Tool | Use Case | Claude Integration |
+|------|----------|-------------------|
+| **Spec Kit** | Greenfield, governance | `/speckit.constitution`, `/speckit.specify`, `/speckit.plan` |
+| **OpenSpec** | Brownfield, changes | `/openspec:proposal`, `/openspec:apply`, `/openspec:archive` |
+| **Specmatic** | API contract testing | MCP agent available |
+
+### Spec Kit (Greenfield)
+
+5-phase workflow:
+1. Constitution: `/speckit.constitution` -> guardrails
+2. Specify: `/speckit.specify` -> requirements
+3. Plan: `/speckit.plan` -> architecture
+4. Tasks: `/speckit.tasks` -> decomposition
+5. Implement: `/speckit.implement` -> code
+
+### OpenSpec (Brownfield)
+
+Two-folder architecture:
+```
+openspec/
++-- specs/      <-- Current truth (stable)
++-- changes/    <-- Proposals (temporary)
+```
+
+Workflow: Proposal -> Review -> Apply -> Archive
+
+---
+
+## Writing Effective Specs
+
+<Aside type="tip">
+Based on analysis of 2,500+ agent configuration files (Source: Addy Osmani).
+</Aside>
+
+### The Six Essential Components
+
+| Component | What to Include | Example |
+|-----------|-----------------|---------|
+| **Commands** | Executable with flags | `npm test -- --coverage` |
+| **Testing** | Framework, coverage, locations | `vitest, 80%, tests/` |
+| **Project structure** | Explicit directories | `src/`, `lib/`, `tests/` |
+| **Code style** | One example > paragraphs | Show a real function |
+| **Git workflow** | Branch, commit, PR format | `feat/name`, conventional commits |
+| **Boundaries** | Permission tiers | See below |
+
+### Permission Tiers
+
+| Tier | Use For |
+|------|---------|
+| Always do | Safe actions, no approval (lint, format) |
+| Ask first | High-impact changes (delete, publish) |
+| Never do | Hard stops (commit secrets, force push main) |
+
+<Aside type="caution">
+The Curse of Instructions: Research shows more instructions equals worse adherence to each one. Solution: Feed only relevant spec sections per task, not the entire document.
+</Aside>
+
+---
+
+## Combination Patterns
+
+Recommended methodology stacks by situation:
+
+| Situation | Recommended Stack | Notes |
+|-----------|-------------------|-------|
+| Solo MVP | SDD + TDD | Minimal overhead, quality focus |
+| Team 5-10, greenfield | Spec Kit + TDD + BDD | Governance + quality + collaboration |
+| Microservices | CDD + Specmatic | Contract-first, parallel dev |
+| Existing SaaS (100+ features) | OpenSpec + BDD | Change tracking, no spec drift |
+| Enterprise 10+ | BMAD + Spec Kit + Specmatic | Full governance + contracts |
+| LLM-native product | Eval-Driven + Multi-Agent | Self-improving systems |

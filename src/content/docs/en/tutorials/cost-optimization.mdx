@@ -1,0 +1,503 @@
+---
+title: "Cost Optimization"
+description: "Practical techniques to minimize Claude Code API costs while maximizing development productivity"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+This guide covers practical techniques to minimize API costs while maximizing productivity, including model selection, token-saving strategies, the RTK tool, cost tracking, and economic workflow patterns.
+
+---
+
+## Model Selection Matrix
+
+Choose the right model for each task to balance cost and capability.
+
+### OpusPlan Mode (Recommended)
+
+- **Planning**: Opus for high-level thinking
+- **Execution**: Sonnet for implementation
+- **Best of both worlds**: Strategic thinking + cost-effective execution
+
+```bash
+# Activate OpusPlan mode
+/model opusplan
+
+# Enter Plan Mode (Opus for planning)
+Shift+Tab × 2
+
+You: "Design a caching layer for the API"
+# Opus creates detailed architectural plan
+
+# Exit Plan Mode (Sonnet for execution)
+Shift+Tab
+
+You: "Implement the caching layer following the plan"
+# Sonnet executes the plan at lower cost
+```
+
+---
+
+## Token-Saving Techniques
+
+<Aside type="note">
+Claude Code uses lazy loading -- it doesn't "load" your entire codebase at startup. Files are read on-demand when you ask Claude to analyze them. The main context consumers at startup are your CLAUDE.md files and auto-loaded rules.
+</Aside>
+
+### CLAUDE.md Token Cost Estimation
+
+| File Size | Approximate Tokens | Impact |
+|-----------|-------------------|--------|
+| 50 lines | 500-1,000 tokens | Minimal (recommended) |
+| 100 lines | 1,000-2,000 tokens | Acceptable |
+| 200 lines | 2,000-3,500 tokens | Upper limit |
+| 500+ lines | 5,000+ tokens | Consider splitting |
+
+<Aside type="caution">
+Beyond file size, context files containing non-essential information (style guides, architecture descriptions, general conventions) add **+20-23% inference cost per session** regardless of line count -- because agents process and act on every instruction. (Gloaguen et al., 2026)
+</Aside>
+
+### 1. Keep CLAUDE.md Files Concise
+
+```markdown
+# Bad: Bloated CLAUDE.md (wastes tokens on every session)
+- 500+ lines of instructions
+- Multiple @includes importing other files
+- Rarely-used guidelines
+
+# Good: Lean CLAUDE.md
+- Essential project context only (&lt;200 lines)
+- Move specialized rules to .claude/rules/ (auto-loaded at session start)
+- Split by concern: team rules in project CLAUDE.md, personal prefs in ~/.claude/CLAUDE.md
+```
+
+<Aside type="tip" title="Research Finding">
+An ETH Zurich study (2026, 138 benchmarks, 12 repos) showed that developer-written CLAUDE.md improves agent success rate by **+4%**, but LLM-generated files reduce it by **-3%**. Recommendation: include only build/test commands and project-specific tooling.
+</Aside>
+
+### 2. Use Targeted File References
+
+```bash
+# Bad: Vague request (Claude reads many files to find context)
+"Fix the authentication bug"
+
+# Good: Specific request (Claude reads only what's needed)
+"Fix the JWT validation in @src/auth/middleware.ts line 45"
+```
+
+### 3. Compact Proactively
+
+```bash
+# Bad: Wait until 90% context
+/status  # Context: 92% - Too late, degraded performance
+
+# Good: Compact at 70%
+/status  # Context: 72%
+/compact  # Frees up context, maintains performance
+```
+
+### 4. Agent Specialization
+
+```markdown
+---
+name: test-writer
+description: Generate unit tests (use for test generation only)
+model: haiku
+---
+
+Generate comprehensive unit tests with edge cases.
+```
+
+**Benefits**: Haiku costs less than Sonnet, focused context (tests only), faster execution.
+
+### 5. Batch Similar Operations
+
+```bash
+# Bad: Individual sessions for each fix
+claude -p "Fix typo in auth.ts"
+claude -p "Fix typo in user.ts"
+claude -p "Fix typo in api.ts"
+
+# Good: Batch in single session
+claude
+You: "Fix typos in auth.ts, user.ts, and api.ts"
+# Single context load, multiple fixes
+```
+
+---
+
+## Command Output Optimization with RTK
+
+**RTK (Rust Token Killer)** filters bash command outputs **before** they reach Claude's context, achieving **60-90% token reduction** across git, testing, and development workflows.
+
+### Installation
+
+```bash
+# Option 1: Homebrew (macOS/Linux)
+brew install rtk-ai/tap/rtk
+
+# Option 2: Cargo (all platforms)
+cargo install rtk
+
+# Option 3: Install script
+curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/main/install.sh | bash
+```
+
+### Proven Token Savings
+
+| Command | Baseline | RTK | Reduction |
+|---------|----------|-----|-----------|
+| `rtk git log` | 13,994 chars | 1,076 chars | **92.3%** |
+| `rtk git status` | 100 chars | 24 chars | **76.0%** |
+| `rtk git diff` | 15,815 chars | 6,982 chars | **55.9%** |
+| `rtk vitest run` | ~50,000 chars | ~5,000 chars | **90.0%** |
+| `rtk pnpm list` | ~8,000 chars | ~2,400 chars | **70.0%** |
+
+### Supported Commands
+
+<Tabs>
+  <TabItem label="Git">
+    ```bash
+    rtk git log
+    rtk git status
+    rtk git diff HEAD~1
+    ```
+  </TabItem>
+  <TabItem label="JS/TS">
+    ```bash
+    rtk vitest run           # Test results condensed
+    rtk pnpm list            # Dependency tree optimized
+    rtk prisma migrate status # Migration status filtered
+    ```
+  </TabItem>
+  <TabItem label="Python/Go/Rust">
+    ```bash
+    rtk python pytest        # Python test output condensed
+    rtk go test              # Go test results filtered
+    rtk cargo test           # Cargo test output condensed
+    rtk cargo clippy         # Lints grouped by severity
+    ```
+  </TabItem>
+  <TabItem label="Utilities">
+    ```bash
+    rtk init                 # Initialize RTK in a project
+    rtk tree                 # Project structure condensed
+    rtk gain                 # Token savings dashboard
+    rtk discover             # Find missed optimization opportunities
+    ```
+  </TabItem>
+</Tabs>
+
+### Real-World Impact
+
+```
+30-minute Claude Code session:
+- Without RTK: ~150K tokens (10-15 git commands @ ~10K tokens each)
+- With RTK: ~41K tokens (10-15 git commands @ ~2.7K tokens each)
+- Savings: 109K tokens (72.6% reduction)
+```
+
+### Integration Strategies
+
+<Steps>
+1. **Hook-first install** (recommended)
+
+   ```bash
+   rtk init  # Sets up PreToolUse hook automatically
+   ```
+
+2. **CLAUDE.md instruction** (manual wrapper)
+
+   ```markdown
+   ## Token Optimization
+   Use RTK for all supported commands:
+   - `rtk git log` (92.3% reduction)
+   - `rtk git status` (76.0% reduction)
+   - `rtk git diff` (55.9% reduction)
+   ```
+
+3. **Skill** (auto-suggestion)
+
+   Detects high-verbosity commands and suggests RTK wrapper automatically.
+
+4. **Hook** (automatic wrapper)
+
+   PreToolUse hook intercepts bash commands and applies RTK wrapper when beneficial.
+</Steps>
+
+---
+
+## Cost Tracking
+
+### Monitor with /status
+
+```bash
+/status
+
+# Output:
+Model: Sonnet | Ctx: 45.2k | Cost: $1.23 | Ctx(u): 42.0%
+```
+
+### API Budget Alerts
+
+```python
+# If using Anthropic API directly
+import anthropic
+
+client = anthropic.Anthropic()
+
+response = client.messages.create(
+    model="claude-sonnet-4-5",
+    max_tokens=1024,
+    messages=[...],
+    metadata={
+        "user_id": "user_123",
+        "project": "api_development"
+    }
+)
+
+# Log cost per request
+cost = calculate_cost(response.usage)
+if cost > BUDGET_THRESHOLD:
+    alert_team(f"Budget threshold exceeded: ${cost}")
+```
+
+### Session Cost Limits
+
+```markdown
+## CLAUDE.md - Cost Awareness
+
+**Budget-conscious mode:**
+- Use Haiku for reviews and simple tasks
+- Reserve Sonnet for feature work
+- Use Opus only for critical decisions
+- Compact context at 70% to avoid waste
+- Close sessions after task completion
+```
+
+---
+
+## Economic Workflow Patterns
+
+<CardGrid>
+  <Card title="Pattern 1: Haiku for Tests, Sonnet for Implementation" icon="setting">
+    ```bash
+    # Terminal 1: Test generation (Haiku)
+    claude --model haiku
+    You: "Generate tests for the auth module"
+
+    # Terminal 2: Implementation (Sonnet)
+    claude --model sonnet
+    You: "Implement the auth module"
+    ```
+  </Card>
+  <Card title="Pattern 2: Progressive Model Escalation" icon="up-caret">
+    ```bash
+    # Start with Haiku
+    claude --model haiku
+    You: "Review this code for obvious issues"
+
+    # If complex issues found, escalate to Sonnet
+    /model sonnet
+    You: "Deep analysis of the race condition"
+
+    # If architectural issue, escalate to Opus
+    /model opus
+    You: "Redesign the concurrency model"
+    ```
+  </Card>
+</CardGrid>
+
+### Pattern 3: Context Reuse
+
+```bash
+# Build context once, reuse for multiple tasks
+claude
+You: "Analyze the authentication flow"
+# Context built: ~20k tokens
+
+# Same session - context already loaded
+You: "Now add 2FA to the authentication flow"
+# No context rebuild needed
+
+You: "Generate tests for the 2FA feature"
+# Still same context
+
+# Commit when done
+You: "Create commit for 2FA implementation"
+```
+
+---
+
+## Token Calculation Reference
+
+### Input and Output Tokens
+
+**Input tokens**: Source code loaded into context, conversation history, memory files (CLAUDE.md), agent/skill instructions
+
+**Output tokens**: Claude's responses, generated code, explanations
+
+### Rough Estimates
+
+- 1 token is approximately 0.75 words (English)
+- 1 token is approximately 4 characters
+- Average function: 50-200 tokens
+- Average file (500 LOC): 2,000-5,000 tokens
+
+### Cost Calculation Example
+
+```
+Context loaded:
+- 10 files × 500 LOC × 4 tokens/LOC = 20,000 tokens
+- Conversation history: 5,000 tokens
+- CLAUDE.md: 1,000 tokens
+Total input: 26,000 tokens
+
+Claude response:
+- Generated code: 500 LOC × 4 = 2,000 tokens
+- Explanation: 500 tokens
+Total output: 2,500 tokens
+
+Total cost per request: (26,000 + 2,500) tokens × model price
+```
+
+### Sonnet Pricing (Approximate)
+
+```
+Input: $3 per million tokens
+Output: $15 per million tokens
+
+Session cost:
+Input: 26,000 × $3 / 1,000,000 = $0.078
+Output: 2,500 × $15 / 1,000,000 = $0.0375
+Total: ~$0.12 per interaction
+```
+
+---
+
+## Cost Optimization Checklist
+
+```markdown
+Daily practices:
+□ Use /status to monitor context and cost
+□ Compact at 70% context usage
+□ Close sessions after task completion
+□ Use permissions.deny to block sensitive files
+
+Model selection:
+□ Default to Sonnet for most work
+□ Use Haiku for reviews and simple fixes
+□ Reserve Opus for architecture and critical debugging
+□ Try OpusPlan mode for strategic work
+
+Context management:
+□ Use specific file references (@path/to/file.ts)
+□ Batch similar tasks in single session
+□ Reuse context for multiple related tasks
+□ Create specialized agents with focused context
+
+Team practices:
+□ Share cost-effective patterns in team wiki
+□ Track spending per project
+□ Set budget alerts for high-cost operations
+□ Review cost metrics in retrospectives
+```
+
+---
+
+## Alternative: Flat-Rate via Copilot Pro+
+
+For heavy usage, consider **cc-copilot-bridge** to route requests through GitHub Copilot Pro+ ($10/month flat) instead of per-token billing.
+
+```bash
+# Switch to Copilot mode (flat rate)
+ccc  # Uses Copilot Pro+ subscription
+
+# Back to direct Anthropic (per-token)
+ccd  # Uses ANTHROPIC_API_KEY
+```
+
+**When this makes sense**:
+- You're hitting rate limits frequently
+- Monthly costs exceed $50-100
+- You already have Copilot Pro+ subscription
+
+---
+
+## Cost-Aware CI/CD
+
+```yaml
+# .github/workflows/claude-review.yml
+name: Claude Code Review
+on: [pull_request]
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      # Use Haiku for cost-effective reviews
+      - name: Run Claude review
+        run: |
+          claude --model haiku \
+                 -p "Review changes for security and style issues" \
+                 --add-dir src/ \
+                 --output-format json > review.json
+
+      # Only escalate to Sonnet if issues found
+      - name: Deep analysis (if needed)
+        if: contains(steps.*.outputs.*, 'CRITICAL')
+        run: |
+          claude --model sonnet \
+                 -p "Detailed analysis of critical issues found" \
+                 --add-dir src/
+```
+
+### Cost Comparison
+
+```
+Haiku review (per PR): ~$0.02
+Sonnet review (per PR): ~$0.10
+Opus review (per PR): ~$0.50
+
+With 100 PRs/month:
+- All Haiku: $2/month
+- All Sonnet: $10/month
+- All Opus: $50/month
+
+Smart escalation (Haiku → Sonnet for 10% of PRs):
+- Base cost: $2 (Haiku for all)
+- Escalation: $1 (Sonnet for 10%)
+- Total: $3/month (vs $10 or $50)
+```
+
+---
+
+## Cost vs Productivity Trade-offs
+
+<CardGrid>
+  <Card title="False Economy" icon="close">
+    - Spending 2 hours manually debugging to save $1 in API costs
+    - Using Haiku for complex tasks, generating incorrect code
+    - Over-compacting context, losing valuable history
+  </Card>
+  <Card title="Smart Optimization" icon="approve-check">
+    - Use right model for the task (time saved >> cost)
+    - Invest in good prompts and memory files (reduce iterations)
+    - Automate with agents (consistent, efficient)
+  </Card>
+</CardGrid>
+
+### When to Optimize Aggressively
+
+- High-volume operations (&gt;1000 requests/day)
+- Automated pipelines running 24/7
+- Large teams (cost scales with users)
+- Budget-constrained projects
+
+### When Productivity Matters More
+
+- Critical bug fixes
+- Time-sensitive features
+- Learning and experimentation
+- Complex architectural decisions

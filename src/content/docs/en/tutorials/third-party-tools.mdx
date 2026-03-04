@@ -1,0 +1,218 @@
+---
+title: "Third-Party Tools"
+description: "Community GUIs, TUIs, config managers, token trackers, and alternative UIs"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+This page catalogs **community-built tools that extend Claude Code**. Each tool has been verified against its public repository or package registry. Only tools with a public source (GitHub, npm, PyPI) are included.
+
+<Aside>
+This page does not cover: complementary AI tools (see AI Ecosystem tutorial), DIY monitoring scripts, or MCP server recommendations (see MCP Ecosystem tutorial).
+</Aside>
+
+---
+
+## Token & Cost Tracking
+
+### ccusage
+
+The most mature cost tracking tool for Claude Code. Parses local session data to produce cost reports by day, month, session, or 5-hour billing window.
+
+| Attribute | Details |
+|-----------|---------|
+| **Source** | [npm: ccusage](https://www.npmjs.com/package/ccusage) / [ccusage.com](https://ccusage.com) |
+| **Install** | `bunx ccusage` (fastest) or `npx ccusage` |
+| **Language** | TypeScript (Node.js 18+) |
+
+**Key features**:
+
+- `ccusage daily` / `ccusage monthly` / `ccusage session` -- aggregated cost reports
+- `ccusage blocks --live` -- real-time monitoring against 5-hour billing windows
+- `--breakdown` flag for per-model cost split (Opus/Sonnet/Haiku)
+- JSON output (`--json`) for programmatic access
+- MCP server integration (`@ccusage/mcp`)
+- macOS widget and Raycast extension
+
+**Limitations**: Relies on local JSONL parsing; cost estimates may differ from official Anthropic billing. No team aggregation without manual log merging.
+
+---
+
+### ccburn
+
+A Python TUI for visual token burn-rate tracking. Displays charts showing consumption rate relative to Claude's billing windows.
+
+| Attribute | Details |
+|-----------|---------|
+| **Source** | [GitHub: JuanjoFuchs/ccburn](https://github.com/JuanjoFuchs/ccburn) |
+| **Install** | `pip install ccburn` |
+| **Language** | Python 3.10+ (Rich + Plotext) |
+
+**When to choose ccburn over ccusage**: If you prefer visual burn-rate charts over tabular reports, or if your toolchain is Python-based.
+
+---
+
+### RTK (Rust Token Killer)
+
+A CLI proxy that filters command outputs **before** they reach Claude's context. 446 stars, 700+ upvotes on r/ClaudeAI.
+
+| Attribute | Details |
+|-----------|---------|
+| **Source** | [GitHub: rtk-ai/rtk](https://github.com/rtk-ai/rtk) |
+| **Install** | `brew install rtk-ai/tap/rtk` or `cargo install rtk` |
+| **Language** | Rust (standalone binary) |
+
+**Key features**:
+- `rtk git log` (92% reduction), `rtk git status` (76% reduction), `rtk git diff` (56% reduction)
+- Supports vitest, prisma, pnpm, pytest, go test, cargo, and more
+- `rtk gain` -- token savings analytics
+- `rtk discover` -- find missed optimization opportunities
+
+<Aside type="tip">
+RTK **reduces** token consumption (preprocessing), while ccusage/ccburn **monitor** it (postprocessing). Use both together for maximum efficiency.
+</Aside>
+
+---
+
+## Session Management
+
+### claude-code-viewer
+
+A web-based UI for browsing and reading Claude Code conversation history (JSONL files).
+
+| Attribute | Details |
+|-----------|---------|
+| **Install** | `npx @kimuson/claude-code-viewer` |
+| **Language** | TypeScript (Node.js 18+) |
+
+**Key features**:
+- Project browser with session counts and metadata
+- Full conversation display with syntax highlighting
+- Tool usage results inline
+- Real-time updates via Server-Sent Events
+
+**Limitations**: Read-only (cannot edit or resume sessions).
+
+---
+
+### Entire CLI
+
+Agent-native platform for Git-integrated session capture with rewindable checkpoints and governance layer.
+
+| Attribute | Details |
+|-----------|---------|
+| **Source** | [GitHub: entireio/cli](https://github.com/entireio/cli) / [entire.io](https://entire.io) |
+| **Founded** | February 2026 by Thomas Dohmke (ex-GitHub CEO), $60M funding |
+
+**Key features**:
+
+| Scenario | Why Entire CLI |
+|----------|---------------|
+| **Compliance (SOC2, HIPAA)** | Full audit trail: prompts → reasoning → outputs |
+| **Multi-agent workflows** | Context preserved across agent switches |
+| **Debugging AI decisions** | Rewind to checkpoint, inspect reasoning |
+| **Governance** | Approval gates before production changes |
+
+**Entire CLI vs claude-code-viewer**:
+
+| Feature | claude-code-viewer | Entire CLI |
+|---------|-------------------|-----------|
+| **Purpose** | Read-only history viewing | Active session management + replay |
+| **Replay** | No | Yes (rewind to checkpoints) |
+| **Governance** | No | Yes (approval gates, permissions) |
+| **Multi-agent** | No | Yes (agent handoffs) |
+
+---
+
+## Configuration Management
+
+### claude-code-config
+
+A TUI for managing `~/.claude.json` configuration, focused on MCP server management.
+
+| Attribute | Details |
+|-----------|---------|
+| **Install** | `pip install claude-code-config` |
+| **Language** | Python (Textual TUI) |
+
+**Limitations**: Limited to `~/.claude.json` scope. Does not manage hooks or slash commands.
+
+---
+
+### AIBlueprint
+
+A CLI that scaffolds pre-configured Claude Code setups with hooks, commands, statusline, and workflow automation.
+
+| Attribute | Details |
+|-----------|---------|
+| **Install** | `npx aiblueprint-cli` |
+| **Language** | TypeScript |
+
+**Limitations**: Opinionated configuration choices. Some features require a premium tier. Does not read existing config (scaffolds from scratch).
+
+---
+
+## Alternative UIs
+
+<CardGrid>
+  <Card title="Claude Chic" icon="laptop">
+    Styled terminal UI built on claude-agent-sdk. Color-coded messages, collapsible tool blocks, Git worktree management, vim keybindings. Install: `uvx claudechic`. Alpha status.
+  </Card>
+  <Card title="Toad" icon="laptop">
+    Universal terminal frontend for 12+ AI coding agents (Claude Code, Gemini CLI, etc.). Unified interface, shell integration, `@` file context injection. Author: Will McGugan (creator of Rich & Textual).
+  </Card>
+  <Card title="Conductor" icon="laptop">
+    macOS desktop app for orchestrating multiple Claude Code instances in parallel using git worktrees. Unified diff viewer, GitHub/Linear integration. macOS only.
+  </Card>
+  <Card title="Claude Code GUI" icon="laptop">
+    Third-party VS Code extension (not Anthropic's official extension) adding a graphical layer on top of Claude Code. Note the distinction from the official extension.
+  </Card>
+</CardGrid>
+
+---
+
+## Multi-Agent Orchestration
+
+Tools for running **multiple concurrent Claude Code instances**:
+
+| Tool | Type | Key Feature |
+|------|------|-------------|
+| [Gas Town](https://github.com/steveyegge/gastown) | Multi-agent workspace | Steve Yegge's agent-first workspace manager |
+| [multiclaude](https://github.com/dlorenc/multiclaude) | Multi-agent spawner | tmux + git worktrees (383+ stars) |
+| [agent-chat](https://github.com/justinabrahms/agent-chat) | Monitoring UI | Real-time SSE monitoring for Gas Town/multiclaude |
+| Conductor | Desktop app | macOS parallel agents (also listed above) |
+
+---
+
+## Plugin Ecosystem
+
+Claude Code's plugin system supports community-built extensions:
+
+- **[claude-plugins.dev](https://claude-plugins.dev)** -- 11,989 plugins, 63,065 skills indexed
+- **[claudemarketplaces.com](https://claudemarketplaces.com)** -- Auto-scan GitHub for marketplace plugins
+- **[agentskills.io](https://agentskills.io)** -- Open standard for agent skills (26+ platforms)
+
+---
+
+## Known Gaps
+
+| Gap | Description |
+|-----|-------------|
+| **Visual skills editor** | No GUI for creating/editing `.claude/skills/` -- must edit YAML/Markdown manually |
+| **Visual hooks editor** | No GUI for managing hooks in `settings.json` -- requires JSON editing |
+| **Unified admin panel** | No single dashboard combining config, sessions, cost, and MCP management |
+| **Per-MCP-server profiler** | No way to measure token cost attributable to each MCP server individually |
+| **Cross-platform config sync** | No tool syncs Claude Code config across machines |
+
+---
+
+## Recommendations by Persona
+
+| Persona | Recommended Tools | Rationale |
+|---------|-------------------|-----------|
+| **Solo developer** | ccusage + claude-code-viewer | Cost awareness + session history review |
+| **Small team (2-5)** | ccusage + Conductor or multiclaude | Cost tracking + parallel development |
+| **Enterprise** | ccusage (MCP) + custom dashboards | Programmatic cost data + audit trails |
+| **Python-centric** | ccburn + Claude Chic | Native Python ecosystem tools |
+| **Multi-agent user** | Toad or Conductor | Unified agent management |
+| **Config-heavy setup** | claude-code-config + AIBlueprint | TUI config management + scaffolding |

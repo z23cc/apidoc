@@ -1,0 +1,585 @@
+---
+title: "Security Hardening Guide"
+description: "Active threats, injection defense, and CVE-based security hardening for Claude Code"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Securing Claude Code goes beyond basic permissions. This guide covers **active threat defense**, **injection attack prevention**, and **CVE-based hardening** to protect your development workflow against real-world attacks.
+
+---
+
+## Quick Decision Matrix
+
+| Your Situation | Immediate Action | Time |
+|----------------|------------------|------|
+| **Solo dev, public repos** | Install output scanner hook | 5 min |
+| **Team, sensitive codebase** | + MCP vetting + injection hooks | 30 min |
+| **Enterprise, production** | + ZDR + integrity verification | 2 hours |
+
+<Aside type="danger">
+**NEVER** approve MCPs from unknown sources without version pinning. **NEVER** run database MCPs on production without read-only credentials.
+</Aside>
+
+---
+
+## Part 1: Prevention (Before You Start)
+
+### MCP Vetting Workflow
+
+Model Context Protocol (MCP) servers extend Claude Code's capabilities but introduce significant attack surface. Understanding the threat model is essential.
+
+#### Attack: MCP Rug Pull
+
+```
+1. Attacker publishes benign MCP "code-formatter"
+          |
+2. User adds to ~/.claude.json, approves once
+          |
+3. MCP works normally for 2 weeks (builds trust)
+          |
+4. Attacker pushes malicious update (no re-approval!)
+          |
+5. MCP exfiltrates ~/.ssh/*, .env, credentials
+
+MITIGATION: Version pinning + hash verification + monitoring
+```
+
+This attack exploits the one-time approval model: once you approve an MCP, updates execute automatically without re-consent.
+
+#### CVE Summary (2025-2026)
+
+| CVE | Severity | Impact | Mitigation |
+|-----|----------|--------|------------|
+| **CVE-2025-53109/53110** | High | Filesystem MCP sandbox escape via prefix bypass + symlinks | Update to >= 0.6.3 / 2025.7.1 |
+| **CVE-2025-54135** | High (8.6) | RCE in Cursor via prompt injection rewriting mcp.json | File integrity monitoring hook |
+| **CVE-2025-54136** | High | Persistent team backdoor via post-approval config tampering | Git hooks + hash verification |
+| **CVE-2025-49596** | Critical (9.4) | RCE in MCP Inspector tool | Update to patched version |
+| **CVE-2026-24052** | High | SSRF via domain validation bypass in WebFetch | Update to v1.0.111+ |
+| **CVE-2025-66032** | High | 8 command execution bypasses via blocklist flaws | Update to v1.0.93+ |
+| **ADVISORY-CC-2026-001** | High | Sandbox bypass -- commands excluded from sandboxing bypass Bash permissions | Update to v2.1.34+ |
+| **CVE-2026-0755** | Critical (9.8) | RCE in gemini-mcp-tool -- no fix yet | Avoid using in production |
+
+<Aside type="caution">
+**v2.1.34 Security Fix (Feb 2026)**: Claude Code v2.1.34 patched a sandbox bypass vulnerability where commands excluded from sandboxing could bypass Bash permission enforcement. Upgrade immediately if running v2.1.33 or earlier.
+</Aside>
+
+<Aside type="danger">
+**CVE-2026-0755 (Feb 2026 -- No Patch)**: Critical RCE in `gemini-mcp-tool` (CVSS 9.8). An attacker can send crafted JSON-RPC requests with malicious arguments that execute arbitrary code on the host machine. Do not expose gemini-mcp-tool to untrusted networks.
+</Aside>
+
+#### Attack Patterns
+
+| Pattern | Description | Detection |
+|---------|-------------|-----------|
+| **Tool Poisoning** | Malicious instructions in tool metadata influence LLM before execution | Schema diff monitoring |
+| **Rug Pull** | Benign server turns malicious after gaining trust | Version pinning + hash verify |
+| **Confused Deputy** | Attacker registers tool with trusted name on untrusted server | Namespace verification |
+
+#### 5-Minute MCP Audit
+
+Before adding any MCP server, complete this checklist:
+
+<Steps>
+1. **Source**: Run `gh repo view <mcp-repo>` -- Stars >50, commits &lt;30 days
+2. **Permissions**: Review `mcp.json` config -- No `--dangerous-*` flags
+3. **Version**: Check version string -- Pinned (not "latest" or "main")
+4. **Hash**: Run `sha256sum <mcp-binary>` -- Matches release checksum
+5. **Audit**: Review recent commits -- No suspicious changes
+</Steps>
+
+#### MCP Safe List (Community Vetted)
+
+| MCP Server | Status | Notes |
+|------------|--------|-------|
+| `@anthropic/mcp-server-*` | Safe | Official Anthropic servers |
+| `context7` | Safe | Read-only documentation lookup |
+| `sequential-thinking` | Safe | No external access, local reasoning |
+| `memory` | Safe | Local file-based persistence |
+| `filesystem` (unrestricted) | Risk | CVE-2025-53109/53110 -- use with caution |
+| `database` (prod credentials) | Unsafe | Exfiltration risk -- use read-only |
+| `browser` (full access) | Risk | Can navigate to malicious sites |
+| `mcp-scan` (Snyk) | Tool | Supply chain scanning for skills/MCPs |
+
+#### Secure MCP Configuration Example
+
+```json
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@context7/mcp-server@1.2.3"],
+      "env": {}
+    },
+    "database": {
+      "command": "npx",
+      "args": ["-y", "@company/db-mcp@2.0.1"],
+      "env": {
+        "DB_HOST": "readonly-replica.internal",
+        "DB_USER": "readonly_user"
+      }
+    }
+  }
+}
+```
+
+**Key practices**:
+- Pin exact versions (`@1.2.3`, not `@latest`)
+- Use read-only database credentials
+- Minimize environment variables exposed
+
+### Agent Skills Supply Chain Risks
+
+Third-party Agent Skills introduce supply chain risks similar to npm packages.
+
+**Snyk ToxicSkills** (Feb 2026) scanned **3,984 skills** across ClawHub and skills.sh:
+
+| Finding | Stat | Impact |
+|---------|------|--------|
+| Skills with security flaws | **36.82%** (1,467/3,984) | Over 1 in 3 skills is compromised |
+| Critical risk skills | **534** (13.4%) | Malware, prompt injection, exposed secrets |
+| Malicious payloads identified | **76** | Credential theft, backdoors, data exfiltration |
+| Hardcoded secrets (ClawHub) | **10.9%** | API keys, tokens exposed in skill code |
+| Remote prompt execution | **2.9%** | Skills fetch and execute distant content dynamically |
+
+<Aside type="tip">
+**Mitigations**: Scan before installing with `mcp-scan` (Snyk), review `SKILL.md` for unexpected access (especially `Bash`), pin skill versions to specific commit hashes.
+</Aside>
+
+```bash
+# Scan a skill directory with mcp-scan (Snyk)
+npx mcp-scan ./skill-directory
+
+# Validate spec compliance with skills-ref
+skills-ref validate ./skill-directory
+```
+
+### Known Limitations of permissions.deny
+
+The `permissions.deny` setting in `.claude/settings.json` is the official method to block Claude from accessing sensitive files. However, security researchers have documented architectural limitations.
+
+#### What permissions.deny Blocks
+
+| Operation | Blocked? | Notes |
+|-----------|----------|-------|
+| `Read()` tool calls | Yes | Primary blocking mechanism |
+| `Edit()` tool calls | Yes | With explicit deny rule |
+| `Write()` tool calls | Yes | With explicit deny rule |
+| `Bash(cat .env)` | Yes | With explicit deny rule |
+| `Glob()` patterns | Yes | Handled by Read rules |
+| `ls .env*` (filenames) | Partial | Exposes file existence, not contents |
+
+#### Known Security Gaps
+
+| Gap | Description |
+|-----|-------------|
+| **System reminders** | Background indexing may expose file contents via internal mechanism before tool permission checks |
+| **Bash wildcards** | Generic bash commands without explicit deny rules may access files |
+| **Indexing timing** | File watching operates at a layer below tool permissions |
+
+#### Recommended Configuration
+
+Block **all** access vectors, not just `Read`:
+
+```json
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env*)",
+      "Edit(./.env*)",
+      "Write(./.env*)",
+      "Bash(cat .env*)",
+      "Bash(head .env*)",
+      "Bash(tail .env*)",
+      "Bash(grep .env*)",
+      "Read(./secrets/**)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.key)"
+    ]
+  }
+}
+```
+
+#### Defense-in-Depth Strategy
+
+<Steps>
+1. **Store secrets outside project directories** -- Use `~/.secrets/` or external vault
+2. **Use external secrets management** -- AWS Secrets Manager, 1Password, HashiCorp Vault
+3. **Add PreToolUse hooks** -- Secondary blocking layer
+4. **Never commit secrets** -- Even "blocked" files can leak through other vectors
+5. **Review bash commands** -- Manually inspect before approving execution
+</Steps>
+
+<Aside>
+`permissions.deny` is necessary but not sufficient. Treat it as one layer in a defense-in-depth strategy, not a complete solution.
+</Aside>
+
+#### Built-in Permission Safeguards
+
+| Safeguard | Behavior |
+|-----------|----------|
+| **Command blocklist** | `curl` and `wget` are blocked by default in the sandbox |
+| **Fail-closed matching** | Any permission rule that doesn't match defaults to requiring manual approval |
+| **Command injection detection** | Suspicious bash commands require manual approval even if previously allowlisted |
+
+### Repository Pre-Scan
+
+Before opening untrusted repositories, scan for injection vectors.
+
+**High-risk files to inspect**:
+- `README.md`, `SECURITY.md` -- Hidden HTML comments with instructions
+- `package.json`, `pyproject.toml` -- Malicious scripts in hooks
+- `.cursor/`, `.claude/` -- Tampered configuration files
+- `CONTRIBUTING.md` -- Social engineering instructions
+
+**Quick scan command**:
+```bash
+# Check for hidden instructions in markdown
+grep -r "<!--" . --include="*.md" | head -20
+
+# Check for suspicious npm scripts
+jq '.scripts' package.json 2>/dev/null
+
+# Check for base64 in comments
+grep -rE "#.*[A-Za-z0-9+/]{20,}={0,2}" . --include="*.py" --include="*.js"
+```
+
+### Malicious Extensions (.claude/ Attack Surface)
+
+Repositories can embed a `.claude/` folder with pre-configured agents, commands, and hooks. Opening such a repo in Claude Code automatically loads this configuration -- a supply chain vector that bypasses skill marketplaces entirely.
+
+#### Attack Vectors
+
+| Vector | Mechanism | Risk |
+|--------|-----------|------|
+| **Malicious agents** | `allowed-tools: ["Bash"]` + exfiltration instructions | Agent executes arbitrary commands |
+| **Malicious commands** | Hidden instructions in prompt template | Commands run with full permissions |
+| **Malicious hooks** | Bash scripts in `.claude/hooks/` | Data exfiltration on every tool call |
+| **Poisoned CLAUDE.md** | Instructions that override security settings | LLM follows repo instructions |
+| **Trojan settings.json** | Permissive `permissions.allow` rules | Weakens security posture silently |
+
+#### 5-Minute .claude/ Audit Checklist
+
+<Steps>
+1. **Existence**: Run `ls -la .claude/` -- Unexpected `.claude/` in a non-Claude project?
+2. **Hooks**: Run `cat .claude/hooks/*.sh` -- Look for `curl`, `wget`, network calls, base64 encoding
+3. **Agents**: Run `cat .claude/agents/*.md` -- Check for `allowed-tools: ["Bash"]` with vague descriptions
+4. **Commands**: Run `cat .claude/commands/*.md` -- Look for hidden instructions after visible content
+5. **Settings**: Run `cat .claude/settings.json` -- Check for overly permissive `permissions.allow` rules
+6. **CLAUDE.md**: Run `cat .claude/CLAUDE.md` -- Watch for instructions to disable security
+</Steps>
+
+```bash
+# Quick scan for suspicious patterns in .claude/
+grep -r "curl\|wget\|nc \|base64\|eval\|exec" .claude/ 2>/dev/null
+grep -r "allowed-tools.*Bash" .claude/agents/ 2>/dev/null
+grep -r "permissions.allow" .claude/ 2>/dev/null
+```
+
+---
+
+## Part 2: Detection (While You Work)
+
+### Prompt Injection Detection
+
+Coding assistants are vulnerable to indirect prompt injection through code context. Attackers embed instructions in files that Claude reads automatically.
+
+#### Evasion Techniques
+
+| Technique | Example | Risk | Detection |
+|-----------|---------|------|-----------|
+| **Zero-width chars** | `U+200B`, `U+200C`, `U+200D` | Instructions invisible to humans | Unicode regex |
+| **RTL override** | `U+202E` reverses text display | Hidden command appears normal | Bidirectional scan |
+| **ANSI escape** | `\x1b[` terminal sequences | Terminal manipulation | Escape filter |
+| **Null byte** | `\x00` truncation attacks | Bypass string checks | Null detection |
+| **Base64 comments** | `# SGlkZGVuOiBpZ25vcmU=` | LLM decodes automatically | Entropy check |
+| **Nested commands** | `$(evil_command)` | Bypass denylist via substitution | Pattern block |
+| **Homoglyphs** | Cyrillic vs Latin characters | Keyword filter bypass | Normalization |
+
+#### Detection Patterns
+
+```bash
+# Zero-width + RTL + Bidirectional
+[\x{200B}-\x{200D}\x{FEFF}\x{202A}-\x{202E}\x{2066}-\x{2069}]
+
+# ANSI escape sequences (terminal injection)
+\x1b\[|\x1b\]|\x1b\(
+
+# Null bytes (truncation attacks)
+\x00
+
+# Base64 in comments (high entropy)
+[#;].*[A-Za-z0-9+/]{20,}={0,2}
+
+# Nested command execution
+\$\([^)]+\)|\`[^\`]+\`
+```
+
+### Secret & Output Monitoring
+
+#### Tool Comparison
+
+| Tool | Recall | Precision | Speed | Best For |
+|------|--------|-----------|-------|----------|
+| **Gitleaks** | 88% | 46% | Fast (~2 min/100K commits) | Pre-commit hooks |
+| **TruffleHog** | 52% | 85% | Slow (~15 min) | CI verification |
+| **GitGuardian** | 80% | 95% | Cloud | Enterprise monitoring |
+| **detect-secrets** | 60% | 98% | Fast | Baseline approach |
+
+**Recommended stack**:
+```
+Pre-commit  ->  Gitleaks (catch early, accept some FP)
+CI/CD       ->  TruffleHog (verify with API validation)
+Monitoring  ->  GitGuardian (if budget allows)
+```
+
+#### Environment Variable Leakage
+
+| Vector | Example | Mitigation |
+|--------|---------|------------|
+| `env` / `printenv` output | Dumps all environment | Block in output scanner |
+| `/proc/self/environ` access | Linux env read | Block file access pattern |
+| Error messages with creds | Stack trace with DB password | Redact before display |
+| Bash history exposure | Commands with inline secrets | History sanitization |
+
+### Hook Stack Setup
+
+Recommended security hook configuration for `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          "~/.claude/hooks/dangerous-actions-blocker.sh"
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          "~/.claude/hooks/prompt-injection-detector.sh",
+          "~/.claude/hooks/unicode-injection-scanner.sh"
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          "~/.claude/hooks/output-secrets-scanner.sh"
+        ]
+      }
+    ],
+    "SessionStart": [
+      "~/.claude/hooks/mcp-config-integrity.sh"
+    ]
+  }
+}
+```
+
+**Hook installation**:
+```bash
+# Copy hooks to Claude directory
+cp examples/hooks/bash/*.sh ~/.claude/hooks/
+chmod +x ~/.claude/hooks/*.sh
+```
+
+---
+
+## Part 3: Response (When Things Go Wrong)
+
+### Secret Exposed
+
+**First 15 minutes** (stop the bleeding):
+
+<Steps>
+1. **Revoke immediately**
+   ```bash
+   # AWS
+   aws iam delete-access-key --access-key-id AKIA... --user-name <user>
+   # GitHub: Settings -> Developer settings -> Revoke
+   # Stripe: Dashboard -> Developers -> Roll key
+   ```
+2. **Confirm exposure scope**
+   ```bash
+   git log --oneline origin/main..HEAD
+   git log -p | grep -E "(AKIA|sk_live_|ghp_|xoxb-)"
+   gitleaks detect --source . --report-format json > exposure-report.json
+   ```
+3. **Audit git history** (if pushed, you may need to rewrite history)
+   ```bash
+   git filter-repo --invert-paths --path <file-with-secret>
+   ```
+4. **Scan dependencies** for leaked keys in logs or configs
+5. **Check CI/CD logs** for secret exposure in build outputs
+</Steps>
+
+**First 24 hours** (remediate):
+- Rotate ALL related credentials (assume lateral movement)
+- Notify team/compliance if required (GDPR, SOC2, HIPAA)
+- Document incident timeline for post-mortem
+
+### MCP Compromised
+
+If you suspect an MCP server has been compromised:
+
+<Steps>
+1. **Disable immediately**
+   ```bash
+   jq 'del(.mcpServers.<suspect>)' ~/.claude.json > tmp && mv tmp ~/.claude.json
+   ```
+2. **Verify config integrity**
+   ```bash
+   sha256sum ~/.claude.json
+   diff ~/.claude.json ~/.claude.json.backup
+   cat .mcp.json 2>/dev/null
+   ```
+3. **Audit recent actions** -- Review session logs in `~/.claude/logs/`, check for unexpected file modifications
+4. **Restore from known-good backup**
+   ```bash
+   cp ~/.claude.json.backup ~/.claude.json
+   ```
+</Steps>
+
+### AI Kill Switch & Containment
+
+<CardGrid>
+  <Card title="Level 1: Scoped Revocation" icon="setting">
+    Disable specific capabilities via hooks and `permissions.deny`.
+  </Card>
+  <Card title="Level 2: Velocity Governor" icon="warning">
+    Rate-limit command frequency with custom hooks and `--allowedTools` flag.
+  </Card>
+  <Card title="Level 3: Global Hard Stop" icon="error">
+    Kill everything: `Ctrl+C` / `Esc`, `claude config set --disable`, uninstall.
+  </Card>
+</CardGrid>
+
+**Velocity governor hook example**:
+
+```bash
+#!/bin/bash
+# .claude/hooks/velocity-governor.sh
+# Blocks if >20 Bash commands in 5 minutes
+
+COUNTER_FILE="/tmp/claude-cmd-counter-$$"
+WINDOW=300  # 5 minutes
+THRESHOLD=20
+
+NOW=$(date +%s)
+echo "$NOW" >> "$COUNTER_FILE"
+
+if [[ -f "$COUNTER_FILE" ]]; then
+  CUTOFF=$((NOW - WINDOW))
+  awk -v cutoff="$CUTOFF" '$1 >= cutoff' "$COUNTER_FILE" > "${COUNTER_FILE}.tmp"
+  mv "${COUNTER_FILE}.tmp" "$COUNTER_FILE"
+  COUNT=$(wc -l < "$COUNTER_FILE")
+
+  if (( COUNT > THRESHOLD )); then
+    echo '{"decision": "block", "reason": "Rate limit exceeded. Possible runaway agent."}'
+    exit 0
+  fi
+fi
+
+exit 0
+```
+
+---
+
+## Part 4: Integration (In Your Daily Workflow)
+
+### PR Security Review Workflow
+
+The most high-ROI use of Claude Code for security: systematic review of every PR before merge.
+
+#### Setup
+
+```bash
+# Run from repo root before merging any PR
+git diff main...HEAD > /tmp/pr-diff.txt
+```
+
+Then in Claude Code:
+
+```
+Review the security implications of this PR diff.
+Focus: injection, auth bypass, secrets exposure, insecure deserialization.
+File: /tmp/pr-diff.txt
+```
+
+#### What to Always Check in a Security PR Review
+
+| Change type | Risk | What to look for |
+|-------------|------|-----------------|
+| New API endpoint | High | Auth check, input validation, rate limiting |
+| DB query change | High | Parameterized queries, index exposure |
+| Auth logic | Critical | Token validation, session management, privilege escalation |
+| File upload | High | MIME type, size limit, path traversal |
+| Third-party lib added | Medium | CVE check (`npm audit`, `cargo audit`) |
+| Env var added | Medium | Not hardcoded, in `.gitignore`, in `.env.example` |
+
+---
+
+## Remote Control Security
+
+<Aside>
+**Feature context**: Remote Control (Research Preview, Feb 2026) allows controlling a local Claude Code session from a phone, tablet, or browser. Available on Pro and Max plans only.
+</Aside>
+
+### Architecture
+
+```
+Local terminal --HTTPS outbound--> Anthropic relay --> Mobile/Browser
+ (execution)                        (relay only)       (control UI)
+```
+
+**Security properties**: Zero inbound ports, HTTPS only, multiple short-lived credentials, execution stays 100% local.
+
+### Threat Model
+
+| Threat | Risk | Mitigation |
+|--------|------|------------|
+| **Session URL leak** | Full terminal access for URL holder | Treat URL as password |
+| **RCE via remote commands** | Attacker with URL can run commands | Per-command approval prompts |
+| **Corporate policy violation** | Personal account on corporate machine | Verify policy before enabling |
+| **Persistent session exposure** | Long-running sessions increase exposure | Close sessions when done; ~10min auto-timeout |
+
+### Best Practices
+
+```bash
+# 1. Don't auto-enable - activate only when needed
+# 2. Use on a dedicated, hardened workstation
+# 3. Close the session when done (Ctrl+C on local terminal)
+# 4. Never share session URLs in team chats, tickets, or logs
+# 5. Prefer use on personal dev machines (not corporate with elevated privileges)
+```
+
+---
+
+## Quick Reference
+
+### Security Posture Levels
+
+| Level | Measures | Time | For |
+|-------|----------|------|-----|
+| **Basic** | Output scanner + dangerous blocker | 5 min | Solo dev, experiments |
+| **Standard** | + Injection hooks + MCP vetting | 30 min | Teams, sensitive code |
+| **Hardened** | + Integrity verification + ZDR | 2 hours | Enterprise, production |
+
+### Command Quick Reference
+
+```bash
+# Scan for secrets
+gitleaks detect --source . --verbose
+
+# Check MCP config
+cat ~/.claude.json | jq '.mcpServers | keys'
+
+# Verify hook installation
+ls -la ~/.claude/hooks/
+
+# Test Unicode detection
+echo -e "test\u200Bhidden" | grep -P '[\x{200B}-\x{200D}]'
+```

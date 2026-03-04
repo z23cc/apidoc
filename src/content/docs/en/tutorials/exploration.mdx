@@ -1,0 +1,313 @@
+---
+title: "Exploration Before Implementation"
+description: "Ask Claude for multiple approaches with trade-offs before coding to prevent anchoring bias"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Before writing code, ask Claude for multiple approaches with trade-offs. This prevents **anchoring bias** — the tendency to fixate on the first solution proposed and ignore potentially better alternatives.
+
+---
+
+## Core Workflow
+
+<Steps>
+1. Describe the problem (no code, no preconceptions)
+2. Request 3-5 approaches with trade-offs
+3. Ask for a quantified comparison
+4. Choose an approach
+5. Then implement
+</Steps>
+
+<Aside type="tip">
+Key insight: **Once a model proposes a concrete solution, it can unintentionally narrow your thinking.** So explore broadly before committing to any approach.
+</Aside>
+
+---
+
+## The Exploration Pattern in Detail
+
+### Step 1: Problem Statement Only
+
+Start with the problem, not a solution direction:
+
+```
+I need to handle user sessions in a Node.js API.
+Requirements:
+- Support 10K concurrent users
+- Session data: user ID, permissions, preferences
+- Must survive server restarts
+```
+
+<Aside type="caution">
+Don't start like this (anchors on Redis):
+
+```
+I'm thinking of using Redis for sessions. How should I implement it?
+```
+
+You've eliminated 90% of solutions before exploring.
+</Aside>
+
+### Step 2: Request Multiple Approaches
+
+```
+Give me 4 different approaches to solve this.
+For each, include:
+- Architecture overview
+- Pros and cons
+- Performance characteristics
+- Complexity to implement
+```
+
+### Step 3: Quantified Comparison
+
+```
+Now rank these approaches on a 1-10 scale for:
+- Latency (lower is better)
+- Scalability (10K → 100K users)
+- Operational complexity
+- Development time
+```
+
+### Step 4: Choose, Then Implement
+
+```
+I'll go with approach B (JWT + Redis hybrid).
+Now implement it following our existing patterns in src/auth/.
+```
+
+---
+
+## Anti-Anchoring Prompt Techniques
+
+LLMs can fixate on their first suggestion. These prompts combat that tendency:
+
+| Prompt Type | Template | Effect |
+|-------------|----------|--------|
+| **Fresh start** | "Ignore any prior ideas. Generate 4 novel approaches to [X]" | Forces diversity |
+| **Reflection loop** | "Generate 3 options, then critique each, then recommend" | Self-correction |
+| **Quantified trade-offs** | "Rank by [metric1], [metric2], [metric3] with scores 1-10" | Objective comparison |
+| **Devil's advocate** | "What are the strongest arguments against your recommendation?" | Surface hidden trade-offs |
+| **Constraint variation** | "Now solve the same problem with [opposite constraint]" | Expand solution space |
+
+### Anti-Anchoring Prompt Example
+
+```
+I need pagination for a REST API with 1M+ records.
+
+IMPORTANT: Don't suggest offset-based pagination first.
+Generate 4 different pagination strategies, including at least one
+unconventional approach. For each:
+
+1. How it works (2-3 sentences)
+2. Best use case
+3. Worst use case
+4. Performance at 1M records
+
+Then recommend one, explaining why it beats the others for my use case.
+```
+
+### Reflection Loop Prompt
+
+```
+For implementing real-time notifications:
+
+Phase 1: Generate 3 approaches (WebSockets, SSE, Long Polling)
+Phase 2: For each, list 2 things that could go wrong in production
+Phase 3: Based on Phase 2, which approach is most resilient?
+
+Show your reasoning for each phase.
+```
+
+---
+
+## When to Use Exploration
+
+<CardGrid>
+  <Card title="Use Exploration" icon="approve-check">
+    - Greenfield features (no existing pattern to follow)
+    - Architecture decisions (high impact, hard to reverse)
+    - Multiple valid approaches (need informed choice)
+    - Unfamiliar domain (don't know what you don't know)
+    - Team disagreement (get neutral analysis)
+  </Card>
+  <Card title="Skip Exploration" icon="close">
+    - Bug fixes (solution usually obvious from symptoms)
+    - Single valid approach (no real choice to make)
+    - Time-critical hotfixes (speed over perfection)
+    - Following existing patterns (decision already made)
+    - Trivial changes (overhead not worth it)
+  </Card>
+</CardGrid>
+
+---
+
+## Integration with Claude Code
+
+### With Plan Mode
+
+Exploration happens **before** entering Plan Mode:
+
+```
+# Step 1: Explore (not in Plan Mode yet)
+I need to add caching to the API. What are my options?
+
+# Claude responds with 4 approaches
+
+# Step 2: Choose
+Let's go with approach C (edge caching with Cloudflare).
+
+# Step 3: Plan (press Shift+Tab twice to enter Plan Mode)
+Implement edge caching using Cloudflare Workers.
+Follow the patterns in our existing middleware.
+```
+
+### With CLAUDE.md
+
+Add exploration triggers to your project configuration:
+
+```markdown
+## Workflow Preferences
+
+### Before New Features
+When implementing new features, first explore 3-4 approaches
+with trade-offs before committing to implementation.
+Use quantified comparison (1-10 scale) for:
+- Performance
+- Maintainability
+- Time to implement
+```
+
+---
+
+## Anti-Patterns
+
+### Premature Anchoring
+
+<Tabs>
+  <TabItem label="Wrong">
+```
+"I want to use Redis for caching. How do I set it up?"
+```
+You've eliminated 90% of solutions before exploring.
+  </TabItem>
+  <TabItem label="Right">
+```
+"I need caching for API responses. What are my options?"
+```
+  </TabItem>
+</Tabs>
+
+### Shallow Comparison
+
+<Tabs>
+  <TabItem label="Wrong">
+```
+"Which is better: Redis or Memcached?"
+```
+  </TabItem>
+  <TabItem label="Right">
+```
+"Compare Redis, Memcached, and in-process caching for:
+- 50MB cache size
+- Read-heavy workload (95% reads)
+- Single server deployment
+Include latency, memory overhead, and operational complexity."
+```
+  </TabItem>
+</Tabs>
+
+### Ignoring Trade-offs
+
+<Tabs>
+  <TabItem label="Wrong">
+```
+"Just tell me the best approach"
+```
+  </TabItem>
+  <TabItem label="Right">
+```
+"What would I give up by choosing approach A over B?
+What scenarios would make me regret this choice?"
+```
+  </TabItem>
+</Tabs>
+
+### Analysis Paralysis
+
+<Tabs>
+  <TabItem label="Wrong">
+```
+Exploring 10 options for a simple feature
+```
+  </TabItem>
+  <TabItem label="Right">
+```
+Set a limit: "Give me your top 3 approaches, no more"
+Make a decision and iterate if needed
+```
+  </TabItem>
+</Tabs>
+
+---
+
+## Full Example
+
+### Exploration Phase
+
+```
+User: I need to implement real-time updates in our React dashboard.
+      The dashboard shows ~50 metrics that update every 5 seconds.
+      Currently we poll, but users complain about stale data.
+
+Claude: Here are 4 approaches:
+
+A) WebSockets
+- Full duplex, server can push anytime
+- Pros: Lowest latency, true real-time
+- Cons: Connection management, scaling complexity
+- Best for: Sub-second updates, bidirectional communication
+
+B) Server-Sent Events (SSE)
+- Unidirectional server → client stream
+- Pros: Simple, HTTP-based, auto-reconnect
+- Cons: One-way only, limited browser connections
+- Best for: Dashboard feeds, notifications
+
+C) Long Polling
+- Client holds request until data ready
+- Pros: Works everywhere, simple fallback
+- Cons: Higher latency, more server load
+- Best for: Legacy compatibility
+
+D) GraphQL Subscriptions
+- WebSocket-based with GraphQL schema
+- Pros: Type-safe, selective updates
+- Cons: Requires GraphQL infrastructure
+- Best for: Existing GraphQL APIs
+```
+
+### Quantified Comparison
+
+```
+User: Rank these for our use case (React, 50 metrics, 5s refresh,
+      team has no WebSocket experience).
+
+Claude: Scores (1-10, higher is better):
+
+| Approach | Latency | Complexity | Team Fit | Scalability |
+|----------|---------|------------|----------|-------------|
+| WebSockets | 10 | 4 | 3 | 7 |
+| SSE | 8 | 8 | 8 | 8 |
+| Long Polling | 5 | 9 | 9 | 5 |
+| GraphQL Subs | 9 | 3 | 2 | 7 |
+
+Recommendation: SSE
+Best balance of simplicity and real-time capability.
+Your team can implement it in a day, and it handles your
+50 metrics x 5s updates easily. Upgrade to WebSockets later
+if you need bidirectional or sub-second updates.
+
+User: Let's go with SSE. Now implement it.
+```

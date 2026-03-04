@@ -1,0 +1,540 @@
+---
+title: "Git 最佳实践"
+description: "Claude Code 中 Git 工作流的最佳实践，包括提交规范、分支管理、Worktree 并行开发等"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+本指南涵盖 Claude Code 中高效的 Git 工作流最佳实践，包括提交消息规范、分支管理、Rewind 与 Revert 的选择、Git Worktree 并行开发等。
+
+---
+
+## 提交消息规范
+
+Claude Code 能自动生成提交消息。通过 CLAUDE.md 配置来引导其风格。
+
+### 默认行为
+
+```bash
+# Claude 在完成更改后会生成如下提交：
+git commit -m "feat: add user authentication middleware
+
+- Implement JWT validation
+- Add session management
+- Create auth error handling
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>"
+```
+
+### 自定义提交风格
+
+在 CLAUDE.md 中定义提交约定：
+
+```markdown
+## Git Commit Conventions
+
+Follow Conventional Commits format:
+- feat: New features
+- fix: Bug fixes
+- docs: Documentation changes
+- refactor: Code restructuring
+- test: Test additions/changes
+- chore: Maintenance tasks
+
+Keep first line under 72 characters.
+Include ticket number: [PROJ-123]
+```
+
+### 带引导的提交示例
+
+```bash
+You: "Implement login endpoint"
+
+Claude: Creates commit:
+git commit -m "feat: implement user login endpoint [AUTH-42]
+
+- Add POST /api/auth/login route
+- Validate credentials with bcrypt
+- Generate JWT tokens
+- Return user profile on success
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>"
+```
+
+### AI 归属标准
+
+除了默认的 `Co-Authored-By` 标签外，还有其他归属选项：
+
+- LLVM 的 `Assisted-by:` 尾标标准
+- git-ai 检查点追踪
+- 团队和企业合规模式
+
+---
+
+## Git Amend 工作流
+
+<CardGrid>
+  <Card title="何时使用 Amend" icon="approve-check">
+    - 修复最近提交的拼写错误
+    - 将遗漏文件添加到上次提交
+    - 改善提交消息
+    - **仅限未推送的提交**
+  </Card>
+  <Card title="安全模式" icon="warning">
+    已推送的提交**绝不使用** amend（需要 force push，破坏团队历史），应创建新提交。
+  </Card>
+</CardGrid>
+
+### 安全的 Amend 模式
+
+```bash
+# 检查提交是否未推送
+git status
+# 输出: "Your branch is ahead of 'origin/main' by 1 commit"
+
+# 修改提交
+You: "Add the missing test file to the last commit"
+
+Claude:
+git add tests/auth.test.ts
+git commit --amend --no-edit
+```
+
+### 已推送提交的处理
+
+```bash
+You: "Fix typo in authentication function"
+
+Claude:
+# 创建新提交而不是修改
+git commit -m "fix: correct typo in authenticateUser function"
+```
+
+---
+
+## 分支管理
+
+### Feature 分支模式
+
+在 CLAUDE.md 中定义分支工作流：
+
+```markdown
+## CLAUDE.md Git Workflow
+
+Always work on feature branches:
+1. Create branch from main: git checkout -b feature/name
+2. Make changes and commit regularly
+3. Push to remote: git push -u origin feature/name
+4. Create pull request when ready
+5. Never commit directly to main/master
+```
+
+### 分支命名规范
+
+```
+feature/user-authentication
+fix/login-validation-bug
+refactor/api-endpoints
+docs/update-readme
+chore/dependency-updates
+```
+
+### Claude Code 分支操作
+
+```bash
+# 开始新功能
+You: "Create a new branch for adding search functionality"
+Claude: git checkout -b feature/search-functionality
+
+# 功能完成后
+You: "Create pull request for search feature"
+Claude:
+git push -u origin feature/search-functionality
+# 打开 PR 创建页面
+```
+
+---
+
+## Rewind 与 Revert
+
+<Tabs>
+  <TabItem label="/rewind（本地撤销）">
+    - 撤销 Claude 当前会话中的最近更改
+    - **不**创建 Git 提交
+    - 仅对未提交的更改有效
+    - 适用场景：Claude 犯了错误，想尝试不同方案
+
+    ```bash
+    You: "Add email validation to login form"
+    Claude: [进行更改]
+    You: [审查 diff] "This breaks the existing flow"
+    /rewind
+    # 更改已撤销，回到之前状态
+    You: "Add email validation but preserve existing flow"
+    ```
+  </TabItem>
+  <TabItem label="git revert（已提交更改）">
+    - 创建新提交来撤销之前的提交
+    - 对已推送的提交安全（保留历史）
+    - 适用场景：需要撤销已提交的更改
+
+    ```bash
+    You: "Revert the authentication changes from the last commit"
+
+    Claude:
+    git revert HEAD
+    # 创建新提交: "Revert 'feat: add authentication'"
+    ```
+  </TabItem>
+</Tabs>
+
+### 决策树
+
+```
+更改尚未提交？ → 使用 /rewind
+更改已提交但未推送？ → 使用 git reset（谨慎！）
+更改已提交且已推送？ → 使用 git revert
+```
+
+---
+
+## Git Worktree 并行开发
+
+### 什么是 Worktree？
+
+Git Worktree（Git 2.5.0+ 可用）可以从同一仓库创建多个工作目录，每个目录检出到不同分支。
+
+### 传统工作流的问题
+
+```bash
+# 正在开发功能 A
+git checkout feature-a
+# 工作了 2 小时...
+
+# 突然需要紧急修复
+git stash              # 保存当前工作
+git checkout main
+git checkout -b hotfix
+# 修复 bug...
+git checkout feature-a
+git stash pop          # 恢复工作
+```
+
+### Worktree 解决方案
+
+```bash
+# 一次性设置
+git worktree add ../myproject-hotfix hotfix
+git worktree add ../myproject-feature-a feature-a
+
+# 现在可以并行工作
+cd ../myproject-hotfix    # 终端 1
+claude                    # 修复 bug
+
+cd ../myproject-feature-a # 终端 2
+claude                    # 继续功能开发
+```
+
+### 何时使用 Worktree
+
+<CardGrid>
+  <Card title="推荐使用" icon="approve-check">
+    - 同时开发多个功能
+    - 需要并行测试不同方案
+    - 边开发边审查代码
+    - 长时间 CI/CD 构建时继续编码
+    - 维护多个版本（v1 支持 + v2 开发）
+  </Card>
+  <Card title="不推荐使用" icon="close">
+    - 简单分支切换就够了
+    - 磁盘空间有限（每个 worktree = 完整工作目录）
+    - 团队不熟悉 worktree（增加复杂性）
+  </Card>
+</CardGrid>
+
+### Worktree 生命周期命令
+
+| 命令 | 用途 |
+|------|------|
+| `/git-worktree` | 创建 worktree，带分支验证、依赖符号链接、后台检查 |
+| `/git-worktree-status` | 检查后台验证任务（类型检查、测试、构建） |
+| `/git-worktree-remove` | 安全移除单个 worktree，包含合并检查和 DB 清理 |
+| `/git-worktree-clean` | 批量清理过期 worktree，附磁盘使用报告 |
+
+```bash
+# 创建（自动前缀 + 符号链接 node_modules）
+You: "/git-worktree auth"
+# → 创建 feat/auth 分支，符号链接 node_modules，后台运行检查
+
+# 检查后台验证状态
+You: "/git-worktree-status"
+# → Type check: PASS, Tests: PASS (142 tests)
+
+# 合并后移除
+You: "/git-worktree-remove feat/auth"
+# → 移除 worktree + 分支（本地 + 远程）+ DB 清理提醒
+
+# 批量清理所有已合并的 worktree
+You: "/git-worktree-clean --dry-run"
+# → Preview: 3 merged (4.2 MB), 1 unmerged (kept)
+```
+
+<Aside type="tip">
+`/git-worktree` 命令默认从主 worktree 符号链接 `node_modules`，每次创建可节省约 30 秒和大量磁盘空间。需要全新依赖时（如测试升级），使用 `--isolated` 标志。
+</Aside>
+
+### Worktree 管理
+
+```bash
+# 列出所有 worktree
+git worktree list
+
+# 移除 worktree（功能合并后）
+git worktree remove .worktrees/feature/new-api
+
+# 清理过期的 worktree 引用
+git worktree prune
+```
+
+<Aside type="tip" title="Shell 别名快速导航">
+Claude Code 团队使用单字母别名在 worktree 间快速跳转：
+
+```bash
+# ~/.zshrc 或 ~/.bashrc
+alias za="cd .worktrees/feature-a"
+alias zb="cd .worktrees/feature-b"
+alias zc="cd .worktrees/feature-c"
+alias zlog="cd .worktrees/analysis"  # 专用于日志和查询的 worktree
+```
+
+专用的 "analysis" worktree 用于查看日志和运行数据库查询，避免污染活跃的功能分支。
+</Aside>
+
+### Worktree 中的 Claude Code 上下文
+
+每个 worktree 维护**独立的 Claude Code 上下文**：
+
+```bash
+# 终端 1 - Worktree A
+cd .worktrees/feature-a
+claude
+You: "Implement user authentication"
+# Claude 索引 feature-a worktree
+
+# 终端 2 - Worktree B（同时进行）
+cd .worktrees/feature-b
+claude
+You: "Add payment integration"
+# Claude 索引 feature-b worktree（独立上下文）
+```
+
+### Memory 文件与 Worktree
+
+| 级别 | 位置 | 共享范围 |
+|------|------|---------|
+| 全局 Memory | `~/.claude/CLAUDE.md` | 所有 worktree 共享 |
+| 项目 Memory | 仓库根 `CLAUDE.md` | 已提交，共享 |
+| Worktree 本地 Memory | worktree 内 `.claude/CLAUDE.md` | 仅限该 worktree |
+
+### 推荐目录结构
+
+```
+~/projects/
+├── myproject/              # 主 worktree（main 分支）
+│   ├── CLAUDE.md          # 项目约定（已提交）
+│   └── .claude/
+├── myproject-develop/      # develop 分支 worktree
+│   └── .claude/           # develop 专属配置
+├── myproject-feature-a/    # feature-a 分支 worktree
+│   └── .claude/           # 功能 A 上下文
+└── myproject-hotfix/       # hotfix 分支 worktree
+    └── .claude/           # 热修复上下文
+```
+
+### Worktree 最佳实践
+
+<Steps>
+1. **清晰命名 worktree**
+
+   ```bash
+   # 差
+   git worktree add ../temp feature-x
+
+   # 好
+   git worktree add ../myproject-feature-x feature-x
+   ```
+
+2. **添加到 .gitignore**
+
+   ```gitignore
+   # Worktree 目录
+   .worktrees/
+   worktrees/
+   ```
+
+3. **清理已合并的分支**
+
+   ```bash
+   git worktree remove myproject-feature-x
+   git branch -d feature-x  # 删除本地分支
+   git push origin --delete feature-x  # 删除远程分支
+   ```
+
+4. **使用一致的位置**
+
+   - `.worktrees/`（隐藏目录，项目根目录中）
+   - `worktrees/`（可见目录，项目根目录中）
+   - `../myproject-*`（兄弟目录）
+
+5. **不要提交 worktree 内容**
+
+   始终确保 worktree 目录在 `.gitignore` 中。`/git-worktree` 命令会自动验证。
+</Steps>
+
+---
+
+## Claude Code 原生 Worktree 功能
+
+Claude Code 内置了 worktree 集成，超越了手动的 `git worktree` 工作流。
+
+### 在隔离 worktree 中启动 Claude
+
+```bash
+# --worktree / -w 标志：基于 HEAD 创建临时 worktree
+claude --worktree
+claude -w
+```
+
+worktree 自动创建，Claude 在其中运行，退出时自动清理（如果没有更改）。
+
+### Agent 定义中的声明式隔离
+
+在 agent 的 frontmatter 中设置 `isolation: "worktree"`，每次调用都会自动在新 worktree 中生成：
+
+```yaml
+---
+name: refactoring-agent
+description: Large-scale refactors that must not pollute the main working tree
+model: opus
+isolation: "worktree"   # 每次调用获取独立的隔离检出
+---
+
+Perform the requested refactoring. Commit your changes inside the worktree.
+```
+
+### Worktree 生命周期钩子
+
+两个新的 Hook 事件用于 worktree 生命周期：
+
+| 事件 | 触发时机 | 用途 |
+|------|---------|------|
+| `WorktreeCreate` | agent worktree 创建时 | 设置 DB 分支、复制 .env、安装依赖 |
+| `WorktreeRemove` | agent worktree 销毁时 | 清理 DB 分支、删除临时凭证 |
+
+```json
+{
+  "hooks": {
+    "WorktreeCreate": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "scripts/worktree-setup.sh $CLAUDE_WORKTREE_PATH"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 数据库分支隔离
+
+将 Git Worktree 与数据库分支结合，实现真正的功能隔离。
+
+### 问题与方案
+
+```
+传统工作流：
+Git 分支 → 共享开发数据库 → Schema 冲突 → 迁移噩梦
+
+现代工作流：
+Git worktree + DB 分支 → 隔离环境 → 安全实验
+```
+
+### 自动检测数据库提供商
+
+`/git-worktree` 命令自动检测你的数据库：
+
+| 提供商 | 建议命令 |
+|--------|---------|
+| **Neon** | `neonctl branches create` |
+| **PlanetScale** | `pscale branch create` |
+| **Supabase** | 提示不支持分支 |
+| **本地 Postgres** | 建议基于 schema 的隔离 |
+
+### 何时创建 DB 分支
+
+| 场景 | 创建分支？ |
+|------|-----------|
+| 添加数据库迁移 | 是 |
+| 重构数据模型 | 是 |
+| Bug 修复（无 schema 更改） | 否 |
+| 性能实验 | 是 |
+
+### 完整工作流
+
+```bash
+# 1. 创建 worktree
+/git-worktree feature/payments
+
+# 2. 按建议创建 DB 分支
+cd .worktrees/feature-payments
+neonctl branches create --name feature-payments --parent main
+
+# 3. 用新 DATABASE_URL 更新 .env
+
+# 4. 在隔离环境中工作
+npx prisma migrate dev
+pnpm test
+
+# 5. PR 合并后清理
+git worktree remove .worktrees/feature-payments
+neonctl branches delete feature-payments
+```
+
+---
+
+## Worktree 常见问题
+
+<Tabs>
+  <TabItem label="创建失败">
+    **问题**: Worktree 创建时报 "already checked out"
+
+    ```bash
+    # 解决方案：不能在多个 worktree 中检出同一分支
+    git worktree list  # 查看哪些分支已检出
+    # 使用不同分支或先移除已有的 worktree
+    ```
+  </TabItem>
+  <TabItem label="磁盘空间">
+    **问题**: 磁盘空间不足
+
+    ```bash
+    # 每个 worktree 是完整的工作目录
+    # 解决方案：定期清理未使用的 worktree
+    git worktree prune
+    ```
+  </TabItem>
+  <TabItem label="无法删除">
+    **问题**: 无法删除 worktree 目录
+
+    ```bash
+    # 解决方案：使用 git worktree remove，不要使用 rm -rf
+    git worktree remove --force .worktrees/old-feature
+    ```
+  </TabItem>
+</Tabs>

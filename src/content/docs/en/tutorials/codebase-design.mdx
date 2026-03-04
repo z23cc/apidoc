@@ -1,0 +1,708 @@
+---
+title: "Codebase Design for Agents"
+description: "How to design and optimize your codebase for AI agent productivity, including domain knowledge embedding, code discoverability, testing, and guardrails"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Traditional codebases are optimized for human developers. AI agents have different needs -- they excel at pattern matching but struggle with implicit knowledge and scattered context. This guide covers how to design an "agent-friendly" codebase.
+
+<Aside type="tip" title="Key Principles">
+- **Domain Knowledge Embedding**: Put business logic and design decisions directly in code
+- **Code Discoverability**: Make code "searchable" like SEO -- use synonyms, tags, complete terms
+- **Token Efficiency**: Split large files, remove obvious comments
+- **Testing for Autonomy**: TDD is more critical for agents than humans
+- **Guardrails**: Hooks, CI checks, and PR reviews catch agent mistakes early
+</Aside>
+
+---
+
+## The Paradigm Shift: Designing for Agents
+
+### Traditional vs AI-Native Codebase Design
+
+| Aspect | Human-Optimized | Agent-Optimized |
+|--------|-----------------|-----------------|
+| **Comments** | Sparse, assume context | Explicit "why" + synonyms |
+| **File size** | 1000+ lines OK | Split at 500 lines |
+| **Architecture docs** | Separate wiki/Confluence | Embedded in CLAUDE.md + ADRs |
+| **Conventions** | Oral tradition, tribal knowledge | Written, discoverable, tagged |
+| **Testing** | Optional for prototypes | Critical -- agents follow tests |
+| **Error messages** | Generic | Specific with recovery hints |
+
+### The Agent Experience (AX) Framework
+
+Netlify coined "Agent Experience" as the agent equivalent of Developer Experience (DX). Key questions:
+
+1. **Can the agent find what it needs?** (Discoverability)
+2. **Can it understand design decisions?** (Domain Knowledge)
+3. **Can it validate its work?** (Testing + Guardrails)
+4. **Can it work efficiently?** (Token budget)
+
+### When to Invest in AX
+
+<CardGrid>
+  <Card title="Worth Optimizing" icon="approve-check">
+    - Greenfield projects (design agent-friendly from start)
+    - High-churn files (business logic, API routes)
+    - Teams using agents extensively (&gt;50% of commits)
+  </Card>
+  <Card title="Skip Optimization" icon="close">
+    - Stable legacy code (don't refactor just for agents)
+    - Small scripts (&lt;100 lines, agents handle fine)
+  </Card>
+</CardGrid>
+
+### Convention-Over-Configuration for AI Agents
+
+Choose opinionated frameworks to reduce the agent's decision space:
+
+| Aspect | Custom Architecture | Opinionated Framework |
+|--------|---------------------|----------------------|
+| **File organization** | Agent must learn your structure | Standard conventions (e.g., Next.js `app/`, Rails MVC) |
+| **Routing** | Custom logic, must be documented | Convention-based (file = route) |
+| **Data access** | Multiple patterns possible | Single pattern enforced |
+| **CLAUDE.md size** | Large (must document everything) | Smaller (conventions already known) |
+
+**Example comparison**:
+
+```markdown
+# Custom Architecture (500+ lines CLAUDE.md)
+## File Organization
+- API routes in `src/endpoints/`
+- Business logic in `src/domain/`
+- Data access in `src/repositories/`
+... (extensive documentation of custom patterns)
+
+# Next.js (50 lines CLAUDE.md)
+## Project Context
+We use Next.js 14 with App Router.
+... (minimal context, rest is framework conventions)
+```
+
+---
+
+## Domain Knowledge Embedding
+
+### Advanced CLAUDE.md Patterns
+
+Encode deep domain knowledge in your CLAUDE.md:
+
+```markdown
+# CLAUDE.md
+
+## Domain Context
+**Product**: SaaS platform for event management (B2B, enterprise)
+**Business model**: Subscription-based, tiered pricing
+
+## Design Principles
+1. **Idempotency First**: All API mutations must be idempotent
+2. **Eventual Consistency**: Calendar sync uses queue-based reconciliation
+3. **Graceful Degradation**: If external API fails, store locally + retry
+
+## Domain Terms
+- **Event**: User-created calendar entry (our domain model)
+- **Appointment**: External calendar system's term (Google/Outlook)
+- **Sync Job**: Background process reconciling our DB with external calendars
+
+## Gotchas
+- Google Calendar API has 10 req/sec rate limit per user
+- Outlook timezone handling is non-standard → use normalizeTimezone()
+- Event deletion = soft delete (set deletedAt) for compliance audit trail
+```
+
+### Code Comments: What vs Why
+
+<Tabs>
+  <TabItem label="Bad: Obvious Comments">
+    ```typescript
+    // Get user by ID
+    function getUserById(id: string) {
+      return db.users.findOne({ id });
+    }
+    ```
+  </TabItem>
+  <TabItem label="Good: Explain the Why">
+    ```typescript
+    // Fetch user with calendar permissions.
+    // Returns null if user exists but lacks calendar access
+    // (common after OAuth token expiration).
+    // Callers should handle null by redirecting to re-auth flow.
+    function getUserById(id: string) {
+      return db.users.findOne({ id });
+    }
+    ```
+  </TabItem>
+  <TabItem label="Best: Domain Knowledge + Edge Cases">
+    ```typescript
+    // Fetch user with calendar permissions for event sync.
+    //
+    // Returns null in two cases:
+    // 1. User doesn't exist (rare, DB inconsistency)
+    // 2. User exists but calendar OAuth token expired
+    //    (common, ~5% of calls)
+    //
+    // Callers MUST handle null by:
+    // - Redirecting to /auth/calendar/reauth (UI flows)
+    // - Logging + skipping sync (background jobs)
+    //
+    // Related: See refreshCalendarToken() for auto refresh.
+    // Rate limits: Google = 10 req/sec, Outlook = 20 req/sec
+    function getUserById(id: string): Promise<User | null> {
+      return db.users.findOne({ id });
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Architecture Decision Records (ADRs)
+
+Store ADRs in `docs/decisions/` and reference from code:
+
+```typescript
+// Soft delete per ADR-007. Never use db.events.delete()
+// due to compliance requirements (GDPR audit trail).
+async function deleteEvent(eventId: string) {
+  await db.events.update(
+    { id: eventId },
+    { deletedAt: new Date() }
+  );
+}
+```
+
+---
+
+## Code Discoverability (SEO for Agents)
+
+Agents search for code using keyword matching. If your variable is named `usr`, the agent won't find it when searching for "user".
+
+### Use Complete Terms, Not Abbreviations
+
+<Tabs>
+  <TabItem label="Agent-Hostile">
+    ```typescript
+    function calcEvtDur(evt: Evt): number {
+      const st = evt.stTm;
+      const et = evt.etTm;
+      return et - st;
+    }
+    ```
+  </TabItem>
+  <TabItem label="Agent-Friendly">
+    ```typescript
+    // Calculate event duration in milliseconds.
+    // Also known as: event length, time span,
+    // appointment duration
+    function calculateEventDuration(event: Event): number {
+      const startTime = event.startTime;
+      const endTime = event.endTime;
+      return endTime - startTime;
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Add Synonyms in Comments
+
+```typescript
+// User account record. Also called: member,
+// subscriber, customer, client.
+// In external calendar APIs, this maps to their
+// "principal" or "identity" concepts.
+interface User {
+  id: string;
+  email: string;
+  calendarToken: string;  // aka "access token", "auth credential"
+}
+```
+
+### Tags and Faceting
+
+Use JSDoc-style tags for categorization:
+
+```typescript
+/**
+ * Process incoming webhook from Google Calendar.
+ *
+ * @domain calendar-sync
+ * @external google-calendar-api
+ * @rate-limit 100/min (Google's limit, not ours)
+ * @failure-mode Queues failed webhooks for retry
+ * @related syncEvents, refreshCalendarToken
+ */
+async function handleGoogleWebhook(payload: WebhookPayload) {
+  // implementation
+}
+```
+
+### Directory README Pattern
+
+Place a `README.md` in each major directory explaining its purpose:
+
+```markdown
+# Services Layer
+
+**Purpose**: Business logic and domain operations.
+Services are framework-agnostic (no Express/HTTP concerns).
+
+**Conventions**:
+- One service per domain entity
+- Services may call other services or repositories
+- Services must NOT import from controllers/ (layering violation)
+
+**Testing**: Unit test with mocked repositories.
+See tests/services/ for examples.
+```
+
+---
+
+## Documentation Formats: llms.txt
+
+### What is llms.txt?
+
+llms.txt is a lightweight standard for making documentation discoverable to LLMs. It's like `robots.txt` for AI agents -- a simple index file that tells agents where to find relevant documentation.
+
+**Specification**: https://llmstxt.org/
+
+### Creating llms.txt for Your Project
+
+```
+# MyProject
+
+Enterprise SaaS platform for event management
+
+## Getting Started
+- Setup: docs/setup.md
+- Architecture: docs/architecture.md
+- API Reference: docs/api.md
+
+## Common Patterns
+- Authentication flow: src/services/auth-service.ts (line 78-125)
+- Error handling: CLAUDE.md#error-patterns (line 150)
+- Rate limiting: src/middleware/rate-limiter.ts (line 45)
+
+## Domain Knowledge
+- Event lifecycle: docs/domain/events.md
+- Payment processing: docs/domain/payments.md
+```
+
+### llms.txt vs MCP Doc Servers
+
+| Aspect | llms.txt | Context7 MCP |
+|--------|----------|--------------|
+| **Purpose** | Static documentation index | Runtime library lookup |
+| **Setup** | Zero config (just a file) | Requires MCP server install |
+| **Content** | Project-specific docs | Official library docs |
+| **Token cost** | Low (index only, ~500 tokens) | Medium |
+| **Use case** | Project README, architecture | React API, Next.js patterns |
+
+**Best practice**: Use **both** -- llms.txt for project-specific documentation and Context7 MCP for official library documentation.
+
+---
+
+## Token-Efficient Codebase
+
+### Split Large Files
+
+**Guideline**: Keep files under 500 lines. Agents typically read 200-300 lines at a time.
+
+```
+# Bad: Monolithic file (1200 lines)
+src/services/event-service.ts
+
+# Good: Split by concern
+src/services/event/
+├── event-service.ts         (200 lines: public API + orchestration)
+├── event-validator.ts       (150 lines: validation logic)
+├── event-calendar-sync.ts   (300 lines: external calendar sync)
+├── event-conflict-resolver.ts (250 lines: overlap detection)
+└── README.md                (explains module structure)
+```
+
+### Remove Obvious Comments
+
+<Tabs>
+  <TabItem label="Wasteful Tokens">
+    ```typescript
+    // Import React
+    import React from 'react';
+
+    // Import useState hook
+    import { useState } from 'react';
+
+    // Define Props interface
+    interface Props {
+      // User name
+      name: string;
+      // User age
+      age: number;
+    }
+    ```
+  </TabItem>
+  <TabItem label="Keep Only Value">
+    ```typescript
+    import React, { useState } from 'react';
+
+    interface Props {
+      name: string;
+      age: number;
+    }
+
+    // Displays user name. Age is required for
+    // future age-gating feature (see ADR-012).
+    function User(props: Props) {
+      return <div>{props.name}</div>;
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+**Savings**: Reduced from ~150 tokens to ~80 tokens (47% reduction) without losing critical info.
+
+### Verbose Flags for Debug Output
+
+```typescript
+export const DEBUG = process.env.DEBUG === 'true';
+
+class EventService {
+  async syncEvent(eventId: string) {
+    if (DEBUG) {
+      console.log(`[EventService.syncEvent] Starting sync for ${eventId}`);
+    }
+    const event = await this.getEvent(eventId);
+    // sync logic
+  }
+}
+```
+
+---
+
+## Testing for Autonomy
+
+### Why TDD is More Critical for Agents
+
+**Humans**: Can infer intent from vague requirements and course-correct during implementation.
+
+**Agents**: Implement exactly what tests specify. Missing test = missing feature.
+
+<Aside type="caution">
+For agents, **tests ARE the spec**. Write comprehensive tests manually.
+</Aside>
+
+### Don't Delegate Test Writing
+
+```
+# Bad:
+User: "Implement email validation and write tests for it"
+
+# Good: Write tests yourself first
+# tests/validation/email.test.ts already written manually
+User: "Implement the email validation function to pass
+all tests in tests/validation/email.test.ts"
+```
+
+**Why this fails with delegation**: Agent may write incomplete tests (missing edge cases), and agent tests match its implementation (circular validation).
+
+### TDD Workflow for Agents
+
+<Steps>
+1. **Write failing test** (you, the human)
+
+   ```typescript
+   describe('EventService.createEvent', () => {
+     it('prevents double-booking for same user + time', async () => {
+       await eventService.createEvent({
+         userId: 'user-123',
+         startTime: '2026-01-21T10:00:00Z',
+         endTime: '2026-01-21T11:00:00Z'
+       });
+
+       await expect(
+         eventService.createEvent({
+           userId: 'user-123',
+           startTime: '2026-01-21T10:30:00Z',
+           endTime: '2026-01-21T11:30:00Z'
+         })
+       ).rejects.toThrow('Scheduling conflict detected');
+     });
+   });
+   ```
+
+2. **Give agent the test** with implementation constraints
+
+   ```
+   User: "Implement EventService.createEvent() to pass
+   the double-booking test. Requirements:
+   - Check conflicts using conflictResolver.detectOverlap()
+   - Throw SchedulingConflictError
+   - See ADR-009 for conflict resolution algorithm"
+   ```
+
+3. **Agent implements** to pass the test
+
+4. **Verify** with test run
+
+   ```bash
+   npm test tests/services/event-service.test.ts
+   ```
+
+5. **Iterate** if test fails (agent fixes implementation)
+</Steps>
+
+### Test Coverage as Guardrail
+
+```json
+{
+  "jest": {
+    "coverageThreshold": {
+      "global": {
+        "statements": 80,
+        "branches": 80,
+        "functions": 80,
+        "lines": 80
+      }
+    }
+  }
+}
+```
+
+---
+
+## Conventions and Patterns
+
+### Design Patterns Agents Know
+
+Agents are trained on massive codebases using standard design patterns. Leverage this.
+
+<Tabs>
+  <TabItem label="Standard Pattern (Agent Recognizes)">
+    ```typescript
+    // Singleton pattern (widely known)
+    class DatabaseConnection {
+      private static instance: DatabaseConnection;
+
+      private constructor() {}
+
+      public static getInstance(): DatabaseConnection {
+        if (!DatabaseConnection.instance) {
+          DatabaseConnection.instance = new DatabaseConnection();
+        }
+        return DatabaseConnection.instance;
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Custom Pattern (Needs Documentation)">
+    ```typescript
+    /**
+     * Database connection using Lazy Singleton.
+     *
+     * Pattern: Singleton with lazy initialization.
+     * Why custom: "make()" aligns with our
+     * framework (Laravel-inspired).
+     * Standard Singleton uses "getInstance()" but
+     * we use "make()" for consistency.
+     *
+     * Related: See ADR-004.
+     */
+    class DatabaseConnection {
+      private static conn: DatabaseConnection;
+
+      static make() {
+        return this.conn ?? (this.conn = new DatabaseConnection());
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### The "Boring Tech" Advantage
+
+Popular frameworks and libraries have more training data, so agents perform better:
+
+| Framework/Library | GitHub Repos | Agent Performance |
+|------------------|--------------|-------------------|
+| React | 10M+ | Excellent |
+| Express | 5M+ | Excellent |
+| Vue | 3M+ | Good |
+| Svelte | 500K | Fair |
+| Custom framework | &lt;1K | Poor |
+
+**Recommendation**: Use mainstream tech unless you have strong reasons otherwise.
+
+---
+
+## Guardrails and Validation
+
+### Hooks as Anti-Pattern Validators
+
+Use hooks to enforce codebase conventions beyond just secrets:
+
+```bash
+#!/bin/bash
+# .claude/hooks/PreToolUse.sh
+
+INPUT=$(cat)
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool.name')
+
+if [[ "$TOOL_NAME" == "Edit" ]] || [[ "$TOOL_NAME" == "Write" ]]; then
+  FILE_PATH=$(echo "$INPUT" | jq -r '.tool.input.file_path')
+
+  # Block controllers calling repositories directly
+  if [[ "$FILE_PATH" == *"/controllers/"* ]]; then
+    CONTENT=$(echo "$INPUT" | jq -r '.tool.input.new_string // .tool.input.content')
+
+    if echo "$CONTENT" | grep -q "Repository\\."; then
+      echo "Layering violation: Controllers must call Services, not Repositories" >&2
+      echo "See ADR-011 for architecture rules" >&2
+      exit 2  # Block
+    fi
+  fi
+fi
+
+exit 0  # Allow
+```
+
+### Validation Layers Summary
+
+| Layer | Catches | Speed | Automation |
+|-------|---------|-------|-----------|
+| **Hooks** | Pre-execution (secrets, anti-patterns) | Instant | 100% |
+| **Linter** | Syntax, style violations | &lt;10s | 100% |
+| **Type checker** | Type mismatches | &lt;30s | 100% |
+| **Tests** | Logic errors, broken functionality | &lt;2min | 100% |
+| **CI checks** | Coverage, TODOs, architecture | &lt;5min | 100% |
+| **Human review** | Intent, security, context | Hours | Manual |
+
+**Defense in depth**: Each layer catches different error classes. All layers together minimize risk.
+
+---
+
+## Cross-References and Knowledge Discovery
+
+### Module Cross-References
+
+```typescript
+// src/services/event-service.ts
+/**
+ * Event management service.
+ *
+ * Related modules:
+ * - src/services/calendar-sync-service.ts (external calendar sync)
+ * - src/services/conflict-resolver.ts (overlap detection)
+ * - src/repositories/event-repository.ts (data access)
+ * - src/jobs/reminder-sender.ts (event reminders via queue)
+ *
+ * See also: ADR-007 (event deletion), ADR-009 (conflict resolution)
+ */
+class EventService {
+  // implementation
+}
+```
+
+### Embedded Technical Docs
+
+Place documentation near code, not in a separate wiki:
+
+```
+src/integrations/google-calendar/
+├── google-calendar.ts
+├── google-calendar.test.ts
+├── README.md               ← "How to use integration"
+├── RATE_LIMITS.md          ← "API rate limits + handling"
+└── TROUBLESHOOTING.md      ← "Common errors + solutions"
+```
+
+---
+
+## Usage Instructions and API Design
+
+### Doc Blocks with Examples
+
+```typescript
+/**
+ * Validate email address format and uniqueness.
+ *
+ * Checks:
+ * 1. Valid email format (RFC 5322 compliant)
+ * 2. Not a disposable email domain
+ * 3. Not already registered in database
+ *
+ * @param email - Email address to validate
+ * @returns Promise resolving to true if valid
+ * @throws {ValidationError} If format invalid
+ * @throws {DuplicateEmailError} If already registered
+ *
+ * @example
+ * await validateEmail('user@example.com');  // Returns true
+ *
+ * @example
+ * await validateEmail('invalid-email');
+ * // Throws ValidationError: "Invalid email format"
+ */
+async function validateEmail(email: string | null): Promise<boolean> {
+  // implementation
+}
+```
+
+### Sensible Defaults
+
+```typescript
+// Minimal usage (defaults applied)
+const client = new GoogleCalendarClient(credentials);
+
+// Override specific options only
+const client = new GoogleCalendarClient(credentials, {
+  timeout: 60000  // Only override timeout
+});
+```
+
+---
+
+## Implementation Checklist
+
+### Agent-Friendly Codebase Score
+
+**Domain Knowledge** (Score: ___ / 5)
+- CLAUDE.md with business context, design principles, domain terms
+- Architecture Decision Records (ADRs) document key decisions
+- Code comments explain "why" (not just "what")
+- Cross-references link related modules
+- Directory READMEs explain module purpose
+
+**Discoverability** (Score: ___ / 6)
+- Files use complete terms (not abbreviations: `user` not `usr`)
+- Comments include synonyms
+- Functions have JSDoc tags (`@domain`, `@related`, `@external`)
+- README files in major directories
+- CLI tools have `--help` with examples
+- Embedded docs near code (not separate wiki)
+
+**Token Efficiency** (Score: ___ / 4)
+- Files under 500 lines
+- Obvious comments removed
+- Debug output controlled by verbose flags
+- Large generated files excluded via `.claudeignore`
+
+**Testing** (Score: ___ / 5)
+- Tests written manually (not delegated to agent)
+- TDD workflow for new features
+- E2E tests for UI features
+- Test coverage &gt;80% enforced in CI
+- Tests cover edge cases (not just happy path)
+
+**Scoring**:
+- **25-33**: Excellent agent-friendliness
+- **18-24**: Good, some improvements possible
+- **10-17**: Fair, significant gaps exist
+- **&lt;10**: Poor, major refactoring needed
+
+### Quick Wins (2 Hours Total)
+
+<Steps>
+1. **Add CLAUDE.md** (30 minutes)
+2. **Add directory READMEs** (15 minutes per directory)
+3. **Add cross-references to hot files** (10 minutes per file)
+4. **Split one large file** (30 minutes)
+5. **Enable test coverage in CI** (15 minutes)
+</Steps>

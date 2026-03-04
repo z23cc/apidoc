@@ -1,0 +1,585 @@
+---
+title: "生产安全规则"
+description: "团队在生产环境部署 Claude Code 的不可协商安全规则"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+本指南定义了团队在生产环境部署 Claude Code 时的 **6 条不可协商规则**。这些规则防止最常见且代价最高的故障：部署中断、数据丢失、半成品功能和不一致的代码库。
+
+<Aside>
+**面向初学者**：这些规则是为生产团队设计的。如果你刚开始学习，请先专注于学习——随着项目成长再逐步采用这些规则。
+</Aside>
+
+---
+
+## 何时使用这些规则
+
+| 项目类型 | 是否使用？ | 原因 |
+|---------|-----------|------|
+| 学习/教程 | 否 | 对探索过于严格 |
+| 个人原型 | 否 | 开销不值得 |
+| 小团队（2-3人），预发布环境 | 部分 | 仅规则 1、3、6 |
+| 生产应用，多开发者团队 | 是 | 全部 6 条规则 |
+| 受监管行业（HIPAA、SOC2） | 是 + 合规规则 | 关键安全 |
+
+---
+
+## 6 条规则一览
+
+<CardGrid>
+  <Card title="1. 端口稳定性" icon="setting">
+    未经团队明确许可，绝不更改后端/前端端口。
+  </Card>
+  <Card title="2. 数据库安全" icon="warning">
+    执行破坏性操作（DELETE、DROP、TRUNCATE）前必须备份。
+  </Card>
+  <Card title="3. 功能完整性" icon="approve-check">
+    绝不发布半成品功能。开始了就要做到可用状态。
+  </Card>
+  <Card title="4. 基础设施锁定" icon="close">
+    Docker/环境/CI 变更需要团队明确许可。
+  </Card>
+  <Card title="5. 依赖安全" icon="random">
+    未经批准不得添加新依赖。
+  </Card>
+  <Card title="6. 遵循既有模式" icon="open-book">
+    遵循代码库现有的约定和模式。
+  </Card>
+</CardGrid>
+
+---
+
+## 规则 1：端口稳定性
+
+### 问题
+
+更改端口会破坏本地开发环境、Docker Compose 配置、已部署的服务配置和团队成员的设置。
+
+**真实事故**：重构时后端端口从 3000 改为 8080。所有开发者花了一天重新配置本地环境。预发布部署静默失败，因为 nginx 代理仍指向 3000。
+
+### 实施方案
+
+<Tabs>
+  <TabItem label="权限拒绝">
+    ```json
+    {
+      "permissions": {
+        "deny": [
+          "Edit(docker-compose.yml:*ports*)",
+          "Edit(package.json:*PORT*)",
+          "Edit(.env.example:*PORT*)",
+          "Edit(vite.config.ts:*port*)"
+        ]
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="预执行钩子">
+    ```bash
+    # .claude/hooks/PreToolUse.sh
+    if [[ "$TOOL" == "Edit" ]]; then
+        FILE=$(echo "$INPUT" | jq -r '.tool.input.file_path')
+        CONTENT=$(echo "$INPUT" | jq -r '.tool.input.new_string')
+
+        if [[ "$FILE" =~ (docker-compose|vite.config|package.json) ]] && \
+           [[ "$CONTENT" =~ (port|PORT):[[:space:]]*[0-9] ]]; then
+            echo "已阻止：在 $FILE 中检测到端口修改"
+            echo "端口必须在团队范围内保持稳定。"
+            exit 2
+        fi
+    fi
+    ```
+  </TabItem>
+  <TabItem label="CLAUDE.md">
+    ```markdown
+    ## 端口配置
+
+    **关键**：端口已锁定以确保团队协调。
+
+    当前端口：
+    - 前端 (Vite): 5173
+    - 后端 (Express): 3000
+    - 数据库: 5432
+
+    更改端口：
+    1. 在 /docs/rfcs/ 中创建 RFC 文档
+    2. 获得团队批准（3+ 审查者）
+    3. 同时更新所有环境
+    4. 提前 48 小时通知团队
+    ```
+  </TabItem>
+</Tabs>
+
+| 场景 | 行为 |
+|------|------|
+| 添加新服务 | 允许（不影响现有服务） |
+| 更改测试环境端口 | 允许（与开发/生产隔离） |
+| 机器上端口冲突 | 请用户在本地解决（.env.local） |
+
+---
+
+## 规则 2：数据库安全
+
+### 问题
+
+生产环境中的意外删除等于数据丢失。
+
+**真实事故**：
+- `DELETE FROM users WHERE id = 123` — 忘了 `WHERE` 子句 — 删除了所有用户
+- 清理时 `DROP TABLE sessions` — 删除了生产表
+- 迁移回滚 — 因为没有备份导致数据丢失
+
+### 实施方案
+
+<Tabs>
+  <TabItem label="预执行钩子">
+    ```bash
+    # .claude/hooks/PreToolUse.sh
+    #!/bin/bash
+    INPUT=$(cat)
+    TOOL=$(echo "$INPUT" | jq -r '.tool.name')
+
+    if [[ "$TOOL" == "Bash" ]]; then
+        COMMAND=$(echo "$INPUT" | jq -r '.tool.input.command')
+
+        if [[ "$COMMAND" =~ (DROP TABLE|DELETE FROM|TRUNCATE|ALTER.*DROP) ]]; then
+            echo "已阻止：检测到破坏性数据库操作"
+            echo ""
+            echo "必需步骤："
+            echo "1. 创建备份：pg_dump -U user dbname > backup_$(date +%Y%m%d).sql"
+            echo "2. 验证备份大小合理"
+            echo "3. 确认备份后重新运行"
+            exit 2
+        fi
+    fi
+
+    exit 0
+    ```
+  </TabItem>
+  <TabItem label="迁移包装器">
+    ```bash
+    # scripts/safe-migrate.sh
+    #!/bin/bash
+    set -e
+
+    echo "迁移前检查..."
+
+    # 1. 检查环境
+    if [[ "$NODE_ENV" == "production" ]]; then
+        echo "已阻止：请使用迁移服务处理生产环境"
+        exit 1
+    fi
+
+    # 2. 创建备份
+    BACKUP_FILE="backups/pre-migration-$(date +%Y%m%d_%H%M%S).sql"
+    mkdir -p backups
+    pg_dump $DATABASE_URL > "$BACKUP_FILE"
+    echo "备份已创建：$BACKUP_FILE"
+
+    # 3. 运行迁移
+    npm run prisma:migrate:dev
+
+    # 4. 验证
+    npm run prisma:validate
+    echo "迁移完成。备份：$BACKUP_FILE"
+    ```
+  </TabItem>
+</Tabs>
+
+### MCP 数据库安全
+
+如果使用 MCP 数据库服务器：
+
+```json
+{
+  "mcpServers": {
+    "database": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-postgres"],
+      "env": {
+        "POSTGRES_URL": "postgres://readonly:***@dev-db.example.com:5432/appdb"
+      }
+    }
+  }
+}
+```
+
+<Aside type="danger">
+MCP 必须使用只读数据库用户。所有查询结果都会发送到 Anthropic 服务器。
+</Aside>
+
+---
+
+## 规则 3：功能完整性
+
+### 问题
+
+Claude Code 有时在上下文不足时会"偷工减料"：
+- 删除现有功能而不是修复 bug
+- 为核心功能添加 `TODO` 注释
+- 留下未处理的错误状态
+- 创建 mock 实现
+
+**真实事故**：
+- 支付验证"修复"方式是完全移除验证
+- 错误处理"添加"为 `throw new Error("Not implemented")`
+- 功能"完成"为 `// TODO: Add actual logic here`
+
+### 实施方案
+
+在 CLAUDE.md 中添加：
+
+```markdown
+## 功能实现标准
+
+### 不可协商
+
+1. **核心功能不得有 TODO**
+   - TODO 仅允许用于未来增强
+   - 核心功能必须完整可用
+
+2. **不得有 mock 实现**
+   - 禁止 `throw new Error("Not implemented")`
+   - 生产代码路径中禁止假数据生成器
+
+3. **完整的错误处理**
+   - 每个异步调用都有 try/catch
+   - 每个用户输入都有验证
+   - 每个 API 调用都有超时和重试逻辑
+
+4. **降级 = 完全删除功能**
+   - 如果无法正确修复，移除该功能
+   - 在提交消息中记录原因
+```
+
+**预提交 git 钩子**：
+
+```bash
+# .git/hooks/pre-commit
+#!/bin/bash
+STAGED=$(git diff --cached --name-only --diff-filter=ACM)
+
+for FILE in $STAGED; do
+    if [[ "$FILE" =~ \.(ts|tsx|js|jsx|py)$ ]]; then
+        if ! [[ "$FILE" =~ test|spec ]]; then
+            if git diff --cached "$FILE" | grep -E "^\+.*TODO.*implement|^\+.*Not implemented"; then
+                echo "提交被阻止：$FILE 中存在 TODO/Not implemented"
+                exit 1
+            fi
+        fi
+    fi
+done
+exit 0
+```
+
+---
+
+## 规则 4：基础设施锁定
+
+### 问题
+
+Claude 可能在不理解生产影响的情况下修改基础设施配置——更改 Docker Compose 卷（数据丢失）、修改 `.env.example`（破坏新人引导）、更新 Terraform（意外的资源变更）。
+
+### 实施方案
+
+```json
+{
+  "permissions": {
+    "deny": [
+      "Edit(docker-compose.yml)",
+      "Edit(Dockerfile)",
+      "Edit(.env.example)",
+      "Edit(terraform/**)",
+      "Edit(kubernetes/**)",
+      "Edit(.github/workflows/**)",
+      "Edit(prisma/schema.prisma)"
+    ]
+  }
+}
+```
+
+**需保护的文件**：
+- `docker-compose.yml`、`Dockerfile`
+- `.env.example`（模板，不是个人的 .env.local）
+- `kubernetes/`、`k8s/`、`terraform/`、`helm/`
+- CI/CD 配置（`.github/workflows/`、`.gitlab-ci.yml`）
+- 数据库 schema（需要迁移审查）
+
+<Aside type="tip">
+个人 `.env.local` 文件可以修改——它们被 gitignore 忽略，是每个开发者本地的。
+</Aside>
+
+---
+
+## 规则 5：依赖安全
+
+### 问题
+
+未经团队批准添加依赖会增加包体积、引入安全漏洞、造成许可证合规问题并增加维护负担。
+
+**真实事故**：
+- 项目已有 `date-fns`（轻量）时添加了 `moment.js`（200KB）
+- 项目使用 `ramda` 时安装了 `lodash`
+- 添加 GPL 库——专有代码库的许可证违规
+
+### 实施方案
+
+<Tabs>
+  <TabItem label="权限拒绝">
+    ```json
+    {
+      "permissions": {
+        "deny": [
+          "Bash(npm install *)",
+          "Bash(npm i *)",
+          "Bash(pnpm add *)",
+          "Bash(yarn add *)",
+          "Bash(pip install *)",
+          "Bash(poetry add *)"
+        ],
+        "allow": [
+          "Bash(npm install)",
+          "Bash(pnpm install)",
+          "Bash(pip install -r requirements.txt)"
+        ]
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="CLAUDE.md 协议">
+    ```markdown
+    ## 依赖管理
+
+    ### 不可变技术栈规则
+
+    **禁止添加新依赖**。
+
+    如果需要新依赖：
+    1. 检查现有依赖是否能解决问题
+    2. 如果确实需要，先询问再添加
+    3. 等待明确批准
+    4. 用户手动运行安装命令
+
+    无需询问即可：
+    - `npm install`（安装 package.json 中的现有依赖）
+    - 批准后的测试开发依赖（-D 标志）
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## 规则 6：遵循既有模式
+
+### 问题
+
+Claude 会引入与代码库不一致的新模式——在函数式 React 项目中使用 `class` 组件、在使用 `ramda` 的项目中引入 `lodash`、在 GraphQL 项目中写 REST 端点。
+
+### 实施方案
+
+在 CLAUDE.md 中添加：
+
+```markdown
+## 代码约定
+
+### 技术栈（不得偏离）
+
+**前端**：
+- React 18 函数组件 + hooks（禁止 class 组件）
+- 状态：Zustand（非 Redux、Context）
+- HTTP：axios（非 fetch）
+- 样式：Tailwind CSS（非 styled-components）
+
+**后端**：
+- Node.js + Express
+- 数据库：Prisma ORM（非原始 SQL、TypeORM）
+- 认证：jose 库的 JWT
+- 验证：Zod schemas
+
+**测试**：
+- 单元测试：Vitest（非 Jest）
+- 端到端：Playwright（非 Cypress）
+```
+
+**自动验证钩子**：
+
+```bash
+# .claude/hooks/PostToolUse.sh
+#!/bin/bash
+if [[ "$TOOL" == "Write" ]] || [[ "$TOOL" == "Edit" ]]; then
+    FILE=$(echo "$INPUT" | jq -r '.tool.input.file_path')
+
+    if [[ "$FILE" =~ \.(tsx?)$ ]]; then
+        CONTENT=$(cat "$FILE")
+
+        if echo "$CONTENT" | grep -q "class.*extends.*Component"; then
+            echo "警告：$FILE 中检测到 class 组件"
+            echo "项目使用函数组件。"
+        fi
+
+        if echo "$CONTENT" | grep -q "import.*fetch\|window.fetch"; then
+            echo "警告：$FILE 中检测到 fetch()"
+            echo "项目使用 axios。"
+        fi
+    fi
+fi
+```
+
+---
+
+## 规则 7：验证悖论
+
+### 问题
+
+当 AI 有 99% 的成功率时，传统人工审查变得脆弱。
+
+**悖论**：随着 AI 可靠性提升，人工审查质量反而下降。
+
+| 反模式 | 更好的方式 |
+|--------|-----------|
+| 人工审查每个 AI 输出 | 自动化测试套件 + 选择性审查 |
+| 因为"上次没问题"而信任 | 验证契约（测试、类型、lint） |
+| 人作为唯一的错误检测器 | 快速失败的防护栏（CI/CD 关卡） |
+| 高频 AI 操作的"抽查"策略 | 全面自动化验证 |
+| 审查疲劳 = 标准逐渐降低 | 一致的自动化质量标杆 |
+
+### 实施方案
+
+```yaml
+# .github/workflows/ai-safety.yml
+name: AI 输出验证
+on: [pull_request]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 类型安全
+        run: npm run typecheck
+
+      - name: Lint 规则
+        run: npm run lint
+
+      - name: 单元测试
+        run: npm run test
+
+      - name: 端到端测试
+        run: npm run test:e2e
+
+      - name: 安全审计
+        run: npm audit
+
+      - name: 包分析
+        run: npm run analyze
+      # 只有在所有自动化通过后才进行人工审查
+```
+
+<Aside type="tip">
+**解决方案**：自动化无聊的验证（语法、类型、测试），将人的注意力留给创造性/策略性审查——架构决策、UX/设计选择、业务逻辑验证。
+</Aside>
+
+| 场景 | 行为 |
+|------|------|
+| AI 写出 99.9% 完美代码 | 仍然运行自动化（悖论在 99.9% 时仍适用） |
+| 时间压力，"先发布再说" | 自动化不可协商 |
+| 琐碎更改（修正拼写） | 运行自动化（拼写可能导致生产事故） |
+| 紧急热修复 | 必须运行自动化（压力 = 更高错误率） |
+
+---
+
+## 与现有工作流集成
+
+### 与 Plan 模式配合
+
+```bash
+# 多文件更改前
+/plan
+
+# Claude 进入只读模式，探索代码库
+# 识别模式、约定、现有实现
+# 提出遵循项目约定的计划
+# 你在执行前审查
+```
+
+### 与 CI/CD 配合
+
+```yaml
+# .github/workflows/pr-validation.yml
+name: PR 验证
+on: [pull_request]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: 检查不完整功能
+        run: |
+          if git diff origin/main...HEAD | grep -E "TODO.*implement|Not implemented"; then
+            echo "PR 包含不完整功能"
+            exit 1
+          fi
+
+      - name: 检查未授权依赖
+        run: |
+          git diff origin/main...HEAD -- package.json | grep -E '^\+.*"[^"]+": "[^"]+"' || exit 0
+          echo "检测到新依赖。需要审查。"
+```
+
+---
+
+## 常见问题
+
+### "规则太严格了"
+
+| 团队规模 | 推荐规则 |
+|---------|---------|
+| 1-2 人 | 仅规则 1、3、6 |
+| 3-10 人 | 规则 1、3、5、6 |
+| 10+ 人或生产环境 | 全部 6 条规则 |
+
+### "Claude 总是被阻止"
+
+规则在正常工作！选项：
+
+1. **授予临时权限** — 在 CLAUDE.md 中添加带过期日期的临时覆盖
+2. **创建例外** — 在权限中允许特定操作，拒绝一般操作
+3. **审视规则是否合适** — 个人开发者阻止自己？移除规则
+
+### "如何在团队范围执行规则？"
+
+```bash
+# 共享团队规则（提交到仓库）
+/project/.claude/settings.json
+/project/CLAUDE.md
+
+# 个人覆盖（被 gitignore 忽略）
+/project/.claude/settings.local.json
+```
+
+---
+
+## 快速参考
+
+### 规则严重程度
+
+| 规则 | 严重程度 | 违反后果 |
+|------|---------|---------|
+| 1. 端口稳定性 | 严重 | 团队停工、部署失败 |
+| 2. 数据库安全 | 严重 | 数据丢失、客户影响 |
+| 3. 功能完整性 | 高 | 生产 bug、技术债务 |
+| 4. 基础设施锁定 | 高 | 停机、安全问题 |
+| 5. 依赖安全 | 中 | 包膨胀、许可证问题 |
+| 6. 遵循模式 | 低 | 代码不一致、维护负担 |
+
+### 执行方法
+
+| 方法 | 严格度 | 配置耗时 | 最适合 |
+|------|--------|---------|--------|
+| **权限拒绝** | 100%（阻止） | 2 分钟 | 关键规则（1、2、4） |
+| **预执行钩子** | 100%（阻止） | 10 分钟 | 自定义逻辑、团队特定 |
+| **CLAUDE.md 规则** | ~70%（被遵循） | 5 分钟 | 约定、指南 |
+| **后执行警告** | ~30%（仅警告） | 5 分钟 | 最佳实践、建议 |
+| **Git 钩子** | 100%（阻止提交） | 15 分钟 | 推送前的最终安全网 |

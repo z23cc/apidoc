@@ -1,0 +1,151 @@
+---
+title: "Legacy Codebase Modernization"
+description: "Systematically migrate COBOL, Fortran, and other legacy codebases to modern stacks using Claude Code"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## Why Legacy Modernization Is Hard
+
+The real cost of legacy migration isn't the migration itself -- it's the **discovery phase**. Original developers have retired. Documentation is absent or wrong. Code has been patched for decades by engineers who never understood the full system. Finding what talks to what requires consultants billing by the hour.
+
+AI changes the economics by automating this exact phase.
+
+<Aside type="tip" title="Scale Reference">
+- ~220 billion lines of COBOL still in production (IBM estimate)
+- ~95% of US ATM transactions run on COBOL-based systems
+- Modernization previously required multi-year, multi-team projects
+</Aside>
+
+<Aside>
+In February 2026, Anthropic published a COBOL modernization playbook positioning Claude Code as a direct replacement for legacy consulting teams. The workflow described here applies to any large legacy codebase (COBOL, Fortran, VB6, PL/I), not just COBOL.
+</Aside>
+
+---
+
+## The 4-Step Workflow
+
+<Aside type="tip" title="Independent Validation">
+Academic research (WJAETS 2025) shows -25 to -30% timeline reduction on average. Best-case: Airbnb migrated 3,500 test files in 6 weeks vs. an estimated 1.5 years. COBOL-to-Java accuracy: 93% in controlled studies (arXiv, April 2025).
+</Aside>
+
+<Steps>
+
+1. **Automated Exploration & Discovery**
+
+   Map the entire codebase:
+
+   - Identify all program entry points and execution paths
+   - Trace subroutine calls across hundreds of files
+   - Document implicit dependencies via shared files, databases, and global state
+   - Generate a dependency graph before touching a single line
+
+   **Prompt pattern:**
+   ```
+   "Read the entire [COBOL/legacy] codebase. Map its structure:
+    entry points, execution paths, subroutine call chains,
+    and any implicit dependencies via shared data structures,
+    global variables, or file I/O. Output a dependency map."
+   ```
+
+2. **Risk Analysis & Opportunity Mapping**
+
+   With the dependency map in hand:
+
+   - Assess coupling levels between modules (high coupling = high risk)
+   - Surface isolated components as safe modernization candidates
+   - Identify duplicated logic and dead code
+   - Flag shared state as the highest-risk zones
+
+   **Prompt pattern:**
+   ```
+   "Based on the dependency map: rank modules by coupling level.
+    Which components can be modernized in isolation?
+    Which share state with 3+ other modules and should be touched last?"
+   ```
+
+3. **Strategic Planning**
+
+   Human + AI collaboration:
+
+   - AI suggests prioritization based on risk/dependency analysis
+   - Team reviews against business priorities (what breaks = most expensive)
+   - Define target architecture and code standards
+   - Design function-level tests for validation before migration begins
+
+   <Aside type="caution">
+   This phase is **not fully automatable** -- business context requires human judgment. Hybrid human-AI workflows show 31% higher completion rates within initial time estimates vs. purely automated approaches (WJAETS 2025).
+   </Aside>
+
+4. **Incremental Implementation**
+
+   Never migrate the whole system at once:
+
+   - Translate logic component by component
+   - Create API wrappers for legacy components still in use
+   - Run old and new code side-by-side in production
+   - Validate each component independently before proceeding to the next
+
+   **Prompt pattern:**
+   ```
+   "Translate [module X] to [target language].
+    Preserve exact business logic — no optimization yet.
+    Add a compatibility wrapper so both versions can run in parallel.
+    Write tests that verify identical outputs for identical inputs."
+   ```
+
+</Steps>
+
+---
+
+## Key Principles
+
+| Principle | Why It Matters |
+|-----------|----------------|
+| **Map before touching** | Blind migrations fail; discovery first |
+| **Isolate before migrating** | High-coupling modules = cascade failures |
+| **Parallel run** | Rollback possible only if both versions coexist |
+| **Test at boundary** | Test inputs/outputs, not internal logic (which will change) |
+| **Human review on business logic** | AI doesn't know which edge case is regulatory vs. dead code |
+
+---
+
+## Realistic Expectations
+
+"Years to quarters" is real -- but it's the **optimistic scenario**, not the average:
+
+| Scenario | Timeline Reduction | Source |
+|----------|-------------------|--------|
+| Conservative estimate | -25 to -30% | WJAETS 2025 academic review |
+| Automation-heavy phases | -40 to -50% | Fullstack Labs industry synthesis |
+| Best-case (test migration) | -88% (6 weeks vs 1.5 yr) | Airbnb case study |
+| COBOL-to-Java conversion accuracy | 93% | arXiv, April 2025 |
+
+The average gains are real and significant. The headline numbers require favorable conditions: good test coverage, isolated modules, and a team that understands both the legacy system and the target stack.
+
+---
+
+## Anti-Patterns
+
+<CardGrid>
+  <Card title="Big Bang Migration" icon="warning">
+    Rewriting everything at once. No company has survived this at scale.
+  </Card>
+  <Card title="No Parallel Run" icon="warning">
+    Cutting over without a fallback. One undiscovered edge case = production outage.
+  </Card>
+  <Card title="Skipping Discovery" icon="warning">
+    Starting to translate before mapping. You will break things you didn't know existed.
+  </Card>
+  <Card title="Trusting AI on Business Logic" icon="warning">
+    AI translates faithfully what it reads. If the original was wrong or context-dependent, the translation will be too.
+  </Card>
+</CardGrid>
+
+---
+
+## Resources
+
+- [Anthropic COBOL Modernization Playbook](https://claude.com/blog/how-ai-helps-break-cost-barrier-cobol-modernization) (Feb 2026)
+- [AI-Driven Legacy Systems Modernization: COBOL to Java](https://arxiv.org/abs/2504.11335) (arXiv, April 2025)
+- [AWS EKS COBOL Modernization Case Study](https://aws.amazon.com/blogs/apn/modernize-cobol-workloads-with-amazon-eks-powered-by-generative-ai/) (July 2025)

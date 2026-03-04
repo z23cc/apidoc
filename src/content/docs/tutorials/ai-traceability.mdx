@@ -1,0 +1,423 @@
+---
+title: "AI 代码溯源与归属"
+description: "AI 生成代码的归属标准、工具和合规策略"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+随着 AI 生成代码变得普遍，项目需要清晰的归属策略。本指南涵盖行业标准（LLVM、Ghostty、Fedora）、实用工具和实施模板。
+
+---
+
+## 为什么溯源现在很重要
+
+### AI 代码半衰期
+
+基于 git-ai 跟踪仓库的研究揭示了一个引人注目的指标：**AI 代码半衰期**约为 **3.33 年**（中位数）。这意味着一半的 AI 生成代码会在 3.33 年内被替换——比典型的代码更替更快。
+
+原因：
+- AI 代码通常缺乏对项目架构的深入理解
+- 使用不适合特定上下文的通用模式
+- 需求演变时需要返工
+- 开发者更好地理解问题后会替换掉
+
+### 溯源的四大驱动力
+
+| 驱动力 | 关注点 | 利益相关者 |
+|--------|--------|-----------|
+| **审计与合规** | SOC2、HIPAA、受监管行业需要来源证明 | 法务、安全 |
+| **代码审查效率** | AI 代码通常需要更多审查 | 维护者 |
+| **法律/版权** | 训练数据来源、许可证模糊 | 法务 |
+| **调试** | 理解 AI 选择背后的「为什么」 | 开发者 |
+
+### 归属差距
+
+大多数 AI 编码工具（Copilot、Cursor、ChatGPT）在版本控制中**不留痕迹**。这导致：
+- 无法区分的 AI 贡献与人工代码
+- 审查负担不均（审查者不知道什么需要额外关注）
+- 合规性差距（审计人员无法验证 AI 使用情况）
+
+<Aside>
+Claude Code 默认添加 `Co-Authored-By: Claude` 标记，但这只是更广泛光谱中的一个点。
+</Aside>
+
+---
+
+## 披露光谱
+
+并非所有项目都需要相同级别的归属。根据你的情况选择：
+
+| 级别 | 方法 | 适用场景 | 示例 |
+|------|------|---------|------|
+| **无** | 不披露 | 个人项目、实验 | 副项目 |
+| **最低** | `Co-Authored-By` 标记 | 随意的 OSS、小团队 | 小型工具库 |
+| **标准** | `Assisted-by` 标记 + PR 披露 | 团队项目、活跃的 OSS | 框架贡献 |
+| **完整** | git-ai + 提示保留 | 企业、合规、研究 | 受监管行业代码 |
+
+### 如何选择级别
+
+<Steps>
+1. 这段代码会被审计吗？-> 标准或完整
+2. 贡献者是否需要与 AI 分开获得信用？-> 标准以上
+3. 法律来源是否重要？-> 完整
+4. 这是学习项目吗？-> 最低即可
+5. 公开 OSS 有活跃维护者？-> 查看他们的政策
+</Steps>
+
+---
+
+## 归属方法
+
+### Co-Authored-By（Claude Code 默认）
+
+最简单的方法。Claude Code 自动添加到提交中：
+
+```
+feat: implement user authentication
+
+Implemented JWT-based auth with refresh tokens.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+```
+
+| 优点 | 缺点 |
+|------|------|
+| 零摩擦（自动） | 不区分 AI 参与程度 |
+| 标准 Git 标记（GitHub/GitLab 识别） | 无提示/上下文保留 |
+| 在贡献者图表中显示 | 二元的（AI 帮了或没帮） |
+
+### Assisted-by 标记（LLVM 标准）
+
+LLVM 2026 年 1 月的政策引入了更细致的标记：
+
+```
+commit abc123
+Author: Jane Developer <jane@example.com>
+
+Implement RISC-V vector extension support
+
+Assisted-by: Claude (Anthropic)
+```
+
+| 方面 | Co-Authored-By | Assisted-by |
+|------|---------------|-------------|
+| 含义 | AI 作为共同作者 | 人类作者，AI 辅助 |
+| 信用 | 共享作者身份 | 人类为主要作者 |
+| 责任 | 模糊 | 人类负责 |
+
+### PR/MR 披露（Ghostty 模式）
+
+Ghostty（终端模拟器）要求在 PR 级别披露，而非提交级别：
+
+```markdown
+## AI Assistance
+
+This PR was developed with assistance from Claude (Anthropic).
+Specifically:
+- Initial algorithm structure
+- Test case generation
+- Documentation drafting
+
+All code has been reviewed and understood by the author.
+```
+
+**优势**：
+- 比标记提供更多上下文
+- 允许细致的披露
+- 审查者更容易评估
+- 不会使提交历史混乱
+
+### 检查点跟踪（git-ai / Entire CLI）
+
+最全面的方法。创建「检查点」记录：
+- 哪个工具生成了哪些行
+- 支持指标计算（如 AI 代码半衰期）
+- 可选保留提示上下文
+- 跨 rebase、squash 和 cherry-pick 保持稳定
+
+---
+
+## 行业政策参考
+
+### LLVM「人类在回路中」（2026 年 1 月）
+
+**核心原则**：
+1. **人类负责**：人类必须审查、理解并承担责任
+2. **需要披露**：重要 AI 辅助使用 `Assisted-by:` 标记
+3. **禁止自主 Agent**：完全自主的 AI 贡献被禁止
+4. **保护新手问题**：AI 不能解决标记给新人的问题
+
+**「榨取式贡献」概念**：
+- **增值型**：你写代码，AI 帮助改进 -> 有披露即可
+- **榨取型**：AI 从训练数据生成 -> 有风险，需额外审查
+
+### Ghostty 强制披露（2025 年 8 月）
+
+**需要披露**：
+- AI 生成的代码（任何量）
+- AI 辅助的研究
+- AI 建议的算法或方法
+- AI 起草的文档或注释
+
+**不需要披露**：
+- 简单的自动补全（单个关键词）
+- IDE 语法助手
+- 语法/拼写检查
+
+### Fedora 贡献者问责（2025 年 10 月）
+
+- 使用 RFC 2119 语言：必须（MUST）、应该（SHOULD）、可以（MAY）
+- 贡献者**必须**为 AI 生成内容负责
+- AI **禁止**用于治理（投票、提案、政策）
+- 「实质性」AI 使用需要披露
+
+### 政策对比
+
+| 方面 | LLVM | Ghostty | Fedora |
+|------|------|---------|--------|
+| **披露方式** | `Assisted-by` 标记 | PR 描述 | PR/提交描述 |
+| **触发条件** | 「重要」AI 帮助 | 任何 AI 工具使用 | 「实质性」AI 使用 |
+| **执行方式** | 社交 | 社交 | 社交 |
+| **自主 AI** | 禁止 | 隐含禁止 | 治理领域禁止 |
+| **新手保护** | 是 | 否 | 否 |
+| **范围** | 代码 + RFC | 代码 + 文档 | 所有贡献 |
+
+---
+
+## 工具与自动化
+
+### Entire CLI
+
+由 Thomas Dohmke（前 GitHub CEO）于 2026 年 2 月创立，获得 6000 万美元融资。
+
+**功能**：
+- 捕获 AI Agent 会话作为版本化的**检查点**
+- 存储提示、推理过程、工具使用和文件变更
+- 创建可搜索、可审计的代码编写记录
+- 通过可回退的检查点支持会话重放
+- 支持 Agent 间的上下文传递
+
+```bash
+# 1. 启动 Entire 会话捕获
+entire capture --agent="claude-code" --task="auth-refactor"
+
+# 2. 在 Claude Code 中正常工作
+claude
+
+# 3. 创建命名检查点
+entire checkpoint --name="jwt-implemented"
+
+# 4. 查看会话历史
+entire log
+
+# 5. 需要时回退到任何检查点
+entire rewind --to="jwt-implemented"
+```
+
+| 场景 | 价值 |
+|------|------|
+| 合规/审计 | 完整溯源：提示 -> 推理 -> 代码 |
+| 多 Agent 工作流 | 跨 Agent 切换时保留上下文 |
+| 调试 | 回退到检查点，检查提示/推理 |
+| 团队交接 | 新开发者可恢复完整 AI 会话历史 |
+
+### 自动归属 Hook
+
+在 Claude Code 提交时自动添加 `Assisted-by` 标记：
+
+```bash
+# .claude/hooks/post-commit.sh
+#!/bin/bash
+
+LAST_COMMIT=$(git log -1 --format="%H")
+COMMIT_MSG=$(git log -1 --format="%B")
+
+# 检查是否已有归属标记
+if echo "$COMMIT_MSG" | grep -q "Assisted-by:\|Co-Authored-By:"; then
+    exit 0
+fi
+
+# 追加标记
+git commit --amend -m "$COMMIT_MSG
+
+Assisted-by: Claude (Anthropic)"
+```
+
+### CI/CD 集成
+
+GitHub Action 验证披露：
+
+```yaml
+# .github/workflows/ai-disclosure-check.yml
+name: AI Disclosure Check
+
+on:
+  pull_request:
+    types: [opened, edited]
+
+jobs:
+  check-disclosure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check AI disclosure section
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body || '';
+            const hasDisclosure = body.includes('## AI Assistance') ||
+                                  body.includes('AI-generated') ||
+                                  body.includes('Assisted-by');
+
+            if (!hasDisclosure) {
+              core.warning('No AI disclosure section found.');
+            }
+```
+
+<Aside type="tip">
+这是一个软检查（警告，不是失败）。硬执行有误报风险。
+</Aside>
+
+---
+
+## 安全影响
+
+### PromptPwnd 漏洞
+
+**攻击向量**：
+1. 攻击者在文件中添加恶意指令（隐藏注释、README 等）
+2. 开发者使用读取仓库文件的 AI 助手
+3. AI 遵循恶意指令（窃取密钥、注入后门）
+4. 开发者在不知情的情况下提交了被入侵的代码
+
+**缓解措施**：
+
+| 缓解手段 | 有效性 | 实施方式 |
+|---------|--------|---------|
+| 沙箱化 AI 执行 | 高 | 使用 Claude Code 容器模式 |
+| 审查 AI 生成的 diff | 中 | 提交前始终审查 |
+| 限制文件访问 | 中 | 配置允许的路径 |
+| 审计依赖项 | 中 | 仔细审查新依赖 |
+
+### 非确定性风险
+
+相同提示给相同模型可能产生不同代码。
+
+| 影响 | 缓解措施 |
+|------|---------|
+| 无法重现精确的 AI 输出 | 将提示与提交一起存储 |
+| 难以理解「为什么是这段代码」 | 使用 git-ai 检查点 |
+| 审计人员无法验证 AI 生成声明 | 保留会话日志 |
+
+<Aside type="caution">
+对于合规关键代码，保留：精确使用的提示、模型版本、时间戳、会话上下文。
+</Aside>
+
+---
+
+## 实施指南
+
+### 快速开始（个人开发者）
+
+<Steps>
+1. **已使用 Claude Code？** 你已经完成了——`Co-Authored-By` 是自动的
+
+2. **想要更细粒度？** 添加到提交模板：
+
+   ```bash
+   git config --global commit.template ~/.gitmessage
+   ```
+
+   ```
+   # ~/.gitmessage
+   # Subject line
+
+   # Body
+
+   # Assisted-by: (tool name, if applicable)
+   ```
+
+3. **想要指标？** 安装 git-ai：
+
+   ```bash
+   npm install -g git-ai
+   git-ai init
+   ```
+</Steps>
+
+### 团队采纳
+
+<Steps>
+1. **在 CONTRIBUTING.md 中添加政策**
+
+2. **创建 PR 模板**，包含 AI 披露复选框
+
+3. **在团队会议中讨论**：
+   - 什么级别的披露？
+   - 标记格式偏好？
+   - CI 执行方式（警告 vs 阻止）？
+
+4. **先用警告，不用阻止**：人会忘记，误报令人沮丧，社交执行通常足够
+
+5. **1 个月后审查**：披露是否在发生？审查是否发现问题？
+</Steps>
+
+### 企业/合规
+
+对于受监管行业（金融、医疗、政府）：
+
+| 步骤 | 内容 |
+|------|------|
+| 法律审查优先 | AI 生成代码的知识产权影响、AI 错误的责任、训练数据来源 |
+| 完整跟踪 | git-ai + 提示保留、会话日志归档、模型版本记录 |
+| 审计追踪 | 谁批准了 AI 代码？执行了什么审查？能否重现生成？ |
+| 政策文档 | 书面政策、开发者培训、定期合规检查 |
+| 考虑限制 | 某些代码路径禁止 AI？安全关键的仅人工审查？AI 密集 PR 的审批流程？ |
+
+---
+
+## 模板
+
+### 提交消息（带 Assisted-by）
+
+```
+feat: implement rate limiting middleware
+
+Add token bucket algorithm for API rate limiting.
+Configurable per-endpoint limits with Redis backing.
+
+- Token bucket with configurable refill rate
+- Redis for distributed state
+- Graceful degradation if Redis unavailable
+
+Assisted-by: Claude (Anthropic)
+```
+
+### CONTRIBUTING.md 段落
+
+```markdown
+## AI Assistance Disclosure
+
+If you use any AI tools to help with your contribution, please disclose this
+in your pull request description.
+
+### What to disclose
+- AI-generated code
+- AI-assisted research
+- AI-suggested approaches
+
+### What doesn't need disclosure
+- Trivial autocomplete
+- IDE syntax helpers
+- Grammar/spell checking
+```
+
+### PR 模板
+
+```markdown
+## AI Assistance
+
+- [ ] No AI tools were used
+- [ ] AI was used for research only
+- [ ] AI generated some code (tool: ___)
+- [ ] AI generated most of the code (tool: ___)
+```

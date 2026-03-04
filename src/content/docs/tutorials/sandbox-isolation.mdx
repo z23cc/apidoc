@@ -1,0 +1,370 @@
+---
+title: "沙盒隔离"
+description: "使用 Docker、原生沙盒和云方案安全运行 Claude Code"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Claude Code 的权限系统保护你免受意外操作，但也带来一个矛盾：`--dangerously-skip-permissions` 移除所有防护栏，而交互式批准会拖慢自主工作流。**沙盒隔离**解决了这个问题——让代理在一个爆炸半径可控的环境中自由运行。
+
+---
+
+## 方案速览
+
+| 方案 | 隔离级别 | 本地/云端 | 最适合 |
+|------|---------|----------|--------|
+| **Docker Sandboxes** | 微虚拟机（Hypervisor） | 本地 | 最高安全性，Docker-in-Docker |
+| **原生 CC 沙盒** | 进程级（Seatbelt/bubblewrap） | 本地 | 轻量日常开发，可信代码 |
+| **Fly.io Sprites** | Firecracker 微虚拟机 | 云端 | API 驱动的代理工作流 |
+| **E2B** | Firecracker 微虚拟机 | 云端 | 多框架 AI 应用 |
+| **Vercel Sandboxes** | Firecracker 微虚拟机 | 云端 | Next.js / Vercel 生态 |
+| **Cloudflare Sandbox SDK** | 容器 | 云端 | 基于 Workers 的无服务器 |
+
+**快速开始**：
+
+```bash
+docker sandbox run claude ~/my-project
+```
+
+---
+
+## 问题：安全地自主运行
+
+- **`--dangerously-skip-permissions`** 移除所有防护——Claude 可以不经询问执行 `rm -rf`、`git push --force` 或 `DROP TABLE`。在裸机上这很危险。
+- **权限疲劳**——批准每一个文件编辑和 shell 命令会拖慢自主工作流。
+- **核心矛盾**：如何让 Claude Code 既自主又安全地运行？
+
+<Aside type="tip">
+**答案**：隔离执行环境。让代理在沙盒内自由运行，确保爆炸半径可控。沙盒才是安全边界，而非权限系统。
+</Aside>
+
+---
+
+## Docker Sandboxes
+
+Docker Sandboxes 在你的本地机器上以**微虚拟机隔离**运行 AI 编码代理。每个沙盒都有自己的私有 Docker 守护进程和文件系统。沙盒不会出现在 `docker ps` 中——它们是虚拟机，不是容器。
+
+**要求**：Docker Desktop 4.58+（macOS 或 Windows）
+
+### 快速开始
+
+```bash
+# 用你的项目创建并运行沙盒
+docker sandbox run claude ~/my-project
+
+# 以自主模式运行（在沙盒内是安全的）
+docker sandbox run claude ~/my-project -- --dangerously-skip-permissions
+
+# 直接传入提示
+docker sandbox run claude ~/my-project -- "将认证模块重构为 JWT"
+
+# 继续上一个会话
+docker sandbox run my-sandbox -- --continue
+```
+
+### 架构
+
+```
++----------------------------------------------------------+
+|                       宿主机                               |
+|                                                          |
+|  +----------------------------------------------------+  |
+|  |              DOCKER 沙盒 (微虚拟机)                   |  |
+|  |                                                    |  |
+|  |  +------------+  +---------------------------+     |  |
+|  |  | Claude Code |  | 私有 Docker 守护进程        |     |  |
+|  |  | (--dsp 模式) |  | （与宿主隔离）              |     |  |
+|  |  +------------+  +---------------------------+     |  |
+|  |                                                    |  |
+|  |  +----------------------------------------------+  |  |
+|  |  | 工作区：~/my-project（与宿主同步）               |  |  |
+|  |  +----------------------------------------------+  |  |
+|  |                                                    |  |
+|  |  基础：Ubuntu, Node.js, Python 3, Go, Git,         |  |
+|  |        Docker CLI, GitHub CLI, ripgrep, jq          |  |
+|  +----------------------------------------------------+  |
+|                                                          |
+|  宿主 Docker 守护进程：沙盒内不可访问                       |
+|  宿主文件系统：不可访问（工作区除外）                        |
++----------------------------------------------------------+
+```
+
+关键属性：
+- **工作区同步**：宿主目录以相同绝对路径挂载到沙盒内
+- **完全隔离**：代理无法访问宿主 Docker 守护进程、宿主容器或工作区外的文件
+- **私有 Docker**：每个沙盒有自己的 Docker 守护进程
+- **Claude 以 `--dangerously-skip-permissions` 运行**：这是设计如此——沙盒才是安全边界
+
+### 网络策略
+
+控制沙盒可以访问的网络资源：
+
+```bash
+# 查看网络活动
+docker sandbox network log my-sandbox
+
+# 拒绝列表模式（阻止所有，允许特定）
+docker sandbox network proxy my-sandbox \
+  --policy deny \
+  --allow-host api.anthropic.com \
+  --allow-host "*.npmjs.org" \
+  --allow-host github.com
+
+# 允许列表模式（允许所有，阻止特定）
+docker sandbox network proxy my-sandbox \
+  --policy allow \
+  --block-host "*.malicious-domain.com" \
+  --block-cidr "192.168.0.0/16"
+```
+
+| 模式 | 默认行为 | 使用场景 |
+|------|---------|---------|
+| **允许列表**（默认） | 允许大部分流量，阻止特定目标 | 日常开发 |
+| **拒绝列表** | 阻止所有流量，仅允许指定目标 | 高安全环境 |
+
+**默认阻止范围**：私有 CIDR（`10.0.0.0/8`、`127.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16`、`169.254.0.0/16`）。
+
+### 自定义模板
+
+为需要可复现环境的团队：
+
+```dockerfile
+FROM docker/sandbox-templates:claude-code
+
+USER root
+
+# 安装项目特定依赖
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    redis-tools
+
+RUN npm install -g pnpm turbo
+
+USER agent
+```
+
+```bash
+# 构建并使用自定义模板
+docker build -t my-team-sandbox:v1 .
+docker sandbox create my-sandbox \
+  --template my-team-sandbox:v1 \
+  --load-local-template ~/my-project
+```
+
+### 命令参考
+
+| 命令 | 描述 |
+|------|------|
+| `docker sandbox run <agent> <path>` | 创建并启动沙盒 |
+| `docker sandbox create <name>` | 仅创建不启动 |
+| `docker sandbox ls` | 列出所有沙盒 |
+| `docker sandbox run <name> -- "prompt"` | 传入提示 |
+| `docker sandbox run <name> -- --continue` | 继续上一个会话 |
+| `docker sandbox network proxy <name>` | 配置网络策略 |
+| `docker sandbox network log <name>` | 查看网络活动 |
+
+### 支持的代理
+
+| 代理 | 提供商 | 状态 |
+|------|--------|------|
+| Claude Code | Anthropic | 完全支持 |
+| Codex CLI | OpenAI | 支持 |
+| Gemini CLI | Google | 支持 |
+| cagent | Docker | 支持 |
+| Kiro | AWS | 支持 |
+
+### 限制
+
+- **仅 macOS 和 Windows** 支持微虚拟机模式。Linux 使用传统容器沙盒。
+- **需要 Docker Desktop**——独立 Docker Engine 不可用。
+- **沙盒内暂不支持 MCP Gateway**。
+- **无 GPU 直通**——不适合 ML 训练工作负载。
+- **工作区同步是单向的**：沙盒内的更改传播到宿主，但宿主并发编辑可能冲突。
+
+---
+
+## 原生 Claude Code 沙盒
+
+Claude Code 内置**原生沙盒**，使用操作系统级原语实现进程级隔离。无需 Docker。
+
+**要求**：macOS（内置）或 Linux/WSL2（bubblewrap + socat）。Claude Code v2.1.0+。
+
+### 与 Docker 沙盒的主要区别
+
+| 方面 | 原生沙盒 | Docker 沙盒 |
+|------|---------|------------|
+| **隔离级别** | 进程（Seatbelt/bubblewrap） | 微虚拟机（Hypervisor） |
+| **内核** | 与宿主共享 | 每个沙盒独立内核 |
+| **配置** | 0 依赖（macOS），2 个包（Linux） | Docker Desktop 4.58+ |
+| **开销** | 最小（~1-3% CPU） | 中等（~5-10% CPU，+200MB RAM） |
+| **Docker-in-Docker** | 不支持 | 私有 Docker 守护进程 |
+| **适用场景** | 日常开发，可信代码 | 不可信代码，最高隔离 |
+
+### 快速开始
+
+```bash
+# 启用沙盒（交互菜单）
+/sandbox
+
+# 仅 Linux/WSL2：先安装先决条件
+sudo apt-get install bubblewrap socat  # Ubuntu/Debian
+sudo dnf install bubblewrap socat      # Fedora
+```
+
+### 配置
+
+```json
+{
+  "sandbox": {
+    "autoAllowMode": true,
+    "network": {
+      "policy": "deny",
+      "allowedDomains": [
+        "api.anthropic.com",
+        "registry.npmjs.com",
+        "github.com"
+      ]
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(~/.ssh/**)", "Read(~/.aws/**)",
+      "Edit(~/.ssh/**)", "Edit(~/.aws/**)"
+    ]
+  }
+}
+```
+
+### 何时使用原生 vs Docker
+
+**使用原生沙盒的场景**：
+- 可信团队的日常开发
+- 轻量配置（无需 Docker Desktop）
+- 优先考虑最小开销
+- 代码基本可信
+- 不需要 Docker-in-Docker
+
+**使用 Docker 沙盒的场景**：
+- 运行不可信代码
+- 需要最高安全隔离（内核漏洞防护）
+- 需要沙盒内的私有 Docker 守护进程
+- 测试 AI 生成的脚本
+- 处理敏感工作负载的生产 CI/CD
+
+### 开源运行时
+
+沙盒实现作为开源 npm 包提供：
+
+```bash
+# 直接使用沙盒运行时
+npx @anthropic-ai/sandbox-runtime <command-to-sandbox>
+
+# 示例：沙盒化一个 MCP 服务器
+npx @anthropic-ai/sandbox-runtime node mcp-server.js
+```
+
+---
+
+## 云端沙盒方案
+
+<CardGrid>
+  <Card title="Fly.io Sprites" icon="rocket">
+    Firecracker 微虚拟机，约 300ms 检查点/恢复。最高 8 CPU、16GB RAM。按用量计费。
+  </Card>
+  <Card title="E2B" icon="open-book">
+    开源沙盒平台。约 150ms 冷启动。自定义镜像最大 10GB。支持云端、BYOC 或自托管。
+  </Card>
+  <Card title="Vercel Sandboxes" icon="laptop">
+    临时 Linux 微虚拟机。亚秒级初始化。2026 年 1 月正式发布。最适合 Next.js/Vercel 生态。
+  </Card>
+  <Card title="Cloudflare Sandbox SDK" icon="setting">
+    基于 Cloudflare Workers 的容器。支持 Python、JS/TS、Shell 命令。R2 桶挂载实现持久化。
+  </Card>
+</CardGrid>
+
+---
+
+## 完整对比矩阵
+
+| 标准 | Docker 沙盒 | 原生 CC | Fly.io | Cloudflare | E2B | Vercel |
+|------|-----------|--------|--------|-----------|-----|--------|
+| **隔离** | 微虚拟机 | 进程级 | Firecracker | 容器 | Firecracker | Firecracker |
+| **内核隔离** | 是 | 否（共享） | 是 | 部分 | 是 | 是 |
+| **本地运行** | 是 | 是 | 否 | 否 | 否 | 否 |
+| **配置** | Docker Desktop | 0 依赖(mac) | API 密钥 | Workers 付费版 | API 密钥 | SDK |
+| **Docker-in-Docker** | 是 | 否 | 是 | 否 | 是 | 是 |
+| **网络控制** | 允许/拒绝列表 | 允许/拒绝列表 | L3 出站 | 未详述 | 未详述 | 未详述 |
+| **平台** | macOS, Windows | macOS, Linux, WSL2 | 任意(API) | 任意 | 任意 | 任意 |
+| **开销** | ~5-10% CPU | ~1-3% CPU | 云端 | 云端 | 云端 | 云端 |
+| **最适合** | 最高安全 | 日常开发 | API 代理 | 无服务器 | 多框架 | Next.js |
+
+---
+
+## 安全自主工作流
+
+### 模式：Docker 沙盒 + 自主模式
+
+推荐的本地自主开发模式：
+
+<Steps>
+1. **创建沙盒**
+   ```bash
+   docker sandbox create my-feature ~/my-project
+   ```
+2. **配置网络**（可选，推荐用于安全）
+   ```bash
+   docker sandbox network proxy my-feature \
+     --policy deny \
+     --allow-host api.anthropic.com \
+     --allow-host "*.npmjs.org" \
+     --allow-host github.com
+   ```
+3. **自主运行 Claude**（在沙盒内安全）
+   ```bash
+   docker sandbox run my-feature -- --dangerously-skip-permissions \
+     "将认证模块重构为 JWT。完成前运行所有测试。"
+   ```
+4. **在宿主上审查更改**（工作区自动同步）
+   ```bash
+   cd ~/my-project && git diff
+   ```
+5. **满意则提交，否则丢弃或重新运行**
+   ```bash
+   git add -A && git commit -m "feat: JWT 认证（沙盒生成）"
+   ```
+</Steps>
+
+### 模式：CI/CD 流水线 + 沙盒
+
+```yaml
+jobs:
+  agent-task:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 在 E2B 沙盒中运行 Claude
+        uses: e2b-dev/e2b-github-action@v1
+        with:
+          api-key: ${{ secrets.E2B_API_KEY }}
+          command: |
+            claude --dangerously-skip-permissions \
+              -p "运行完整测试套件并修复所有失败"
+```
+
+<Aside type="tip">
+对于 CI/CD，云端沙盒（E2B、Vercel、Sprites）通常优于 Docker Sandboxes，因为它们不需要 Docker Desktop。
+</Aside>
+
+---
+
+## 反模式
+
+| 反模式 | 为何危险 | 正确做法 |
+|--------|---------|---------|
+| 不用沙盒就使用 `--dsp` | 对宿主无限制访问 | 使用沙盒作为安全边界 |
+| 认为容器 = 虚拟机 | 容器共享宿主内核 | 使用微虚拟机方案 |
+| 挂载整个文件系统 | 隔离形同虚设 | 仅挂载项目工作区 |
+| 网络允许列表中使用 `*` | 代理可向任何端点泄露数据 | 使用拒绝列表并明确允许 |
+| 跳过 `git diff` 审查 | 自主代理可能产生意外更改 | 始终审查差异 |
+| 用沙盒作为跳过代码审查的理由 | 隔离保护宿主，不保护代码质量 | 沙盒 + 审查互为补充 |

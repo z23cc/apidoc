@@ -1,0 +1,278 @@
+---
+title: "Model Selection & Mental Model"
+description: "Choose the right model for every task, understand Claude Code's capabilities, and shift from chatbot mode to context system thinking"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Choosing the right model for each task is the **fastest ROI improvement** most Claude Code users can make. One decision per task — no overthinking.
+
+---
+
+## Model Decision Table
+
+| Task | Model | Effort | Est. Cost/Task |
+|------|-------|--------|----------------|
+| Rename, format, boilerplate | Haiku | low | ~$0.02 |
+| Generate unit tests | Haiku | low | ~$0.03 |
+| CI/CD PR review (volume) | Haiku | low | ~$0.02 |
+| Feature dev, standard debug | Sonnet | medium | ~$0.23 |
+| Module refactoring | Sonnet | high | ~$0.75 |
+| System architecture | Opus | high | ~$1.25 |
+| Critical security audit | Opus | max | ~$2+ |
+| Multi-agent orchestration | Sonnet + Haiku | mixed | variable |
+
+<Aside type="note">
+Estimates based on API pricing (Haiku $0.80/$4.00 per MTok, Sonnet $3/$15, Opus $5/$25). Pro/Max subscribers pay a flat rate, so prioritize quality over cost.
+</Aside>
+
+<Aside type="tip" title="Budget Modifier (Teams Standard/Pro)">
+Downgrade one tier per phase — use Sonnet where the table says Opus, Haiku where it says Sonnet for mechanical implementation tasks. Community pattern: *Sonnet for Plan -> Haiku for Implementation* on a $25/mo Teams Standard plan.
+</Aside>
+
+---
+
+## Effort Levels
+
+The `effort` parameter (Opus 4.6 API) controls the model's **overall computational budget** — not just thinking tokens, but tool calls, verbosity, and analysis depth.
+
+<Tabs>
+  <TabItem label="low">
+    **Mechanical, no design decisions needed**
+
+    > `"Rename getUserById to findUserById across src/"` — Find-replace scope, zero reasoning required.
+  </TabItem>
+  <TabItem label="medium">
+    **Clear pattern, defined scope, one concern**
+
+    > `"Convert fetchUser() in api/users.ts from callbacks to async/await"` — Pattern is known, scope bounded.
+  </TabItem>
+  <TabItem label="high">
+    **Design decisions, edge cases, multiple concerns**
+
+    > `"Redesign error handling in the payment module: add retry logic, partial failure recovery, and idempotency guarantees"` — Architectural choices, not just pattern application.
+  </TabItem>
+  <TabItem label="max">
+    **Cross-system reasoning, irreversible decisions** (Opus 4.6 only)
+
+    > `"Analyze the microservices event pipeline for race conditions across order-service, inventory-service, and notification-service"` — Multi-service hypothesis testing, adversarial thinking.
+  </TabItem>
+</Tabs>
+
+---
+
+## Model per Agent Patterns
+
+Assign models to agents based on **role**, not importance:
+
+<CardGrid>
+  <Card title="Planner">
+    **Model**: Opus
+
+    Strategy and read-only exploration.
+
+    ```yaml
+    name: planner
+    model: opus
+    tools: Read, Grep, Glob
+    ```
+  </Card>
+  <Card title="Implementer">
+    **Model**: Haiku
+
+    Mechanical execution, bounded scope.
+
+    ```yaml
+    name: implementer
+    model: haiku
+    tools: Write, Edit, Bash, Read, Grep, Glob
+    ```
+  </Card>
+  <Card title="Architecture Reviewer">
+    **Model**: Opus
+
+    Critical design review, read-only.
+
+    ```yaml
+    name: architecture-reviewer
+    model: opus
+    tools: Read, Grep, Glob
+    ```
+  </Card>
+</CardGrid>
+
+<Aside type="caution">
+Haiku is for mechanical tasks only. If the implementation requires design decisions or complex business logic, use Sonnet — state this in the task prompt.
+</Aside>
+
+<Aside type="tip">
+Add a model reminder to your CLAUDE.md:
+```
+# Model reminder
+Default: Sonnet. Haiku for mechanical tasks. Opus for architecture and security audits.
+```
+</Aside>
+
+---
+
+## When Thinking Helps vs. Wastes Tokens
+
+| Scenario | Thinking | Reason |
+|----------|----------|--------|
+| Rename 50 files | OFF | Zero reasoning — pure mechanics |
+| Bug spanning 3+ services | ON (high) | Multi-layer hypothesis testing |
+| Boilerplate / test generation | OFF | Repetitive pattern, no decisions |
+| Architecture migration | ON (max) | Irreversible decisions |
+| Direct factual questions | OFF (low) | Immediate answer sufficient |
+| Security code review | ON (high) | Adversarial reasoning needed |
+
+**Toggle**: `Alt+T` (current session) / `/config` (permanent)
+
+---
+
+## Understanding Claude's Mental Model
+
+Understanding how Claude Code "thinks" makes you more effective.
+
+### Claude's View of Your Project
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   YOUR PROJECT                          │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│   ┌─────────────┐    ┌─────────────┐    ┌───────────┐   │
+│   │   Files     │    │   Git       │    │  Config   │   │
+│   │   (.ts,.py) │    │   History   │    │  Files    │   │
+│   └─────────────┘    └─────────────┘    └───────────┘   │
+│          │                  │                  │        │
+│          ▼                  ▼                  ▼        │
+│   ┌─────────────────────────────────────────────────┐   │
+│   │              Claude's Understanding             │   │
+│   │   - File structure & relationships              │   │
+│   │   - Code patterns & conventions                 │   │
+│   │   - Recent changes (from git)                   │   │
+│   │   - Project rules (from CLAUDE.md)              │   │
+│   └─────────────────────────────────────────────────┘   │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### What Claude Knows vs. Doesn't Know
+
+<Tabs>
+  <TabItem label="What Claude Knows">
+    | Capability | Description |
+    |------------|-------------|
+    | **File Structure** | Can navigate and search your files |
+    | **Code Content** | Can read and understand code |
+    | **Git State** | Sees branches, commits, changes |
+    | **Project Rules** | Reads CLAUDE.md for conventions |
+  </TabItem>
+  <TabItem label="What Claude Doesn't Know">
+    | Limitation | Description |
+    |------------|-------------|
+    | **Runtime State** | Can't see running processes |
+    | **External Services** | Can't access your databases directly |
+    | **Your Intent** | Needs clear instructions |
+    | **Hidden Files** | Respects .gitignore by default |
+  </TabItem>
+</Tabs>
+
+<Aside type="caution" title="Pattern Amplification">
+Claude mirrors the patterns it finds. In well-structured codebases, it produces consistent, idiomatic code. In messy codebases without clear abstractions, it perpetuates the mess. If your code lacks good patterns, provide them explicitly in CLAUDE.md.
+</Aside>
+
+---
+
+## You Are the Main Thread
+
+Think of yourself as a CPU scheduler. Claude Code instances are worker threads. You don't write the code — you **orchestrate** the work.
+
+```
+┌─────────────────────────────────────────┐
+│          YOU (Main Thread)              │
+│  ┌────────────────────────────────────┐ │
+│  │  Responsibilities:                 │ │
+│  │  • Define tasks and priorities     │ │
+│  │  • Allocate context budgets        │ │
+│  │  • Review outputs                  │ │
+│  │  • Make architectural decisions    │ │
+│  │  • Handle exceptions/escalations   │ │
+│  └────────────────────────────────────┘ │
+│         │          │          │         │
+│    ┌────▼───┐ ┌────▼───┐ ┌────▼───┐    │
+│    │Worker 1│ │Worker 2│ │Worker 3│    │
+│    │(Claude)│ │(Claude)│ │(Claude)│    │
+│    │Feature │ │Tests   │ │Review  │    │
+│    └────────┘ └────────┘ └────────┘    │
+└─────────────────────────────────────────┘
+```
+
+**Implications**:
+- **Don't write code** when Claude can. Your time is for decisions, not keystrokes.
+- **Don't micromanage**. Give clear instructions, then review results.
+- **Context-switch deliberately**. Like a scheduler, batch similar tasks.
+- **Escalate to yourself**. When Claude is stuck, step in — then hand back.
+
+---
+
+## From Chatbot to Context System
+
+The most common mistake is treating Claude Code like a chatbot — typing ad-hoc requests and hoping for good output. What separates casual usage from production workflows is a **shift in thinking**:
+
+> **Chatbot mode**: You write good prompts. **Context system**: You build structured context that makes every prompt better.
+
+### Four Layers of Persistent Context
+
+Claude Code has four layers of persistent context that compound over time:
+
+| Layer | What It Does | When to Set Up |
+|-------|-------------|----------------|
+| **CLAUDE.md** | Persistent rules, conventions, project knowledge | Week 1 |
+| **Skills** | Reusable knowledge modules for consistent workflows | Week 2 |
+| **Hooks** | Automated guardrails (lint, security, formatting) | Week 2-3 |
+| **Project memory** | Cross-session decisions and architectural context | Ongoing |
+
+These are not independent features. They are layers of the **same system**:
+
+- **CLAUDE.md** teaches Claude *what* your project needs
+- **Skills** teach Claude *how* to perform specific workflows
+- **Hooks** enforce *guardrails* automatically
+- **Memory** preserves *decisions* across sessions
+
+### Before vs. After
+
+<Tabs>
+  <TabItem label="Before (Chatbot Mode)">
+    > "Use pnpm, not npm. And remember our naming convention is..."
+    >
+    > *(Every session. Every time. Copy-pasting context.)*
+  </TabItem>
+  <TabItem label="After (Context System)">
+    > CLAUDE.md loads conventions automatically. Skills ensure consistent workflows. Hooks enforce quality with zero manual effort. Memory carries decisions forward.
+  </TabItem>
+</Tabs>
+
+---
+
+## Communicating Effectively
+
+The gap between a good prompt and a weak prompt is enormous:
+
+<Tabs>
+  <TabItem label="Good Prompt">
+    ```
+    The login function in src/auth/login.ts isn't validating
+    email addresses properly. Plus signs should be allowed
+    but they're being rejected.
+    ```
+  </TabItem>
+  <TabItem label="Weak Prompt">
+    ```
+    Login is broken
+    ```
+  </TabItem>
+</Tabs>
+
+The more context you provide, the better Claude can help.

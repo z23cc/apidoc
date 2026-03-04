@@ -1,0 +1,224 @@
+---
+title: "已知问题"
+description: "影响 Claude Code 用户的已验证关键问题和社区报告"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+本文档追踪基于社区报告和官方通信的、**经验证的关键问题**。仅包含有多方证实或 Anthropic 官方承认的高影响问题。
+
+<Aside type="danger">
+以下问题可能影响安全、隐私或成本。请仔细阅读变通方案并在受影响时采取行动。
+</Aside>
+
+---
+
+## 活跃关键问题
+
+### 1. GitHub Issue 自动创建到错误仓库
+
+| 属性 | 详情 |
+|------|------|
+| **严重程度** | 严重 -- 安全/隐私风险 |
+| **状态** | 活跃（截至 2026 年 1 月 28 日） |
+| **Issue** | [#13797](https://github.com/anthropics/claude-code/issues/13797) |
+| **首次报告** | 2025 年 12 月 12 日 |
+| **受影响版本** | v2.0.65+ |
+
+#### 问题描述
+
+Claude Code **系统性地在公共 `anthropics/claude-code` 仓库中创建 GitHub Issue**，而不是用户的私有仓库。即使在本地 git 仓库目录中工作也会发生。
+
+#### 影响
+
+至少 **17+ 确认案例**中，用户意外暴露了敏感信息：
+
+- 数据库模式
+- API 凭证和配置详情
+- 基础设施架构
+- 私有项目路线图
+- 安全配置
+
+#### 症状
+
+- Issue 带有意外的 `--repo anthropics/claude-code` 标志
+- 私有项目详情出现在公开的 anthropics/claude-code issues 中
+- 在公开仓库创建 issue 前没有确认提示
+
+#### 变通方案
+
+<Steps>
+1. **始终验证目标仓库**：
+   ```bash
+   git remote -v
+   ```
+2. **明确指定仓库**：
+   ```bash
+   gh issue create --repo YOUR_USERNAME/YOUR_REPO --title "..." --body "..."
+   ```
+3. **执行前审查命令**：检查是否有 `--repo anthropics/claude-code` 标志
+4. **在 Claude 设置中对所有 `gh` 命令启用手动审批**
+5. **在 bug 修复前不要在 issue 创建提示中包含敏感信息**
+</Steps>
+
+#### 如果你受到了影响
+
+<Aside type="danger">
+如果你意外创建了暴露敏感信息的 issue：
+1. **立即联系 GitHub Support** 请求删除 issue（不仅是关闭）
+2. **轮换所有暴露的凭证**（API 密钥、密码、Token）
+3. 如涉及安全敏感信息，**向 Anthropic 报告**：security@anthropic.com
+4. **监控暴露信息的使用情况**
+</Aside>
+
+---
+
+### 2. Token 消耗异常
+
+| 属性 | 详情 |
+|------|------|
+| **严重程度** | 高 -- 成本影响 |
+| **状态** | 已报告（Anthropic 调查中） |
+| **Issue** | [#16856](https://github.com/anthropics/claude-code/issues/16856) |
+| **首次报告** | 2026 年 1 月 8 日 |
+| **受影响版本** | v2.1.1+（已报告） |
+
+#### 问题描述
+
+多名用户报告 Token 消耗速度比以前版本**快 4 倍以上**：
+- 速率限制触发得比正常快得多
+- 相同工作流消耗明显更多 Token
+- 意外的成本增加
+
+#### 背景
+
+**节日用量奖励过期**：2025 年 12 月 25-31 日，Anthropic 将使用限额翻倍作为节日礼物。1 月 1 日恢复正常后，用户感觉"容量减少"。
+
+但是，**报告持续超过这个时间点**，表明可能存在底层问题。
+
+#### Anthropic 回应
+
+> "Anthropic 表示'对所有此类报告认真对待，但未发现与 Token 使用相关的缺陷'，并表示已排除推理堆栈中的 bug。"
+
+**状态**：截至 2026 年 1 月 28 日，Anthropic **未正式确认为 bug**。
+
+#### 变通方案
+
+<Steps>
+1. **主动监控 Token 使用**：
+   ```
+   /context
+   ```
+2. **使用较短的会话**：上下文接近 50-60% 时重启会话
+3. **禁用自动压缩**（可能有帮助）：
+   ```bash
+   claude config set autoCompaction false
+   ```
+4. **减少 MCP 工具**：审查 `~/.claude.json` 中的 `"mcpServers"`，禁用未使用的服务器
+5. **使用子代理**进行隔离任务：子代理有独立的上下文窗口
+6. **追踪使用模式**：比较版本升级前后，记录异常峰值
+</Steps>
+
+#### 调查提示
+
+如果遇到异常消耗：
+
+| 步骤 | 操作 |
+|------|------|
+| 记录版本 | `claude --version` |
+| 比较版本 | 如果可能，用早期稳定版本测试 |
+| 记录模式 | 哪些操作触发了高使用量？ |
+| 带数据报告 | 在 issue 报告中包含版本、操作类型、Token 计数 |
+
+---
+
+## 已解决的历史问题
+
+### 模型质量下降（2025 年 8-9 月）
+
+| 属性 | 详情 |
+|------|------|
+| **严重程度** | 严重 |
+| **状态** | 已解决（2025 年 9 月中旬） |
+| **时间线** | 2025 年 8 月 25 日 -- 9 月初 |
+
+#### 问题
+
+用户报告 Claude Code 产生更差的输出：语法错误、意外字符插入（英文响应中出现泰文/中文）、基本任务失败。
+
+#### 根因
+
+Anthropic 确认了**三个基础设施 bug**（非模型退化）：
+
+<CardGrid>
+  <Card title="流量误路由" icon="warning">
+    约 30% 的 Claude Code 请求被路由到错误的服务器类型，导致响应质量下降。
+  </Card>
+  <Card title="输出损坏" icon="warning">
+    8 月 25 日部署的错误配置导致 Token 生成错误。
+  </Card>
+  <Card title="XLA:TPU 编译错误" icon="warning">
+    性能优化触发了潜在的编译器 bug，影响 Token 选择。
+  </Card>
+</CardGrid>
+
+#### Anthropic 回应
+
+**官方事后分析**：[近期三个问题的事后分析](https://www.anthropic.com/engineering/a-postmortem-of-three-recent-issues)
+
+> "我们从不因需求、时间或服务器负载而降低模型质量。用户报告的问题完全是由基础设施 bug 引起的。"
+
+所有 bug 在 2025 年 9 月中旬修复。
+
+---
+
+## Issue 统计（截至 2026 年 1 月 28 日）
+
+| 指标 | 数量 | 来源 |
+|------|------|------|
+| **Open issues** | 5,702 | GitHub API |
+| **标记为 "invalid" 的 Issues** | 527 | GitHub Issues 搜索 |
+| **"错误仓库" Issues（已确认）** | 17+ | 2026 年 1 月手动搜索 |
+| **Token 消耗报告（12-1 月）** | 20+ | Issue 搜索 |
+
+---
+
+## 如何追踪 Issues
+
+### 检查活跃的关键问题
+
+```bash
+# 反应最多的 issues（社区优先级）
+gh issue list --repo anthropics/claude-code --state open --sort reactions-+1 --limit 20
+
+# 最近的关键 bug
+gh search issues --repo anthropics/claude-code "bug" "critical" --sort created --order desc --limit 10
+```
+
+### 监控特定主题
+
+- **Token 消耗**：[搜索](https://github.com/anthropics/claude-code/issues?q=is%3Aissue+excessive+token)
+- **错误仓库创建**：[搜索](https://github.com/anthropics/claude-code/issues?q=is%3Aissue+%22wrong+repo%22)
+- **模型质量**：[搜索](https://github.com/anthropics/claude-code/issues?q=is%3Aissue+quality+degradation)
+
+### 官方渠道
+
+| 渠道 | 链接 |
+|------|------|
+| **GitHub Issues** | https://github.com/anthropics/claude-code/issues |
+| **Anthropic 状态页** | https://status.anthropic.com/ |
+| **工程博客** | https://www.anthropic.com/engineering |
+
+---
+
+## 纳入标准
+
+本文档仅追踪**经验证的高影响问题**：
+
+- **已验证**：在 GitHub 中有多方报告或 Anthropic 官方承认
+- **高影响**：影响安全、隐私、成本或核心功能
+- **可操作**：有变通方案或官方回应
+
+<Aside>
+免责声明：本文档由社区维护，与 Anthropic 无关。信息按原样提供。做决策前请通过官方渠道验证当前状态。
+</Aside>

@@ -173,9 +173,21 @@ npm uninstall -g @anthropic-ai/claude-code  # 卸载
 
 ## 第三步：配置环境变量
 
-获取你的认证信息：
-- **API 地址**（`ANTHROPIC_BASE_URL`）：你的 API 服务地址
-- **Auth Token**（`ANTHROPIC_AUTH_TOKEN`）：你的认证密钥
+你需要从中转站获取以下认证信息：
+
+- **API 地址**（`ANTHROPIC_BASE_URL`）：中转站的 API 服务地址
+- **Auth Token**（`ANTHROPIC_AUTH_TOKEN`）：在中转站 **cc 分组**中创建的 Key
+
+<Steps>
+1. 登录你的中转站后台
+2. 进入 **令牌 / API Key** 管理页面
+3. 点击 **创建令牌**，分组选择 **cc**（Claude Code 专用分组）
+4. 复制生成的 Key，即为 `ANTHROPIC_AUTH_TOKEN` 的值
+</Steps>
+
+<Aside type="caution">
+请确保选择 **cc 分组**创建 Key，其他分组的 Key 可能无法正常使用 Claude Code。
+</Aside>
 
 ### 临时配置（当前会话有效）
 

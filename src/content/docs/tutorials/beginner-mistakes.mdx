@@ -1,0 +1,190 @@
+---
+title: "新手常见错误"
+description: "Claude Code 新手最常犯的八个错误以及如何避免它们"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+刚开始使用 Claude Code 的开发者经常会犯一些常见错误，导致效率低下甚至产生问题。本教程列举了八个最典型的新手错误，并给出具体的解决方法。
+
+---
+
+## 八个新手错误
+
+<CardGrid>
+  <Card title="跳过计划" icon="warning">
+    直接让 Claude 干活，不提供背景信息。
+  </Card>
+  <Card title="忽略上下文限制" icon="warning">
+    一直用到上下文快满了才发现问题。
+  </Card>
+  <Card title="使用模糊提示" icon="warning">
+    "让这段代码更好"之类的指令太笼统。
+  </Card>
+  <Card title="盲目接受更改" icon="warning">
+    不看 diff 就按"y"确认。
+  </Card>
+</CardGrid>
+
+---
+
+### 1. 跳过计划
+
+**错误做法：** 直接跳到"修这个 bug"，不解释上下文。
+
+**正确做法：** 使用 WHAT/WHERE/HOW/VERIFY 格式：
+
+```
+WHAT: 修复登录超时错误
+WHERE: src/auth/session.ts
+HOW: 将 token 过期时间从 1 小时改为 24 小时
+VERIFY: 刷新浏览器后登录状态持续存在
+```
+
+<Aside type="tip">
+结构化的提示不仅帮助 Claude 更好地理解任务，也帮助你自己理清思路。
+</Aside>
+
+---
+
+### 2. 忽略上下文限制
+
+**错误做法：** 一直工作到上下文使用率达到 95%，此时响应质量已明显下降。
+
+**正确做法：** 关注状态栏中的 `Ctx(u):` 指标。在 70% 时使用 `/compact` 压缩上下文，在 90% 时使用 `/clear` 清空重新开始。
+
+<Aside type="caution">
+上下文窗口满了之后，Claude 的响应质量会显著下降。养成定期检查上下文使用情况的习惯。
+</Aside>
+
+---
+
+### 3. 使用模糊提示
+
+**错误做法：** "让这段代码更好" 或 "检查有没有 bug"
+
+**正确做法：** 具体明确："重构 `calculateTotal()` 使其能处理价格为 null 的情况而不抛出异常"
+
+<Tabs>
+  <TabItem label="差的提示">
+    ```
+    让这个函数更好
+    检查有没有问题
+    优化这段代码
+    ```
+  </TabItem>
+  <TabItem label="好的提示">
+    ```
+    重构 calculateTotal() 使其能处理价格为 null 的情况而不抛出异常
+    检查 userAuth 模块中是否有 SQL 注入漏洞
+    将 processOrders() 的时间复杂度从 O(n²) 优化到 O(n log n)
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+### 4. 盲目接受更改
+
+**错误做法：** 不看 diff 就按"y"确认。
+
+**正确做法：** 始终审查 diff。用"n"拒绝不合适的更改，然后解释哪里有问题。
+
+<Aside type="caution">
+即使是经验丰富的用户也应该审查每一个 diff。AI 生成的代码可能看起来正确但存在微妙的逻辑错误。
+</Aside>
+
+---
+
+### 5. 没有版本控制安全网
+
+**错误做法：** 在没有提交的情况下进行大规模更改。
+
+**正确做法：** 在大改动前先提交。使用功能分支。Claude 可以帮忙：`/commit`
+
+<Steps>
+
+1. 在开始大改动前先 `git commit`
+
+2. 使用功能分支而非直接在 main 上操作
+
+3. 让 Claude 帮你管理提交：使用 `/commit` 命令
+
+</Steps>
+
+---
+
+### 6. 过于宽泛的权限
+
+**错误做法：** 设置 `Bash(*)` 或使用 `--dangerously-skip-permissions`
+
+**正确做法：** 从严格开始，根据需要逐步放宽。使用允许列表：
+
+```
+Bash(npm test)
+Bash(git *)
+```
+
+<Aside type="danger">
+过于宽泛的权限可能导致意外的系统修改。始终使用最小权限原则。
+</Aside>
+
+---
+
+### 7. 混合不相关的任务
+
+**错误做法：** "修复认证 bug，同时重构数据库，再加上新测试"
+
+**正确做法：** 每次会话专注一个任务。不同任务之间使用 `/clear` 清空上下文。
+
+<Aside type="tip">
+一次只做一件事不仅让 Claude 的输出更精确，也让你更容易审查和回退更改。
+</Aside>
+
+---
+
+### 8. 把 Claude Code 当聊天机器人
+
+**错误做法：** 每次会话都手动输入临时指令。重复解释项目规范、架构和质量标准。
+
+**正确做法：** 构建随时间积累的结构化上下文：
+
+<CardGrid>
+  <Card title="CLAUDE.md" icon="document">
+    你的规范、技术栈和模式——每次会话自动加载。
+  </Card>
+  <Card title="Skills" icon="puzzle">
+    可复用的工作流（`/review`、`/deploy`），确保一致的执行。
+  </Card>
+  <Card title="Hooks" icon="setting">
+    自动化的防护栏（代码检查、安全扫描、格式化）——零手动操作。
+  </Card>
+</CardGrid>
+
+<Aside type="tip">
+第一周就创建 CLAUDE.md。从简单开始，随着使用经验的积累不断完善。
+</Aside>
+
+---
+
+## 会话前自查清单
+
+每次开始新会话前，确认以下几项：
+
+<Steps>
+
+1. 我有一个清晰、具体的目标
+
+2. 我的项目有 CLAUDE.md 文件
+
+3. 我在功能分支上（而非 main）
+
+4. 我知道当前的上下文使用情况（`/status`）
+
+5. 我会在接受前审查每一个 diff
+
+</Steps>
+
+<Aside type="note">
+养成这些习惯会让你的 Claude Code 体验从"试试看"变成"得心应手"。大多数效率问题都可以通过以上五点来避免。
+</Aside>

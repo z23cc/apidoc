@@ -1,0 +1,275 @@
+---
+title: "Agent Teams Quick Start"
+description: "5-minute setup guide with copy-paste patterns for agent teams"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## What Is This?
+
+You know agent teams exist. You've read the theory. But **when should you actually use them in your projects?**
+
+This guide gives you:
+
+<CardGrid>
+  <Card title="5-Minute Setup" icon="rocket">
+    From environment config to first test
+  </Card>
+  <Card title="4 Copy-Paste Patterns" icon="puzzle">
+    Battle-tested patterns for real projects
+  </Card>
+  <Card title="Decision Matrix" icon="list-format">
+    When to use, when to skip
+  </Card>
+  <Card title="ROI Metrics" icon="document">
+    How to measure effectiveness
+  </Card>
+</CardGrid>
+
+---
+
+## 5-Minute Setup
+
+<Steps>
+
+1. **Prerequisites Check**
+
+   ```bash
+   # Check Claude Code version (v2.1.32+ required)
+   claude --version
+
+   # Check model availability
+   claude
+   > /model opus
+   # Should show: "Model changed to opus (claude-opus-4-6-20250624)"
+   ```
+
+   **Minimum requirements**: Claude Code v2.1.32+, Opus 4.6 model, Git repository
+
+2. **Enable Feature**
+
+   ```bash
+   # Set environment variable (add to ~/.bashrc or ~/.zshrc for persistence)
+   export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+
+   # Launch Claude Code
+   claude
+   ```
+
+3. **Verification**
+
+   ```
+   > Are agent teams enabled?
+   ```
+
+   Expected response should confirm agent teams are enabled, including multi-agent coordination, git-based task claiming, and autonomous team coordination.
+
+   If disabled, check the environment variable: `echo $CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`
+
+4. **First Test (2 agents)**
+
+   ```
+   > Create a simple test team to analyze this README:
+   > - Agent 1: Check structure (sections, TOC, badges)
+   > - Agent 2: Check content quality (clarity, examples, completeness)
+   ```
+
+   **What happens**:
+   - Claude spawns 2 agents (you'll see "Creating team..." message)
+   - Agents work in parallel (you may see "Idle" messages -- this is normal)
+   - Claude presents consolidated findings
+
+   **Navigation**: `Shift+Down` to cycle through teammate outputs in-process mode.
+
+   **Duration**: 1-2 min for a simple 2-agent task.
+
+</Steps>
+
+---
+
+## 4 Ready-to-Use Patterns
+
+### Pattern 1: Pre-Release Review
+
+**Use case**: Systematic audit before version bump to catch consistency issues (broken links, desync counts, wrong versions).
+
+**Team composition**:
+
+```
+Team: pre-release-audit (3 agents)
+|- accuracy-auditor -> Verify claims, stats, versions, external links
+|- consistency-checker -> Check template count, eval count, guide lines match
+|_ breaking-checker -> Identify breaking changes vs last release
+```
+
+**Copy-paste prompt**:
+
+```
+> Create a pre-release audit team:
+> - Accuracy: Check all claims, stats, version numbers,
+>   external links in CHANGELOG.md, README.md
+> - Consistency: Verify template count, eval count,
+>   guide lines match across all files
+> - Breaking: Identify breaking changes vs last release
+```
+
+**ROI**: Catches URL corruption, file count desyncs, wrong version numbers across files.
+
+**When to skip**: Simple typo fixes (no version/count/link changes).
+
+---
+
+### Pattern 2: Multi-File Doc Update
+
+**Use case**: Add new feature documentation across multiple files with cross-reference consistency.
+
+**Team composition**:
+
+```
+Team: doc-update (3 agents)
+|- content-writer -> Write main section with examples
+|- index-updater -> Update TOC, index entries, navigation
+|_ consistency-checker -> Verify cross-references, line numbers, anchors
+```
+
+**Copy-paste prompt**:
+
+```
+> Update documentation for new "[FEATURE NAME]" feature:
+> - Content: Write main section with overview, examples,
+>   best practices + gotchas
+> - Index: Update TOC, reference entries, README navigation
+> - Consistency: Verify all cross-references, line numbers,
+>   no broken internal links
+```
+
+**ROI**: Zero broken links, 60% faster than sequential approach.
+
+---
+
+### Pattern 3: Security PR Review
+
+**Use case**: Review external contributor PR for security issues, code style, and performance.
+
+**Team composition**:
+
+```
+Team: security-pr-review (3 agents)
+|- code-expert -> Check patterns, error handling, idiomatic code
+|- security-auditor -> Scan for injection risks, token leaks, input sanitization
+|_ perf-analyzer -> Review allocations, async patterns, algorithm complexity
+```
+
+**Copy-paste prompt**:
+
+```
+> Review PR #[NUMBER] with scope-focused analysis:
+> - Code: Check patterns, error handling, idiomatic code
+> - Security: Scan for injection risks, token leaks,
+>   input sanitization
+> - Performance: Review allocations, async patterns,
+>   algorithm complexity
+```
+
+---
+
+### Pattern 4: Sync Validation
+
+**Use case**: Verify synchronization between multiple data sources (versions, counts, content).
+
+**Team composition**:
+
+```
+Team: sync-check (2 agents)
+|- source-scanner -> Extract version, counts, and data from source
+|_ target-scanner -> Compare with target, check sync status
+```
+
+---
+
+## Decision Matrix
+
+| Situation | Agent Teams? | Reason |
+|-----------|-------------|--------|
+| **Pre-release review** | Yes | Multi-layer audit requires parallel perspectives |
+| **Simple typo fix** | No | Overkill, 1 agent = 10 sec, 3 agents = cost bloat |
+| **External PR review** | Yes | Security + Code + Perf = blind spots detection |
+| **Multi-file doc update** | Yes | Content + Index + Consistency = zero broken links |
+| **CHANGELOG update** | No | Sequential task, no parallelization benefit |
+| **Single file edit** | No | No coordination needed |
+| **Small README tweak** | No | No cross-references, no complexity |
+| **Architecture design** | Yes | Multiple perspectives (frontend, backend, infra, security) |
+| **Bug investigation** | Maybe | Simple bugs no, complex multi-component failures yes |
+
+### Rule of Thumb
+
+<Tabs>
+  <TabItem label="Use Agent Teams When">
+    - You'd naturally think "I should check X, Y, and Z"
+    - High stakes (production release, external contributor, security-sensitive)
+    - Multi-scope analysis needed
+    - Cross-file consistency matters
+    - Parallel work possible (independent tasks, no sequential dependency)
+  </TabItem>
+  <TabItem label="Don't Use When">
+    - Simple task (&lt;5 files, &lt;100 lines, 1 domain)
+    - Sequential workflow (step B depends on step A result)
+    - Budget tight (3x tokens, reserve for high-value tasks)
+    - Write-heavy (many edits to same files = merge conflicts)
+  </TabItem>
+</Tabs>
+
+---
+
+## Success Metrics
+
+| Metric | Target | How to Measure |
+|--------|--------|----------------|
+| **Convergence rate** | &gt;50% | Findings flagged by 2+ agents / total findings |
+| **Unique insights** | Each agent &ge;1 | Each agent must find at least 1 unique issue in their domain |
+| **False positive rate** | &lt;20% | Invalid findings / total findings |
+| **Time saving** | 60-70% | Agent teams time vs sequential estimate |
+| **Bug catch rate** | &gt;80% | Critical bugs found by agents / total bugs found post-ship |
+
+<Aside type="tip" title="Adjusting Prompts">
+- Low convergence (&lt;30%) -- Scopes too narrow, overlap context boundaries more
+- No unique insights -- Scopes too similar, diversify analysis angles
+- High false positives (&gt;20%) -- Prompts too vague, add concrete criteria
+</Aside>
+
+---
+
+## Limitations & Red Flags
+
+| Limitation | What It Means | Mitigation |
+|------------|---------------|-----------|
+| **3x tokens** | Each agent = separate model call | Reserve for high-stakes tasks |
+| **Idle spam** | Normal coordination behavior | Ignore the spam |
+| **Experimental** | Research preview = stability not guaranteed | Expect bugs |
+| **Coordination overhead** | 3-5 agents max | Stick to 2-4 agents |
+| **Context isolation** | Agents don't see each other's discoveries | Claude synthesizes findings |
+
+---
+
+## Quick Reference
+
+### Setup (5 min once)
+
+```bash
+export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+claude
+> Are agent teams enabled?  # Verify
+```
+
+### When to Use (decision rule)
+
+**YES if**: High stakes + Multi-domain + Parallel-friendly
+
+**NO if**: Simple task + Sequential + Budget tight
+
+### Next Steps
+
+1. Try first test (5 min setup + simple 2-agent task)
+2. Pick 1 pattern from your project
+3. Measure metrics (convergence, unique insights, time saved)
+4. Adjust prompts based on results

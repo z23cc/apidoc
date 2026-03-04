@@ -1,0 +1,365 @@
+---
+title: "Troubleshooting"
+description: "Complete guide for diagnosing and resolving common Claude Code issues"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## Quick Diagnostic Guide
+
+Use this symptom-based guide for rapid issue identification and resolution:
+
+| Symptom | Likely Cause | Quick Fix | Prevention |
+|---------|--------------|-----------|------------|
+| "Context too long" error | Session accumulated too much context | `/compact` first, then `/clear` if needed | Compact regularly at 70% |
+| Slow/delayed responses | High context usage (&gt;75%) | Check `/status`, run `/compact` | Monitor context with `/status` |
+| "Rate limit exceeded" | API throttling from frequent requests | Wait 2 minutes, use `--model haiku` for simple tasks | Batch operations, use `/compact` |
+| Claude forgets instructions | Context overflow, CLAUDE.md lost | Create checkpoint, `/clear`, reload CLAUDE.md | Keep CLAUDE.md concise (&lt;500 lines) |
+| MCP server not connecting | Server crashed or config error | `claude mcp list`, check paths, restart server | Test servers after config changes |
+| Permission prompts every time | Tool not in `allowedTools` | Add pattern to `settings.json` allowedTools | Use wildcards: `Bash(git *)` |
+| Changes not taking effect | Cached configuration | Restart Claude Code session | Use `/exit` before config changes |
+| Session won't resume | Corrupted session file | Start fresh with `/clear` | Exit cleanly with `/exit` or `Ctrl+D` |
+
+---
+
+## Quick Diagnosis Flow
+
+<Steps>
+
+1. **Check context**
+
+   `/status` -- If &gt;70%, run `/compact`
+
+2. **Check connectivity**
+
+   Try a simple command -- If it fails, check network
+
+3. **Check configuration**
+
+   `claude mcp list` -- Verify MCP servers
+
+4. **Check permissions**
+
+   Review error message -- Add to allowedTools if needed
+
+5. **Still failing?**
+
+   `/doctor` -- Run diagnostics and verify system health
+
+</Steps>
+
+---
+
+## Common Issues Reference
+
+| Symptom | Cause | Solution |
+|---------|-------|----------|
+| "Context too long" | Used 100% context | `/clear` or `/compact` |
+| Slow responses | High context usage | `/compact` |
+| "Permission denied" | Security settings | Check `settings.local.json` |
+| Hook not running | Registration error | Check `settings.json` matcher |
+| MCP tool not found | Server not running | Check `mcp.json` config |
+| Agent not found | File naming | Check `.claude/agents/` |
+| Command not found | Path error | Check `.claude/commands/` |
+
+---
+
+## Context Recovery
+
+| Context Level | Recommended Action |
+|---------------|-------------------|
+| 0-50% | Continue normally |
+| 50-75% | Be more specific in queries |
+| 75-90% | Use `/compact` |
+| 90%+ | Use `/clear` |
+
+---
+
+## Common Errors
+
+<Tabs>
+  <TabItem label="Tool Execution Failed">
+    **"Tool execution failed"**
+
+    - Check tool permissions in `settings.local.json`
+    - Verify command syntax
+    - Check for missing dependencies
+  </TabItem>
+  <TabItem label="Agent Not Available">
+    **"Agent not available"**
+
+    - Verify agent file exists in `.claude/agents/`
+    - Check YAML frontmatter syntax
+    - Restart Claude Code session
+  </TabItem>
+  <TabItem label="Hook Blocked Operation">
+    **"Hook blocked operation"**
+
+    - Check hook exit code (2 = blocked)
+    - Review hook error message
+    - Adjust hook rules if needed
+  </TabItem>
+</Tabs>
+
+---
+
+## MCP Server Issues
+
+### Error 1: Tool Name Validation Failed
+
+```
+API Error 400: "tools.11.custom.name: String should match pattern '^[a-zA-Z0-9_-]{1,64}'"
+```
+
+**Cause**: MCP server name contains invalid characters.
+
+**Solution**: Server names must only contain letters, numbers, underscores, hyphens. Maximum 64 characters.
+
+```bash
+# Wrong
+claude mcp add my-server@v1 -- npx server
+
+# Correct
+claude mcp add my-server-v1 -- npx server
+```
+
+### Error 2: MCP Server Not Found
+
+```
+MCP server 'my-server' not found
+```
+
+**Cause**: Server not properly registered or wrong scope.
+
+```bash
+# 1. Check scope settings
+claude mcp list  # Verify server is listed
+
+# 2. Ensure you're in the correct directory for local scope
+# 3. Restart Claude Code session
+# 4. Re-add server if needed
+claude mcp add my-server -s user -- npx @my/server
+```
+
+### Error 3: Windows Path Issues
+
+```
+Error: Cannot find module 'C:UsersusernameDocuments'
+```
+
+**Cause**: Backslashes in Windows paths not properly escaped.
+
+```bash
+# Wrong
+claude mcp add fs -- npx -y @modelcontextprotocol/server-filesystem C:\Users\username\Documents
+
+# Correct - Use forward slashes
+claude mcp add fs -- npx -y @modelcontextprotocol/server-filesystem C:/Users/username/Documents
+
+# Correct - Escape backslashes
+claude mcp add fs -- npx -y @modelcontextprotocol/server-filesystem "C:\\Users\\username\\Documents"
+```
+
+---
+
+## MCP Debugging Techniques
+
+<Tabs>
+  <TabItem label="Enable Debug">
+    ```bash
+    # Debug all MCP connections
+    claude --mcp-debug
+
+    # View MCP status inside Claude Code
+    /mcp
+    ```
+  </TabItem>
+  <TabItem label="View Logs">
+    ```bash
+    # macOS
+    tail -f ~/Library/Logs/Claude/mcp*.log
+
+    # Linux
+    tail -f ~/.local/share/claude/logs/mcp*.log
+
+    # Windows (PowerShell)
+    Get-Content "$env:APPDATA\Claude\logs\mcp*.log" -Wait -Tail 50
+    ```
+  </TabItem>
+  <TabItem label="Manual Test">
+    ```bash
+    # Test if server works standalone
+    npx -y @modelcontextprotocol/server-filesystem ~/Documents
+    # Expected: Server starts and outputs JSON-RPC messages
+
+    # Quick diagnostic commands
+    claude mcp list
+    claude --mcp-debug -p "List available tools"
+
+    # Remove and re-add server
+    claude mcp remove my-server
+    claude mcp add my-server -s user -- npx @my/server
+    ```
+  </TabItem>
+</Tabs>
+
+### Connection Failed: Common Causes
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `ECONNREFUSED` | Server not running | Check `mcp.json` command is correct |
+| `Timeout after 30s` | Slow initialization | Increase timeout or check server logs |
+| `Module not found` | Missing dependencies | Run `npm install` in server directory |
+| `Permission denied` | File access | Check file permissions on server executable |
+| `ENOENT` | Server binary not found | Verify npx/npm is in PATH |
+| `Invalid JSON` | Server output malformed | Check server version compatibility |
+
+---
+
+## Permission Issues
+
+**Pattern matching problems:**
+
+```json
+// Wrong - too specific
+{
+  "allowedTools": ["Bash(npm test)"]
+}
+// This ONLY allows exactly "npm test"
+
+// Right - use wildcards
+{
+  "allowedTools": ["Bash(npm *)"]
+}
+// This allows any npm command
+```
+
+**Common permission patterns:**
+
+```json
+{
+  "allowedTools": [
+    "Bash(git *)",
+    "Bash(npm *)",
+    "Bash(pytest *)",
+    "Edit",
+    "Write",
+    "Read",
+    "mcp__serena__*",
+    "mcp__context7__*",
+    "Task"
+  ]
+}
+```
+
+---
+
+## Timeout Issues
+
+**Claude stops responding mid-task:**
+
+Possible causes:
+
+1. **Network interruption** -- Check your internet connection
+2. **API rate limit** -- Wait 1-2 minutes and retry
+3. **Context exhausted** -- Use `/compact` or `/clear`
+4. **Long-running operation** -- Some MCP operations take 30s+
+
+<Aside type="tip" title="Workaround for Long Operations">
+Instead of asking Claude to analyze all 500 files at once, break into chunks:
+
+```
+"Analyze files in /src/components/ first"
+"Now analyze /src/utils/"
+"Finally analyze /src/services/"
+```
+</Aside>
+
+---
+
+## Installation Issues
+
+<Tabs>
+  <TabItem label="Windows">
+    ```powershell
+    # npm global install fails
+    # Run PowerShell as Administrator
+    npm install -g @anthropic-ai/claude-code
+
+    # PATH not updated
+    # Manually add to PATH:
+    $env:Path += ";$env:APPDATA\npm"
+
+    # Permission errors
+    # Check antivirus isn't blocking Node.js
+    ```
+  </TabItem>
+  <TabItem label="macOS">
+    ```bash
+    # "Command not found" after install
+    # Check shell config loaded:
+    source ~/.zshrc  # or ~/.bashrc
+
+    # Permission denied on /usr/local
+    # Don't use sudo with npm
+    # Fix permissions:
+    sudo chown -R $(whoami) /usr/local
+
+    # curl install blocked
+    # Check firewall/VPN settings
+    ```
+  </TabItem>
+  <TabItem label="Linux">
+    ```bash
+    # npm not found
+    # Install Node.js first:
+    curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+    sudo apt-get install -y nodejs
+
+    # Global install permission issues
+    # Configure npm to use home directory:
+    mkdir ~/.npm-global
+    npm config set prefix '~/.npm-global'
+    echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc
+    source ~/.bashrc
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## Health Checks & Clean Reinstall
+
+<CardGrid>
+  <Card title="One-Shot Health Check" icon="approve-check-circle">
+    Diagnostic scripts for instant troubleshooting. Available for Windows (PowerShell), macOS/Linux (Bash).
+  </Card>
+  <Card title="Full Clean Reinstall" icon="warning">
+    Nuclear option for corrupted installations. Use when all else fails.
+  </Card>
+</CardGrid>
+
+### When to Use Clean Reinstall
+
+- Mysterious errors that persist after normal troubleshooting
+- Corrupted configuration files
+- Breaking changes after Claude Code updates
+- Migration to a new machine (export/import workflow)
+
+### What Gets Deleted
+
+| Item | Status |
+|------|--------|
+| Claude Code binary and npm packages | Deleted |
+| Downloaded models and cache | Deleted |
+| Local session data | Deleted |
+| Config file | Optional (backed up by default) |
+
+### What Survives
+
+| Item | Status |
+|------|--------|
+| Project-level `.claude/` folders | Preserved |
+| Project `CLAUDE.md` files | Preserved |
+| Custom agents, skills, commands, hooks | Preserved |
+| MCP server configurations (in `mcp.json`) | Preserved |

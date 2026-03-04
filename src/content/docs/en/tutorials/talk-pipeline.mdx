@@ -1,0 +1,299 @@
+---
+title: "Talk Preparation Pipeline"
+description: "A 6-stage skill pipeline that transforms raw material into a conference talk with AI-generated slides"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## Overview
+
+Transform a raw article, transcript, or notes into a complete conference talk -- including a Kimi-ready prompt for AI-generated slides. Six stages, two modes, one human-in-the-loop checkpoint.
+
+<CardGrid>
+  <Card title="Six-Stage Pipeline" icon="list-format">
+    Full coverage from extraction to revision for talk preparation.
+  </Card>
+  <Card title="Two Modes" icon="setting">
+    REX (experience retro with git history and metrics) and Concept (idea/thesis-based).
+  </Card>
+  <Card title="AI-to-AI Handoff" icon="rocket">
+    Claude generates narrative structure, Kimi generates visual slides.
+  </Card>
+  <Card title="Human Review" icon="approve-check-circle">
+    Critical decisions must be yours, ensuring the talk goes in the right direction.
+  </Card>
+</CardGrid>
+
+---
+
+## Pipeline Overview
+
+```
+Source Material (article / transcript / notes)
+        |
+        v
+[Stage 1] EXTRACT ─────────────── {slug}-summary.md
+        |
+        |──────────────────────────────────┐
+        |                                  |
+        v (REX only)                       v
+[Stage 2] RESEARCH                [Stage 3] CONCEPTS
+  git-archaeology.md               concepts.md
+  changelog-analysis.md            concepts-enriched.md
+  timeline.md                          |
+        |                              |
+        |──────────────┬───────────────┘
+                       |
+                       v
+              [Stage 4] POSITION
+                angles.md
+                titre.md
+                descriptions.md
+                feedback-draft.md
+                       |
+                  [CHECKPOINT]
+             User selects angle + title
+                       |
+                       v
+              [Stage 5] SCRIPT
+                pitch.md
+                slides.md
+                kimi-prompt.md --> Copy-paste into Kimi.com
+                       |
+                       v
+             [Stage 6] REVISION
+              revision-sheets.md
+```
+
+---
+
+## When to Use
+
+This pipeline fits when you have a talk to prepare and either:
+
+<Tabs>
+  <TabItem label="REX Mode">
+    You built something, shipped it, have real metrics -- and want to turn that into a structured conference talk.
+
+    **Additionally requires**: Access to the git repository you want to analyze
+  </TabItem>
+  <TabItem label="Concept Mode">
+    You have an article, notes, or ideas you want to turn into a structured presentation.
+
+    **Automatically skips** Stage 2 (Research)
+  </TabItem>
+</Tabs>
+
+**Suitable formats**:
+- Conference talks (20-45 min)
+- Meetup presentations (15-30 min)
+- Internal tech talks
+- Workshop openings
+
+**Not suited for**: Slide-deck updates for recurring meetings, short lightning talks under 10 min, or situations where you have no existing material.
+
+---
+
+## Prerequisites
+
+| Category | Requirement |
+|----------|-------------|
+| **Required** | Claude Code with skills installed |
+| **Required** | Source material: `.mdx` article, `.md` transcript, notes, or mix |
+| **Required** | Talk metadata: slug, event name, date, duration, audience description |
+| **REX mode** | Access to the git repository you want to analyze |
+| **Slide generation** | Free account at [kimi.com](https://kimi.com) (no API needed -- just copy-paste) |
+| **Recommended** | `talks/` directory in your project root for output files |
+
+---
+
+## Stage-by-Stage Guide
+
+### Stage 1: Extract
+
+Reads the source material and produces a structured summary -- narrative arc, key metrics, main themes, gaps.
+
+**Invocation**:
+```
+/talk-stage1-extract
+```
+
+Or via the orchestrator:
+```
+/talk-pipeline --stage=extract --slug=my-talk --event="Conf 2026" --date=2026-06-15 --duration=30 --audience="senior devs"
+```
+
+<Aside type="tip" title="Review Before Moving On">
+- Narrative arc is coherent (not generic: "this talk is about AI...")
+- All metrics have an explicit source
+- Gaps are listed (even if it's "no major gaps")
+- Type detection is correct (REX / Concept / Hybrid)
+</Aside>
+
+---
+
+### Stage 2: Research (REX Mode Only)
+
+Git archaeology -- extracts velocity metrics, cross-references CHANGELOG, builds a factual timeline verified by git (not estimated).
+
+**Git commands used** (read-only):
+```bash
+git log --pretty=format:"%Y-%m" | sort | uniq -c   # velocity by month
+git shortlog -sn --no-merges                         # contributors
+git tag --sort=version:refname                       # releases
+git log --merges --oneline | wc -l                   # PRs merged
+```
+
+<Aside type="caution">
+Read-only git commands only -- never modifies the repository. Dates not found in git are marked "unverified" -- never estimated.
+</Aside>
+
+---
+
+### Stage 3: Concepts
+
+Builds a numbered, scored catalogue of all concepts. Each concept gets a talk-potential score.
+
+**Score criteria**:
+
+| Level | Criteria |
+|-------|----------|
+| **HIGH** | Demonstrable, counter-intuitive, has verified numbers, actionable in 30 seconds |
+| **MEDIUM** | Useful but expected, missing proof or numbers |
+| **LOW** | Too abstract, over-covered, hard to illustrate in a slide |
+
+**Scoring discipline**: Maximum 30% HIGH -- being selective is the point.
+
+---
+
+### Stage 4: Position + CHECKPOINT
+
+Generates strategic angles, titles, descriptions, and a peer-feedback draft. Then **stops and waits** for your angle + title choice.
+
+**What gets generated**:
+- **3-4 angles**: each with strengths, weaknesses, audience fit, verdict (scored /5)
+- **Recommendation**: one clear choice with structured justification
+- **3-5 titles** per angle
+- **Short description** (~100 words abstract) + **long description** (~250 words CFP)
+- **Feedback draft**: ready-to-send message for peer validation
+
+<Aside type="caution" title="Mandatory Checkpoint">
+Stage 5 **cannot start** without explicit human confirmation. The angle and title determine everything that follows -- the 5-act structure, which concepts surface, the Kimi prompt tone. An automated choice here would produce a generic talk.
+</Aside>
+
+**What to do at the checkpoint**:
+1. Read `angles.md` -- don't skip it, the recommendation may be wrong for your context
+2. Optionally send `feedback-draft.md` to a trusted peer
+3. Reply with your choice (can be the recommendation, a modification, or something entirely different)
+
+---
+
+### Stage 5: Script
+
+Builds the complete talk in 5 acts with speaker notes, slide specification, and Kimi prompt.
+
+**Three deliverables**:
+
+1. **`pitch.md`** -- The 5-act narrative with speaker notes, timing, key moments
+2. **`slides.md`** -- Slide-by-slide spec: title, visual description, key text (&le;30 words), speaker notes, duration
+3. **`kimi-prompt.md`** -- Complete prompt for [kimi.com](https://kimi.com) with design system, color palette, typography specs
+
+**1-idea-per-slide rule**: If a slide needs an "and" to describe it, split it.
+
+---
+
+### Stage 6: Revision
+
+Produces revision sheets -- quick navigation by act, master concept table, Q&A cheat-sheet, glossary.
+
+**What's in the revision sheets**:
+- Anchor link navigation by act
+- Per-act breakdown: key concepts + metrics + anecdotes + probable Q&A
+- Master table: concept -> 1-2 sentence definition -> URL to share
+- Q&A cheat-sheet: 6-10 probable questions with short answers (&le;20 sec to say)
+- Metrics block: all numbers in one place
+- Glossary: technical terms, max 10 words each
+
+---
+
+## The Kimi Handoff
+
+Stage 5 generates `{slug}-kimi-prompt.md` -- a complete prompt for [kimi.com](https://kimi.com).
+
+<Steps>
+
+1. Open the generated file
+2. Verify no placeholders remain (search the file)
+3. Go to [kimi.com](https://kimi.com) -- free account, no API needed
+4. Start a new conversation
+5. Copy-paste the entire prompt
+6. Kimi generates the presentation (PowerPoint or PDF)
+
+</Steps>
+
+**Embedded design system**:
+- Dark theme (#0a0a0a background)
+- Orange accent (#f97316) for key numbers and CTAs
+- Inter/SF Pro typography
+- Max 30 words per slide, numbers as heroes
+- WCAG AA contrast ratio (projector-safe)
+
+---
+
+## Adapting the Pipeline
+
+<Tabs>
+  <TabItem label="Lightning Talk (10-15 min)">
+    - Keep Stages 1, 3, 4, 5 -- skip Stage 2 even in REX mode
+    - Stage 3: limit to 8-10 concepts (filter to HIGH only)
+    - Stage 4: generate 2 angles maximum
+    - Stage 5: target ~8-10 slides
+    - Skip Stage 6
+  </TabItem>
+  <TabItem label="45-Minute Talk">
+    - Full pipeline, all stages
+    - Stage 3: target 25-35 concepts
+    - Stage 5: 20-25 slides
+    - Stage 6 becomes critical (Q&A lasts 10-15 min)
+  </TabItem>
+  <TabItem label="Workshop (90+ min)">
+    - Run the pipeline up to Stage 4
+    - Stage 5: replace slides.md with activities spec (exercises, timing, breakout groups)
+    - Kimi prompt section becomes optional
+  </TabItem>
+</Tabs>
+
+---
+
+## Common Pitfalls
+
+<CardGrid>
+  <Card title="Metrics Without Sources" icon="warning">
+    Stage 1 extracts metrics but doesn't verify them. Stage 2 verifies. In Concept mode, any metric you mention must be explicitly sourced -- or removed.
+  </Card>
+  <Card title="Overloaded Slides" icon="warning">
+    The Kimi prompt enforces 30 words per slide, but pitch.md may drift toward bullet lists. Test the 1-idea-per-slide rule.
+  </Card>
+  <Card title="Skipping the Checkpoint" icon="warning">
+    Running Stage 5 without a validated angle + title produces a technically correct script for the wrong talk.
+  </Card>
+  <Card title="Late Feedback Draft" icon="warning">
+    Peer feedback at the angle/title stage is actionable. Feedback on a finished script mostly generates regret.
+  </Card>
+</CardGrid>
+
+---
+
+## Design Patterns Showcased
+
+### File-Based State Chaining
+
+Each stage writes files that the next stage reads. State persists between skill invocations through the filesystem -- no in-memory coupling. You can run Stage 3 a week after Stage 2.
+
+### Tool Permission Scoping
+
+Stage 2 is the only stage that needs Bash (for git commands). Every other stage is Read + Write only.
+
+### AI-to-AI Handoff
+
+Claude doesn't generate slides directly -- it generates the specification that another AI (Kimi) executes. This combines strengths: Claude for structured narrative reasoning, Kimi for visual presentation generation.

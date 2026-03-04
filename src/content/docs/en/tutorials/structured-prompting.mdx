@@ -1,0 +1,521 @@
+---
+title: "Structured Prompting"
+description: "Use XML tags to organize complex prompts for better Claude understanding"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+XML-structured prompts provide **semantic organization** for complex requests, helping Claude distinguish between different aspects of your task for clearer understanding and better results.
+
+<CardGrid>
+  <Card title="Separation of Concerns" icon="approve-check-circle">
+    Different aspects of the task are clearly delineated, reducing ambiguity.
+  </Card>
+  <Card title="Better Context Handling" icon="document">
+    Helps Claude prioritize main instructions over background information.
+  </Card>
+  <Card title="Consistent Formatting" icon="setting">
+    Easier to template complex requests and maintain consistency.
+  </Card>
+  <Card title="Multi-faceted Requests" icon="list-format">
+    Complex tasks with multiple requirements stay organized.
+  </Card>
+</CardGrid>
+
+---
+
+## What Are XML-Structured Prompts?
+
+XML tags act as **labeled containers** that explicitly separate instruction types, context, examples, constraints, and expected output format.
+
+**Basic syntax**:
+
+```xml
+<instruction>
+  Your main task description here
+</instruction>
+
+<context>
+  Background information, project details, or relevant state
+</context>
+
+<code_example>
+  Reference code or examples to follow
+</code_example>
+
+<constraints>
+  - Limitation 1
+  - Limitation 2
+  - Requirement 3
+</constraints>
+
+<output>
+  Expected format or structure of the response
+</output>
+```
+
+---
+
+## Common Tags and Their Uses
+
+### Core Instruction Tags
+
+```xml
+<instruction>Main task</instruction>          <!-- Primary directive -->
+<task>Specific subtask</task>                 <!-- Individual action item -->
+<question>What should I do about X?</question> <!-- Explicit inquiry -->
+<goal>Achieve state Y</goal>                  <!-- Desired outcome -->
+```
+
+### Context and Information Tags
+
+```xml
+<context>Project uses Next.js 14</context>            <!-- Background info -->
+<problem>Users report slow page loads</problem>       <!-- Issue description -->
+<background>Migration from Pages Router</background>  <!-- Historical context -->
+<state>Currently on feature-branch</state>            <!-- Current situation -->
+```
+
+### Code and Example Tags
+
+```xml
+<code_example>
+  // Existing pattern to follow
+  const user = await getUser(id);
+</code_example>
+
+<current_code>
+  // Code that needs modification
+</current_code>
+
+<expected_output>
+  // What the result should look like
+</expected_output>
+```
+
+### Constraint and Rule Tags
+
+```xml
+<constraints>
+  - Must maintain backward compatibility
+  - No breaking changes to public API
+  - Maximum 100ms response time
+</constraints>
+
+<requirements>
+  - TypeScript strict mode
+  - 100% test coverage
+  - Accessible (WCAG 2.1 AA)
+</requirements>
+
+<avoid>
+  - Don't use any for types
+  - Don't modify the database schema
+</avoid>
+```
+
+---
+
+## Practical Examples
+
+### Example 1: Code Review with Context
+
+```xml
+<instruction>
+Review this authentication middleware for security vulnerabilities
+</instruction>
+
+<context>
+This middleware is used in a financial application handling sensitive user data.
+We follow OWASP Top 10 guidelines and need PCI DSS compliance.
+</context>
+
+<code_example>
+async function authenticate(req, res, next) {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'No token' });
+
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  req.user = decoded;
+  next();
+}
+</code_example>
+
+<constraints>
+- Point out any security risks
+- Suggest PCI DSS compliant alternatives
+- Consider timing attacks and token leakage
+</constraints>
+
+<output>
+Provide:
+1. List of security issues found
+2. Severity rating for each (Critical/High/Medium/Low)
+3. Specific code fixes with examples
+4. Additional security hardening recommendations
+</output>
+```
+
+### Example 2: Feature Implementation with Requirements
+
+```xml
+<instruction>
+Add a rate limiting system to our API endpoints
+</instruction>
+
+<context>
+Current stack: Express.js + Redis
+No rate limiting currently exists
+Experiencing API abuse from specific IPs
+</context>
+
+<requirements>
+- 100 requests per minute per IP for authenticated users
+- 20 requests per minute per IP for unauthenticated
+- Custom limits for premium users (stored in database)
+- Return 429 status with Retry-After header
+</requirements>
+
+<code_example>
+// Existing middleware pattern we use
+app.use(authenticate);
+app.use(authorize(['admin', 'user']));
+</code_example>
+
+<constraints>
+- Must not impact existing API performance
+- Redis connection should be reused
+- Handle Redis connection failures gracefully
+</constraints>
+
+<output>
+Provide:
+1. Rate limiter middleware implementation
+2. Redis configuration
+3. Unit tests
+4. Documentation for the team
+</output>
+```
+
+### Example 3: Bug Investigation with State
+
+```xml
+<task>
+Investigate why user sessions are expiring prematurely
+</task>
+
+<problem>
+Users report being logged out after 5-10 minutes of activity,
+but session timeout is configured for 24 hours.
+</problem>
+
+<context>
+- Next.js 14 App Router with next-auth
+- PostgreSQL session store
+- Load balanced across 3 servers
+- Issue started after deploying v2.3.0 last week
+</context>
+
+<state>
+Git diff between v2.2.0 (working) and v2.3.0 (broken) shows changes to:
+- middleware.ts (session refresh logic)
+- auth.config.ts (session strategy)
+- database.ts (connection pooling)
+</state>
+
+<constraints>
+- Don't suggest reverting the deploy
+- Production issue, needs quick resolution
+- Must maintain session security
+</constraints>
+
+<output>
+Provide:
+1. Root cause hypothesis
+2. Files to investigate (in priority order)
+3. Debugging commands to run
+4. Potential fixes with trade-offs
+</output>
+```
+
+---
+
+## Advanced Patterns
+
+### Nested Tags for Complex Hierarchy
+
+```xml
+<task>
+Refactor authentication system
+  <subtask priority="high">
+    Update user model
+    <constraints>
+      - Preserve existing user IDs
+      - Add migration for email verification
+    </constraints>
+  </subtask>
+
+  <subtask priority="medium">
+    Implement OAuth providers
+    <requirements>
+      - Google and GitHub OAuth
+      - Reuse existing session logic
+    </requirements>
+  </subtask>
+</task>
+```
+
+### Multiple Examples with Labels
+
+```xml
+<code_example label="current_implementation">
+  // Old approach with callback hell
+  getUser(id, (user) => {
+    getOrders(user.id, (orders) => {
+      res.json({ user, orders });
+    });
+  });
+</code_example>
+
+<code_example label="desired_pattern">
+  // New async/await pattern
+  const user = await getUser(id);
+  const orders = await getOrders(user.id);
+  res.json({ user, orders });
+</code_example>
+```
+
+### Conditional Instructions
+
+```xml
+<instruction>
+Optimize database query performance
+</instruction>
+
+<context>
+Query currently takes 2.5 seconds for 10,000 records
+</context>
+
+<constraints>
+  <if condition="PostgreSQL">
+    - Use EXPLAIN ANALYZE
+    - Consider materialized views
+  </if>
+
+  <if condition="MySQL">
+    - Use EXPLAIN with query plan analysis
+    - Consider query cache
+  </if>
+</constraints>
+```
+
+---
+
+## When to Use XML-Structured Prompts
+
+| Scenario | Recommended? | Why |
+|----------|--------------|-----|
+| Simple one-liner requests | No | Overhead outweighs benefit |
+| Multi-step feature implementation | Yes | Separates goals, constraints, examples |
+| Bug investigation with context | Yes | Distinguishes symptoms from environment |
+| Code review with specific criteria | Yes | Clear separation of code, context, requirements |
+| Architecture planning | Yes | Organizes goals, constraints, trade-offs |
+| Quick typo fix | No | Unnecessary complexity |
+
+---
+
+## Best Practices
+
+<Tabs>
+  <TabItem label="Do's">
+    - Use descriptive tag names that clarify purpose
+    - Keep tags consistent across similar requests
+    - Combine with CLAUDE.md for project-specific tag conventions
+    - Nest tags logically when representing hierarchy
+    - Use tags to separate "what" from "why" from "how"
+  </TabItem>
+  <TabItem label="Don'ts">
+    - Over-structure simple requests (adds noise)
+    - Mix tag purposes (e.g., constraints inside code examples)
+    - Use generic tags (`tag`, `content`) without clear meaning
+    - Nest too deeply (more than 3 levels becomes hard to read)
+  </TabItem>
+</Tabs>
+
+---
+
+## Integration with CLAUDE.md
+
+You can standardize XML tag usage in your project's CLAUDE.md:
+
+```markdown
+# XML Prompt Conventions
+
+When making complex requests, use this structure:
+
+<instruction>Main task</instruction>
+
+<context>
+  Project context and state
+</context>
+
+<code_example>
+  Reference implementations
+</code_example>
+
+<constraints>
+  Technical and business requirements
+</constraints>
+
+<output>
+  Expected deliverables
+</output>
+
+## Project-Specific Tags
+
+- `<api_design>` - API endpoint design specifications
+- `<accessibility>` - WCAG requirements and ARIA considerations
+- `<performance>` - Performance budgets and optimization goals
+```
+
+---
+
+## Combining with Other Features
+
+### XML + Plan Mode
+
+```xml
+<instruction>Plan the migration from REST to GraphQL</instruction>
+
+<context>
+Currently 47 REST endpoints serving mobile and web clients
+</context>
+
+<constraints>
+- Must maintain REST endpoints during transition (6-month overlap)
+- Mobile app can't be force-updated immediately
+</constraints>
+
+<output>
+Multi-phase migration plan with rollback strategy
+</output>
+```
+
+Then use `/plan` to explore read-only before implementation.
+
+### XML + Cost Awareness
+
+For large requests, structure with XML to help Claude understand scope and estimate token usage:
+
+```xml
+<instruction>Analyze all TypeScript files for unused imports</instruction>
+
+<scope>
+  src/ directory (~200 files)
+</scope>
+
+<output_format>
+  Summary report only (don't list every file)
+</output_format>
+```
+
+This helps Claude optimize the analysis approach and reduce token consumption.
+
+---
+
+## Reusable Template Library
+
+Create reusable templates in `claudedocs/templates/`:
+
+**`claudedocs/templates/code-review.xml`**:
+
+```xml
+<instruction>
+Review the following code for quality and best practices
+</instruction>
+
+<context>
+[Describe the component's purpose and architecture context]
+</context>
+
+<code_example>
+[Paste code here]
+</code_example>
+
+<focus_areas>
+- Security vulnerabilities
+- Performance bottlenecks
+- Maintainability issues
+- Test coverage gaps
+</focus_areas>
+
+<output>
+1. Issues found (categorized by severity)
+2. Specific recommendations with code examples
+3. Priority order for fixes
+</output>
+```
+
+**Usage**:
+
+```bash
+cat claudedocs/templates/code-review.xml | \
+  sed 's/\[Paste code here\]/'"$(cat src/auth.ts)"'/' | \
+  claude -p "Process this review request"
+```
+
+---
+
+## Prompting as Provocation
+
+The Claude Code team internally treats prompts as **challenges to a peer**, not instructions to an assistant. This subtle shift produces higher-quality outputs because it forces Claude to prove its reasoning rather than simply comply.
+
+<Steps>
+1. **The Gatekeeper** -- Force Claude to defend its work before shipping:
+
+   ```
+   "Grill me on these changes and don't make a PR until I pass your test"
+   ```
+
+   Claude reviews your diff, asks pointed questions about edge cases, and only proceeds when satisfied.
+
+2. **The Proof Demand** -- Require evidence, not assertions:
+
+   ```
+   "Prove to me this works — show me the diff in behavior between main and this branch"
+   ```
+
+   Claude runs both branches, compares outputs, and presents concrete evidence.
+
+3. **The Reset** -- After a mediocre first attempt, invoke full-context rewrite:
+
+   ```
+   "Knowing everything you know now, scrap this and implement the elegant solution"
+   ```
+
+   This forces a substantive second attempt with accumulated context rather than incremental patches on a weak foundation.
+</Steps>
+
+<Aside type="tip">
+**Why this works**: Provocation triggers deeper reasoning paths than polite requests. When Claude must *convince* rather than *comply*, it activates more thorough analysis and catches its own shortcuts.
+</Aside>
+
+---
+
+## Limitations and Considerations
+
+<Aside type="caution">
+**Token overhead**: XML tags consume tokens. For simple requests, natural language is more efficient.
+
+**Not required**: Claude understands natural language perfectly well. Use XML when structure genuinely helps.
+
+**Consistency matters**: If you use XML tags, be consistent. Mixing styles within a session can confuse context.
+</Aside>
+
+<Aside type="tip">
+Start with natural language prompts. Introduce XML structure when:
+- Requests have 3+ distinct aspects (instruction + context + constraints)
+- Ambiguity causes Claude to misunderstand your intent
+- Creating reusable prompt templates
+- Working with junior developers who need structured communication patterns
+</Aside>

@@ -1,0 +1,306 @@
+---
+title: 更新日志
+description: Claude Code 版本更新记录
+---
+
+import { Aside, Badge, Steps } from '@astrojs/starlight/components';
+
+跟踪 Claude Code 每个版本的新功能、修复和改进。
+
+<Aside type="tip">
+查看 [GitHub CHANGELOG](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md) 获取最新更新。
+</Aside>
+
+---
+
+## 2.1.63
+
+**亮点**：内置斜杠命令、HTTP Hooks、大量内存泄漏修复
+
+- 新增 `/simplify` 和 `/batch` 内置斜杠命令
+- 项目配置和自动记忆现在在同一仓库的 git worktree 间共享
+- 新增 `ENABLE_CLAUDEAI_MCP_SERVERS=false` 环境变量，可选择退出 claude.ai MCP 服务器
+- `/model` 命令现在在菜单中显示当前活动模型
+- 新增 HTTP Hooks，可以向 URL 发送 JSON 并接收 JSON 响应，替代 shell 命令
+- 新增 MCP OAuth 手动 URL 粘贴回退认证方式
+- 新增 `/copy` 选择器中的"始终复制完整响应"选项
+- VSCode：会话列表新增重命名和删除操作
+- 修复多个内存泄漏（bridge 轮询、MCP OAuth、hooks 配置、bash 前缀缓存、git 根检测缓存、JSON 解析缓存等）
+- 修复 `/clear` 不重置缓存技能的问题
+- 修复 REPL bridge 中消息排序的竞态条件
+
+---
+
+## 2.1.62
+
+- 修复降低缓存命中率的提示建议缓存回归
+
+---
+
+## 2.1.59
+
+**亮点**：自动记忆、`/copy` 命令、多实例安全
+
+- Claude 自动保存有用的上下文到自动记忆，使用 `/memory` 管理
+- 新增 `/copy` 命令，可交互选择代码块或完整响应
+- 改进复合 bash 命令的"始终允许"前缀建议（如 `cd /tmp && git fetch && git push`）
+- 修复多个 Claude Code 实例同时运行时的 MCP OAuth token 刷新竞态
+- 修复并发写入导致 Windows 配置文件损坏的问题
+- 修复工作目录被删除时 shell 命令缺少明确错误信息
+
+---
+
+## 2.1.53
+
+**亮点**：稳定性改进、Windows 修复
+
+- 修复 UI 闪烁（用户输入在提交后短暂消失）
+- 修复批量 agent kill（Ctrl+F）发送过多通知的问题
+- 修复 `--worktree` 在首次启动时被忽略
+- 修复 Windows 上的多个崩溃问题（corrupted value panic、进程生成崩溃、WebAssembly 崩溃、ARM64 超时崩溃）
+
+---
+
+## 2.1.51
+
+**亮点**：Remote Control、插件 npm 注册表、性能优化
+
+- 新增 `claude remote-control` 子命令，为所有用户提供本地环境服务
+- 插件市场默认 git 超时从 30s 增加到 120s，新增 `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS` 配置
+- 支持自定义 npm 注册表和特定版本锁定安装插件
+- BashTool 默认跳过登录 shell（`-l` 标志），提升命令执行性能
+- 超过 50K 字符的工具结果持久化到磁盘（之前为 100K）
+- `/model` 选择器显示人类可读标签（如 "Sonnet 4.5"）
+- 支持通过 macOS plist 或 Windows 注册表设置管理设置
+- 修复 `statusLine` 和 `fileSuggestion` hook 命令可在未接受工作区信任的情况下执行的安全问题
+
+---
+
+## 2.1.50
+
+**亮点**：Worktree Hooks、1M 上下文窗口、内存优化
+
+- 新增 `WorktreeCreate` 和 `WorktreeRemove` hook 事件
+- 新增 `isolation: worktree` agent 定义支持
+- 新增 `claude agents` CLI 命令列出所有配置的 agent
+- 新增 `CLAUDE_CODE_DISABLE_1M_CONTEXT` 环境变量禁用 1M 上下文窗口
+- Opus 4.6（快速模式）现在包含完整 1M 上下文窗口
+- 新增 LSP 服务器 `startupTimeout` 配置支持
+- VSCode：新增 `/extra-usage` 命令支持
+- 修复大量内存泄漏（agent teams、任务状态、LSP 诊断、CircularBuffer、ChildProcess 等）
+- 改进长会话内存使用，通过限制文件历史快照
+
+---
+
+## 2.1.49
+
+**亮点**：Worktree 隔离、Ctrl+F 杀进程、插件设置
+
+- 新增 `--worktree`（`-w`）标志在隔离的 git worktree 中启动 Claude
+- 子 Agent 支持 `isolation: "worktree"` 在临时 git worktree 中工作
+- 新增 Ctrl+F 快捷键杀后台 agent（两次按键确认）
+- Agent 定义支持 `background: true` 始终作为后台任务运行
+- 插件可附带 `settings.json` 默认配置
+- 简单模式新增文件编辑工具（除 Bash 工具外）
+- Sonnet 4.5 从 Max 计划中移除，改用 Sonnet 4.6（支持 1M 上下文）
+- 新增 `ConfigChange` hook 事件，配置更改时触发
+- SDK 模型信息新增 `supportsEffort`、`supportedEffortLevels`、`supportsAdaptiveThinking` 字段
+- 修复多个内存增长问题（tree-sitter、Yoga WASM）
+
+---
+
+## 2.1.47
+
+**亮点**：大量 Bug 修复、Windows 改进、Agent Teams 优化
+
+- 修复 Windows 终端渲染问题（行数显示、粗体文本偏移）
+- 改进 VS Code 计划预览（自动更新、评论控制、保持预览窗口）
+- 新增 `chat:newline` 快捷键操作用于多行输入
+- 新增 `last_assistant_message` 字段到 Stop 和 SubagentStop hook 输入
+- 使用 `Ctrl+F` 替代双击 ESC 杀后台 agent
+- 简化队友导航为仅使用 Shift+Down（带循环）
+- `/rename` 命令默认更新终端标签标题
+- 修复 PDF 文档过多导致压缩失败
+- 修复 bash 权限分类器验证问题（防止幻觉描述错误授权）
+- 修复 Unicode 弯引号在编辑时被替换为直引号
+- 修复 CJK 宽字符导致 TUI 时间戳和布局错位
+- 修复 Windows 上 hooks 在 Git Bash 中静默失败
+- 修复大量社区报告的 Bug（总计 50+ 修复项）
+
+---
+
+## 2.1.45
+
+**亮点**：Sonnet 4.6 支持、SDK 速率限制类型
+
+- 新增 Claude Sonnet 4.6 支持
+- 新增 `spinnerTipsOverride` 设置自定义加载提示
+- 新增 `SDKRateLimitInfo` 和 `SDKRateLimitEvent` SDK 类型
+- 修复 Agent Teams 在 Bedrock、Vertex 和 Foundry 上失败
+- 修复 macOS sandbox 临时文件写入权限错误
+- 改进启动性能（移除会话历史的预加载）
+- 改进折叠的读/搜索组显示当前处理的文件
+
+---
+
+## 2.1.42
+
+**亮点**：Opus 4.6 Effort 提示、性能优化
+
+- 改进启动性能（延迟 Zod schema 构建）
+- 改进提示缓存命中率（将日期移出系统提示）
+- 新增 Opus 4.6 effort 一次性提示
+- 修复 `/resume` 显示中断消息作为会话标题
+
+---
+
+## 2.1.41
+
+**亮点**：认证 CLI、Windows ARM64 支持
+
+- 新增 `claude auth login`、`claude auth status`、`claude auth logout` CLI 子命令
+- 新增 Windows ARM64（win32-arm64）原生二进制支持
+- 改进 `/rename` 在无参数时自动从对话上下文生成会话名
+- 新增 `speed` 属性到 OTel 事件用于快速模式可见性
+- 修复多个 Agent Teams 相关问题
+- 修复 `@` 文件提及含锚点片段时解析失败
+
+---
+
+## 2.1.38
+
+**亮点**：安全修复、终端渲染
+
+- 修复 VS Code 终端滚动到顶部回归
+- 改进 heredoc 分隔符解析防止命令注入
+- 在沙箱模式中阻止写入 `.claude/skills` 目录
+- 修复 bash 权限匹配使用环境变量包装器的命令
+- 修复非流式模式下工具使用间的文本消失
+
+---
+
+## 2.1.36
+
+**亮点**：Opus 4.6 快速模式
+
+- Opus 4.6 现在支持快速模式。[了解更多](https://code.claude.com/docs/en/fast-mode)
+
+---
+
+## 2.1.33
+
+**亮点**：Agent Teams 改进、插件增强
+
+- 修复 tmux 中 agent 队友会话的消息收发
+- 新增 `TeammateIdle` 和 `TaskCompleted` hook 事件
+- 支持通过 `Task(agent_type)` 语法限制可生成的子 agent
+- 新增 agent `memory` frontmatter 字段（`user`、`project` 或 `local` 作用域）
+- 新增插件名称到技能描述和 `/skills` 菜单
+- VSCode：支持远程会话，OAuth 用户可从 claude.ai 浏览和恢复会话
+- VSCode：会话选择器新增 git 分支和消息计数
+
+---
+
+## 2.1.32
+
+**亮点**：Opus 4.6 发布、Agent Teams 预览、自动记忆
+
+- **Claude Opus 4.6 正式发布！**
+- 新增 Agent Teams 多 agent 协作研究预览功能（需设置 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`）
+- Claude 现在自动记录和回忆工作中的记忆
+- 新增"从此处总结"到消息选择器
+- `.claude/skills/` 中的 Skills 现在从附加目录（`--add-dir`）自动加载
+- 技能字符预算随上下文窗口扩展（上下文的 2%）
+- 修复泰语/老挝语间距元音渲染问题
+
+---
+
+## 2.1.30
+
+**亮点**：PDF 分页读取、MCP OAuth、`/debug` 命令
+
+- Read 工具新增 `pages` 参数支持 PDF 分页读取（如 `pages: "1-5"`）
+- 新增预配置 OAuth 客户端凭据用于不支持动态客户端注册的 MCP 服务器
+- 新增 `/debug` 命令帮助排查当前会话
+- 新增减少动画模式到配置
+- 改进 `/resume` 内存使用（减少 68%）
+- 修复 phantom "(no content)" 文本块浪费 token
+- 修复 Windows 用户 `.bashrc` 文件导致 bash 命令失败
+
+---
+
+## 2.1.27
+
+**亮点**：PR 关联、调试日志改进
+
+- 新增 `--from-pr` 标志从特定 GitHub PR 恢复会话
+- 会话自动关联到通过 `gh pr create` 创建的 PR
+- 新增工具调用失败和拒绝到调试日志
+- 修复 Windows bash 命令执行和控制台窗口闪烁
+
+---
+
+## 2.1.23
+
+**亮点**：自定义加载动画、代理修复
+
+- 新增 `spinnerVerbs` 自定义加载动画文字
+- 修复 mTLS 和代理连接（企业代理/客户端证书）
+- 改进终端渲染性能（优化屏幕数据布局）
+- 修复 ripgrep 搜索超时静默返回空结果
+
+---
+
+## 2.1.21
+
+**亮点**：Python 虚拟环境、读/搜索进度指示
+
+- VSCode：自动激活 Python 虚拟环境（通过 `claudeCode.usePythonEnvironment` 配置）
+- 改进读/搜索进度指示器（进行中显示"正在读取..."，完成后显示"已读取"）
+- 改进 Claude 优先使用文件操作工具（Read、Edit、Write）而非 bash 替代品
+- 修复自动压缩在大输出 token 限制模型上过早触发
+
+---
+
+## 2.1.20
+
+**亮点**：PR 审查状态、任务删除、Vim 改进
+
+- 新增 PR 审查状态指示器到提示栏（批准/请求更改/待审/草稿）
+- 支持通过 `--add-dir` 加载 `CLAUDE.md` 文件（需设置 `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1`）
+- 新增任务删除功能（通过 `TaskUpdate` 工具）
+- Vim 普通模式新增方向键历史导航
+- 新增外部编辑器快捷键（Ctrl+G）到帮助菜单
+- 改进 `/copy` 命令向所有用户开放
+- 后台 agent 在启动前提示工具权限
+
+---
+
+## 2.1.19
+
+**亮点**：参数简写、任务环境变量
+
+- 新增 `CLAUDE_CODE_ENABLE_TASKS` 环境变量
+- 新增自定义命令参数简写 `$0`、`$1` 等
+- 索引参数语法从 `$ARGUMENTS.0` 改为 `$ARGUMENTS[0]`
+- 无额外权限或 hooks 的技能无需批准即可使用
+- VSCode：启用会话分叉和回退功能
+- 修复无 AVX 指令支持的处理器崩溃
+
+---
+
+## 2.1.18
+
+**亮点**：自定义快捷键
+
+- 新增可自定义键盘快捷键。配置每个上下文的快捷键，创建组合序列。运行 `/keybindings` 开始。[了解更多](https://code.claude.com/docs/en/keybindings)
+
+---
+
+## 2.1.16
+
+**亮点**：任务管理系统、VSCode 插件管理
+
+- 新增任务管理系统，包括依赖追踪等新功能
+- VSCode：新增原生插件管理支持
+- VSCode：OAuth 用户可浏览和恢复远程 Claude 会话

@@ -1,0 +1,275 @@
+---
+title: "Agent 团队快速入门"
+description: "5 分钟设置 Agent Teams 并掌握 4 种实用协作模式"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## 这是什么？
+
+你知道 Agent Teams 存在，也读过理论。但**什么时候在项目中真正使用它们？**
+
+本指南提供：
+
+<CardGrid>
+  <Card title="5 分钟设置" icon="rocket">
+    从环境配置到第一次测试
+  </Card>
+  <Card title="4 种可复制模式" icon="puzzle">
+    适用于真实项目的实战模式
+  </Card>
+  <Card title="决策矩阵" icon="list-format">
+    何时使用、何时跳过
+  </Card>
+  <Card title="ROI 指标" icon="document">
+    衡量效果的方法
+  </Card>
+</CardGrid>
+
+---
+
+## 5 分钟设置
+
+<Steps>
+
+1. **环境检查**
+
+   ```bash
+   # 检查 Claude Code 版本（需要 v2.1.32+）
+   claude --version
+
+   # 检查模型可用性
+   claude
+   > /model opus
+   # 应显示: "Model changed to opus (claude-opus-4-6-20250624)"
+   ```
+
+   **最低要求**：Claude Code v2.1.32+、Opus 4.6 模型、Git 仓库
+
+2. **启用功能**
+
+   ```bash
+   # 设置环境变量（添加到 ~/.bashrc 或 ~/.zshrc 持久化）
+   export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+
+   # 启动 Claude Code
+   claude
+   ```
+
+3. **验证**
+
+   ```
+   > Are agent teams enabled?
+   ```
+
+   预期响应应确认 agent teams 已启用，包括多 agent 协调、基于 git 的任务分配和自主团队协调。
+
+   如果显示未启用，检查环境变量：`echo $CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`
+
+4. **首次测试（2 个 Agent）**
+
+   ```
+   > Create a simple test team to analyze this README:
+   > - Agent 1: Check structure (sections, TOC, badges)
+   > - Agent 2: Check content quality (clarity, examples, completeness)
+   ```
+
+   **会发生什么**：
+   - Claude 生成 2 个 agent（你会看到 "Creating team..." 消息）
+   - Agent 并行工作（可能看到 "Idle" 消息 -- 这是正常的）
+   - Claude 呈现综合结果
+
+   **导航**：`Shift+Down` 在进程模式中循环切换队友输出。
+
+   **持续时间**：简单 2-agent 任务约 1-2 分钟。
+
+</Steps>
+
+---
+
+## 4 种实用模式
+
+### 模式 1：发布前审查
+
+**场景**：版本发布前的系统性审计，捕捉一致性问题（断链、计数不同步、版本号错误）。
+
+**团队组成**：
+
+```
+Team: pre-release-audit (3 agents)
+|- accuracy-auditor -> 验证声明、统计、版本、外部链接
+|- consistency-checker -> 检查模板计数、评估计数、指南行数匹配
+|_ breaking-checker -> 识别与上次发布的破坏性变更
+```
+
+**可复制的提示词**：
+
+```
+> Create a pre-release audit team:
+> - Accuracy: Check all claims, stats, version numbers,
+>   external links in CHANGELOG.md, README.md
+> - Consistency: Verify template count, eval count,
+>   guide lines match across all files
+> - Breaking: Identify breaking changes vs last release
+```
+
+**ROI**：可捕获 URL 损坏、文件间计数不同步、多个文件中的错误版本号等问题。
+
+**何时跳过**：简单的拼写修复（无版本/计数/链接变更）。
+
+---
+
+### 模式 2：多文件文档更新
+
+**场景**：在多个文件中添加新功能文档，确保跨引用一致性。
+
+**团队组成**：
+
+```
+Team: doc-update (3 agents)
+|- content-writer -> 编写主要内容并附示例
+|- index-updater -> 更新 TOC、索引条目、导航
+|_ consistency-checker -> 验证交叉引用、行号、锚点
+```
+
+**可复制的提示词**：
+
+```
+> Update documentation for new "[FEATURE NAME]" feature:
+> - Content: Write main section with overview, examples,
+>   best practices + gotchas
+> - Index: Update TOC, reference entries, README navigation
+> - Consistency: Verify all cross-references, line numbers,
+>   no broken internal links
+```
+
+**ROI**：零断链，比顺序执行快 60%。
+
+---
+
+### 模式 3：安全 PR 审查
+
+**场景**：审查外部贡献者的 PR 是否有安全问题、代码风格和性能。
+
+**团队组成**：
+
+```
+Team: security-pr-review (3 agents)
+|- code-expert -> 检查代码模式、错误处理、惯用写法
+|- security-auditor -> 扫描注入风险、令牌泄漏、输入净化
+|_ perf-analyzer -> 审查内存分配、异步模式、算法复杂度
+```
+
+**可复制的提示词**：
+
+```
+> Review PR #[NUMBER] with scope-focused analysis:
+> - Code: Check patterns, error handling, idiomatic code
+> - Security: Scan for injection risks, token leaks,
+>   input sanitization
+> - Performance: Review allocations, async patterns,
+>   algorithm complexity
+```
+
+---
+
+### 模式 4：同步验证
+
+**场景**：验证多个数据源之间的同步状态（版本、计数、内容）。
+
+**团队组成**：
+
+```
+Team: sync-check (2 agents)
+|- source-scanner -> 从源提取版本、计数等数据
+|_ target-scanner -> 比较目标，检查同步状态
+```
+
+---
+
+## 决策矩阵
+
+| 场景 | 使用 Agent Teams？ | 原因 |
+|------|-------------------|------|
+| **发布前审查** | 是 | 多层审计需要并行视角 |
+| **简单拼写修复** | 否 | 杀鸡用牛刀 |
+| **外部 PR 审查** | 是 | 安全 + 代码 + 性能 = 盲点检测 |
+| **多文件文档更新** | 是 | 内容 + 索引 + 一致性 = 零断链 |
+| **CHANGELOG 更新** | 否 | 顺序任务，无并行化收益 |
+| **单文件编辑** | 否 | 无需协调 |
+| **小型 README 修改** | 否 | 无交叉引用，无复杂性 |
+| **架构设计** | 是 | 多视角（前端、后端、基础设施、安全） |
+| **Bug 调查** | 视情况 | 简单 bug 否，复杂多组件故障 是 |
+
+### 经验法则
+
+<Tabs>
+  <TabItem label="使用 Agent Teams">
+    - 你自然会想"我应该检查 X、Y 和 Z"
+    - 高风险（生产发布、外部贡献者、安全敏感）
+    - 需要多范围分析
+    - 跨文件一致性很重要
+    - 可并行工作（独立任务，无顺序依赖）
+  </TabItem>
+  <TabItem label="不使用 Agent Teams">
+    - 简单任务（&lt;5 个文件，&lt;100 行，1 个领域）
+    - 顺序工作流（步骤 B 依赖步骤 A 的结果）
+    - 预算紧张（3 倍 token，留给高价值任务）
+    - 写入密集（同一文件的多次编辑 = 合并冲突）
+  </TabItem>
+</Tabs>
+
+---
+
+## 成功指标
+
+| 指标 | 目标 | 衡量方法 |
+|------|------|---------|
+| **收敛率** | &gt;50% | 被 2+ 个 agent 标记的发现数 / 总发现数 |
+| **独特洞察** | 每个 agent &ge;1 | 每个 agent 必须在其领域找到至少 1 个独特问题 |
+| **误报率** | &lt;20% | 无效发现数 / 总发现数 |
+| **时间节省** | 60-70% | Agent teams 时间 vs 顺序估计时间 |
+| **Bug 捕获率** | &gt;80% | Agent 发现的关键 bug / 发布后发现的总 bug |
+
+<Aside type="tip" title="调整提示词">
+- 收敛率低（&lt;30%）-- 范围太窄，增加上下文边界重叠
+- 无独特洞察 -- 范围太相似，多样化分析角度
+- 误报率高（&gt;20%）-- 提示词太模糊，添加具体标准
+</Aside>
+
+---
+
+## 限制与红旗
+
+| 限制 | 含义 | 缓解措施 |
+|------|------|---------|
+| **3 倍 token** | 每个 agent = 独立模型调用 | 留给高风险任务 |
+| **Idle 刷屏** | 协调过程中的正常行为 | 忽略即可 |
+| **实验性** | 研究预览 = 稳定性无保证 | 预期会有 bug |
+| **协调开销** | 最多 3-5 个 agent | 保持 2-4 个 agent |
+| **上下文隔离** | Agent 看不到彼此的发现 | Claude 负责综合结果 |
+
+---
+
+## 快速参考
+
+### 设置（一次 5 分钟）
+
+```bash
+export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+claude
+> Are agent teams enabled?  # 验证
+```
+
+### 何时使用（决策规则）
+
+**使用**：高风险 + 多领域 + 可并行
+
+**不使用**：简单任务 + 顺序 + 预算紧张
+
+### 下一步
+
+1. 尝试首次测试（5 分钟设置 + 简单 2-agent 任务）
+2. 从你的项目中选择 1 种模式
+3. 衡量指标（收敛率、独特洞察、时间节省）
+4. 根据结果调整提示词

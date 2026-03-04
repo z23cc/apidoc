@@ -1,0 +1,422 @@
+---
+title: "Session Management"
+description: "Claude Code session teleportation, multi-instance workflows, and parallel development patterns"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+This guide covers Claude Code's Session Teleportation and Multi-Instance Workflows, helping you seamlessly migrate sessions between environments and scale parallel development.
+
+---
+
+## Session Teleportation
+
+Session teleportation allows migrating coding sessions between cloud (claude.ai/code) and local (CLI) environments. This enables workflows where you start work on mobile/web and continue locally with full filesystem access.
+
+<Aside type="caution">
+Session teleportation is in **Research Preview**. Expect rough edges.
+</Aside>
+
+### Evolution Timeline
+
+| Version | Feature |
+|---------|---------|
+| **2.0.24** | Initial Web to CLI teleport capability |
+| **2.0.41** | Teleporting auto-sets upstream branch |
+| **2.0.45** | `&` prefix for background tasks to web |
+| **2.1.0** | `/teleport` and `/remote-env` commands |
+
+### Commands Reference
+
+| Command | Usage |
+|---------|-------|
+| `%` or `&` prefix | Send task to cloud (e.g., `% Fix the auth bug`) |
+| `claude --teleport` | Interactive picker for available sessions |
+| `claude --teleport <id>` | Teleport specific session by ID |
+| `/teleport` | In-REPL command to teleport current session |
+| `/tasks` | Monitor background tasks status |
+| `/remote-env` | Configure cloud environment settings |
+| `Ctrl+B` | Background all running tasks |
+
+### Prerequisites
+
+- GitHub account connected + Claude GitHub App installed
+- Clean git state (0 uncommitted changes)
+- Same repository (not a fork)
+- Branch exists on remote
+- Same Claude.ai account on both environments
+- CLI version 2.1.0+
+
+### Workflow Example
+
+```bash
+# 1. Start task on web (claude.ai/code)
+#    "Refactor the authentication middleware"
+
+# 2. Session works in cloud sandbox
+
+# 3. Later, on local machine:
+claude --teleport
+# → Interactive picker shows available sessions
+
+# 4. Select session, Claude syncs:
+#    - Conversation context
+#    - File changes (via git)
+#    - Task state
+
+# 5. Continue work locally with full filesystem access
+```
+
+### Environment Support
+
+| Environment | Teleport Support |
+|-------------|------------------|
+| CLI/Terminal | Full bidirectional |
+| VS Code | Via terminal (not Chat view) |
+| Cursor | Via terminal |
+| Web (claude.ai/code) | Outbound only (web to local) |
+| iOS app | Monitoring only |
+
+### Current Limitations
+
+- **Unidirectional**: Web to local only (cannot teleport local to web)
+- **GitHub only**: No GitLab or Bitbucket support yet
+- **Subscription required**: Pro, Max, Team Premium, or Enterprise Premium
+- **Rate limits**: Parallel sessions consume proportional rate limits
+- **Git dependency**: Requires clean git state for sync
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| "Uncommitted changes" | Commit or stash changes before teleporting |
+| "Branch not found" | Push local branch to remote first |
+| "Session not found" | Verify same Claude.ai account on both |
+| "Teleport failed" | Check internet connectivity, try again |
+| Connection timeout | Use `claude --teleport <id>` with explicit ID |
+
+### Best Practices
+
+<Steps>
+1. **Commit frequently** -- clean git state is required
+2. **Use meaningful branch names** -- helps identify sessions
+3. **Check /tasks** -- verify background task status before teleporting
+4. **Same account** -- ensure CLI and web use same Claude.ai login
+5. **Push branches** -- remote must have the branch for sync
+</Steps>
+
+---
+
+## Multi-Instance Workflows
+
+<Aside type="note">
+Multi-instance orchestration is an advanced pattern for teams managing 10+ concurrent features. It requires modular architecture + budget + monitoring. **95% of users don't need this** -- sequential workflows with 1-2 instances are more efficient for most contexts.
+</Aside>
+
+### When Multi-Instance Makes Sense
+
+| Context | Recommendation | Monthly Cost | Reasoning |
+|---------|----------------|--------------|-----------|
+| **Solo dev** | Don't | - | Overhead &gt; benefit |
+| **Startup &lt;10 devs** | Maybe | $400-750 | Only if modular architecture + tests |
+| **Scale-up 10-50 devs** | Consider | $1,000-2,000 | Headless PM framework + monitoring justified |
+| **Enterprise 50+** | Yes | $2,000-5,000 | Clear ROI, budget available |
+
+### Red Flags (Don't Use Multi-Instance)
+
+- **Architecture**: Legacy monolith, no tests, tight coupling
+- **Budget**: &lt;$500/month available for API costs
+- **Expertise**: Team unfamiliar with Claude Code basics
+- **Context**: Solo dev or &lt;3 people
+
+---
+
+## Real-World Case: Boris Cherny (Interval)
+
+Boris Cherny, creator of Claude Code, shared his workflow orchestrating 5-15 Claude instances in parallel.
+
+### Setup
+
+- **5 instances** in local terminal (iTerm2 tabs, numbered 1-5)
+- **5-10 instances** on claude.ai/code (`--teleport` to sync with local)
+- **Git worktrees** for isolation (each instance = separate checkout)
+- **CLAUDE.md**: 2.5k tokens, team-shared and versioned in git
+- **Model**: Opus 4.6 (slower but fewer corrections needed, adaptive thinking)
+- **Slash commands**: `/commit-push-pr` used "dozens of times per day"
+
+### Results (30 Days, January 2026)
+
+| Metric | Value |
+|--------|-------|
+| PRs merged | **259** |
+| Commits | **497** |
+| Lines added | **40k** |
+| Lines deleted | **38k** (refactor-heavy) |
+| Monthly cost | ~$500-1,000 API (Opus pricing) |
+
+<Aside type="caution">
+Boris is the creator of Claude Code, working with perfect architecture, Anthropic resources, and ideal conditions. **This is not representative of average teams.**
+</Aside>
+
+### Key Insights from Boris
+
+> **On multi-clauding**: "I use Cowork as a 'doer,' not a chat: it touches files, browsers, and tools directly. I think about productivity as parallelism: multiple tasks running while I steer outcomes."
+
+> **On CLAUDE.md**: "I treat Claude.md as compounding memory: every mistake becomes a durable rule for the team."
+
+> **On plan-first workflow**: "I run plan-first workflows: once the plan is solid, execution gets dramatically cleaner."
+
+### Team Patterns (February 2026)
+
+- **Skills as institutional knowledge**: Anything done more than once daily becomes a skill checked into version control
+- **CLI and scripts over MCP**: The team prefers shell scripts over MCP servers for external tool connections
+- **Re-plan when stuck**: Switch back to Plan Mode rather than pushing through
+- **Claude writes its own rules**: After each correction, instruct Claude to update CLAUDE.md with the lesson learned
+
+---
+
+## Dual-Instance Planning Pattern (Vertical Separation)
+
+While Boris's workflow demonstrates **horizontal scaling** (5-15 instances in parallel), an alternative pattern focuses on **vertical separation**: using two Claude instances with distinct roles.
+
+### When to Use
+
+| Context | Use Dual-Instance? | Monthly Cost |
+|---------|-------------------|--------------|
+| **Solo dev, spec-heavy work** | Yes | $100-200 |
+| **Small team, complex requirements** | Yes | $150-300 |
+| **Product designers coding** | Yes | $100-200 |
+| **High-volume parallel features** | No, use Boris pattern | $500-1K+ |
+
+### Architecture
+
+```
+┌──────────────────┐
+│  Claude Zero     │  Planning & Review
+│  (Planner)       │  - Explores codebase
+└────────┬─────────┘  - Writes plans
+         │            - Reviews implementations
+         │            - NEVER touches code
+         ▼
+┌─────────────────┐
+│  Plans/Review/  │  Human review checkpoint
+│  Plans/Active/  │
+└────────┬────────┘
+         │
+         ▼
+┌──────────────────┐
+│  Claude One      │  Implementation
+│  (Implementer)   │  - Reads approved plans
+└──────────────────┘  - Writes code
+                      - Commits changes
+```
+
+### Five-Step Workflow
+
+<Steps>
+1. **Planning (Claude Zero)**
+
+   ```
+   You (to Claude Zero): /plan
+   Implement JWT authentication for the API.
+   - Support access tokens (15min expiry)
+   - Support refresh tokens (7 day expiry)
+   - Middleware to validate tokens on protected routes
+   ```
+
+   Claude Zero explores the codebase, interviews you about requirements, and writes a plan to `.claude/plans/Review/auth-jwt.md`.
+
+2. **Human Review**
+
+   Review the plan: Is the approach correct? Are all requirements covered? Any security issues?
+
+   If approved:
+   ```bash
+   mv .claude/plans/Review/auth-jwt.md .claude/plans/Active/
+   ```
+
+3. **Implementation (Claude One)**
+
+   ```
+   You (to Claude One): Implement .claude/plans/Active/auth-jwt.md
+   ```
+
+   Claude One reads the plan file, implements all steps, and commits.
+
+4. **Verification (Claude Zero)**
+
+   ```
+   You (to Claude Zero): Review the JWT implementation Claude One just completed.
+   ```
+
+   Claude Zero reviews: Does code match plan? Security best practices followed? Tests cover success criteria?
+
+5. **Archive**
+
+   ```bash
+   mv .claude/plans/Active/auth-jwt.md .claude/plans/Completed/
+   ```
+</Steps>
+
+### Boris (Horizontal) vs Dual-Instance (Vertical)
+
+| Dimension | Boris Pattern | Dual-Instance Pattern |
+|-----------|---------------|----------------------|
+| **Scaling axis** | Horizontal (5-15 instances, parallel features) | Vertical (2 instances, separated phases) |
+| **Primary goal** | Speed via parallelism | Quality via separation of concerns |
+| **Monthly cost** | $500-1,000 | $100-200 |
+| **Entry barrier** | High | Low (2 terminals + Plans/ directory) |
+| **Best for** | Shipping 10+ features/day, experienced teams | Complex specs, quality-critical, budget-conscious |
+
+<Aside type="tip">
+These patterns are **not mutually exclusive**. You can use dual-instance for complex features (planning rigor) and the Boris pattern for high-volume simple features (speed).
+</Aside>
+
+### Agent-Ready Plans Best Practices
+
+The key to dual-instance efficiency is **plan structure**.
+
+<Tabs>
+  <TabItem label="Bad: Vague">
+    ```markdown
+    ## Implementation
+    Add authentication to the API.
+    Update the routes.
+    Create middleware.
+    ```
+  </TabItem>
+  <TabItem label="Good: Agent-Ready">
+    ```markdown
+    ## Implementation
+
+    ### Step 1: Create JWT utilities
+    **File**: src/auth/jwt.ts (new file, ~120 lines)
+    **Functions**:
+    - Line 10-30: generateAccessToken(userId: string): string
+    - Line 35-55: generateRefreshToken(userId: string): string
+
+    ### Step 2: Create auth middleware
+    **File**: src/middleware/auth.ts (new file, ~45 lines)
+    **Export**:
+    - Line 15-40: requireAuth middleware
+
+    ### Step 3: Protect routes
+    **File**: src/routes/api.ts
+    **Location**: Line 23
+    **Change**: Import requireAuth, apply to protected routes
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## Progressive Scaling Implementation Guide
+
+Don't jump to 10 instances. Scale progressively with validation gates.
+
+### Phase 1: Single Instance Mastery (2-4 Weeks)
+
+**Goal**: Achieve &gt;80% success rate with 1 instance before scaling.
+
+```bash
+# 1. Create CLAUDE.md (2-3k tokens)
+# 2. Implement feedback loops (automated tests, pre-commit hooks)
+# 3. Measure baseline (PRs/month, test pass rate, time to merge)
+```
+
+**Success criteria**: 80%+ PRs merged without major revisions.
+
+### Phase 2: Dual Instance Testing (1 Month)
+
+**Goal**: Validate that 2 instances increase throughput without chaos.
+
+```bash
+# 1. Setup git worktrees
+/git-worktree feature/backend
+/git-worktree feature/frontend
+
+# 2. Parallel development (ensure decoupled work, no file overlap)
+# 3. Monitor conflicts (>2% conflict rate → pause and fix architecture)
+```
+
+**Success criteria**: &lt;2% merge conflicts, &gt;5% productivity gain vs single instance.
+
+### Phase 3: Multi-Instance (If Phase 2 Successful)
+
+**Goal**: Scale to 3-5 instances with orchestration framework.
+
+| Tool | Paradigm | Best For |
+|------|----------|----------|
+| **Manual (worktrees)** | No framework | 2-3 instances, full control |
+| **Gas Town** | Parallel coordination | 5+ instances, complex parallel tasks |
+| **multiclaude** | Self-hosted spawner | Teams needing on-prem/airgap |
+| **Entire CLI** | Governance + handoffs | Sequential workflows with compliance |
+
+---
+
+## Monitoring and Observability
+
+### Essential Metrics
+
+| Metric | Tool | Target | Red Flag |
+|--------|------|--------|----------|
+| **Merge conflicts** | `git log --grep="Merge conflict"` | &lt;2% | &gt;5% |
+| **PRs/month** | GitHub Insights | +3-5% vs baseline | Flat or declining |
+| **Test pass rate** | CI/CD | &gt;95% | &lt;90% |
+| **API cost** | Session stats script | Within budget | &gt;20% over |
+
+### Warning Signs (Rollback Triggers)
+
+Stop multi-instance and return to sequential if you see:
+
+- Merge conflicts &gt;5% of PRs
+- CLAUDE.md grows &gt;5k tokens (sign of chaos)
+- Test quality degrades (coverage drops, flaky tests increase)
+- Supervision overhead &gt;30% developer time
+- Team reports skill atrophy or frustration
+
+---
+
+## Decision Matrix
+
+```
+New feature request
+├─ Solo dev?
+│  └─ Use Cursor ($20/month)
+│
+├─ Startup &lt;10 devs?
+│  ├─ Legacy code without tests?
+│  │  └─ Fix architecture first (1-2 months)
+│  └─ Modular + tested?
+│     └─ Try 2 instances (1 month pilot)
+│
+├─ Scale-up 10-50 devs?
+│  ├─ Budget >$1k/month?
+│  │  └─ Deploy Headless PM framework
+│  └─ Budget <$1k/month?
+│     └─ Sequential optimized (better prompts)
+│
+└─ Enterprise 50+ devs?
+   └─ Windsurf + custom orchestration
+```
+
+---
+
+## Cost-Benefit Analysis
+
+### Direct API Costs
+
+| Scale | Model | Monthly Cost | Break-Even Productivity Gain |
+|-------|-------|--------------|------------------------------|
+| **5 devs, 2 instances each** | Sonnet | $390-750 | 3-5% |
+| **10 devs, 2-3 instances** | Sonnet | $1,080-1,650 | 1.3-2% |
+| **Boris scale (15 instances)** | Opus | $500-1,000 | Justified if 259 PRs/month |
+
+### Hidden Costs
+
+| Cost Type | Impact | Mitigation |
+|-----------|--------|------------|
+| **Coordination overhead** | 10-20% time managing instances | Headless PM framework |
+| **Merge conflicts** | 5-15% time resolving conflicts | Git worktrees + modular architecture |
+| **Context switching** | Cognitive load times number of instances | Limit to 2-3 instances per developer |
+| **Supervision** | Must review all autonomous output | Automated tests + code review |

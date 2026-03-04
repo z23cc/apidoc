@@ -1,0 +1,365 @@
+---
+title: "故障排除"
+description: "Claude Code 常见问题诊断与解决方案完整指南"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## 快速诊断指南
+
+使用此基于症状的指南快速识别和解决问题：
+
+| 症状 | 可能原因 | 快速修复 | 预防措施 |
+|------|---------|---------|---------|
+| "Context too long" 错误 | 会话累积了过多上下文 | 先 `/compact`，如需要再 `/clear` | 在 70% 时定期压缩 |
+| 响应缓慢/延迟 | 上下文使用率高（&gt;75%） | 检查 `/status`，运行 `/compact` | 用 `/status` 监控上下文 |
+| "Rate limit exceeded" | 频繁请求导致 API 限流 | 等待 2 分钟，简单任务使用 `--model haiku` | 批量操作，使用 `/compact` |
+| Claude 忘记指令 | 上下文溢出，CLAUDE.md 丢失 | 创建检查点，`/clear`，重新加载 CLAUDE.md | 保持 CLAUDE.md 简洁（&lt;500 行） |
+| MCP 服务器无法连接 | 服务器崩溃或配置错误 | `claude mcp list`，检查路径，重启服务器 | 配置更改后测试服务器 |
+| 每次都弹权限提示 | 工具不在 `allowedTools` 中 | 添加模式到 `settings.json` allowedTools | 使用通配符：`Bash(git *)` |
+| 更改不生效 | 缓存的配置 | 重启 Claude Code 会话 | 配置更改前使用 `/exit` |
+| 会话无法恢复 | 损坏的会话文件 | 使用 `/clear` 重新开始 | 使用 `/exit` 或 `Ctrl+D` 正常退出 |
+
+---
+
+## 快速诊断流程
+
+<Steps>
+
+1. **检查上下文**
+
+   `/status` -- 如果 &gt;70%，运行 `/compact`
+
+2. **检查连接**
+
+   尝试简单命令 -- 如果失败，检查网络
+
+3. **检查配置**
+
+   `claude mcp list` -- 验证 MCP 服务器
+
+4. **检查权限**
+
+   查看错误信息 -- 如有需要添加到 allowedTools
+
+5. **仍然失败？**
+
+   `/doctor` -- 运行诊断并验证系统健康状况
+
+</Steps>
+
+---
+
+## 常见问题参考
+
+| 症状 | 原因 | 解决方案 |
+|------|------|---------|
+| "Context too long" | 已使用 100% 上下文 | `/clear` 或 `/compact` |
+| 响应缓慢 | 上下文使用率高 | `/compact` |
+| "Permission denied" | 安全设置 | 检查 `settings.local.json` |
+| Hook 不运行 | 注册错误 | 检查 `settings.json` matcher |
+| MCP 工具未找到 | 服务器未运行 | 检查 `mcp.json` 配置 |
+| Agent 未找到 | 文件命名问题 | 检查 `.claude/agents/` |
+| 命令未找到 | 路径错误 | 检查 `.claude/commands/` |
+
+---
+
+## 上下文恢复
+
+| 上下文级别 | 推荐操作 |
+|-----------|---------|
+| 0-50% | 正常继续 |
+| 50-75% | 查询时更加具体 |
+| 75-90% | 使用 `/compact` |
+| 90%+ | 使用 `/clear` |
+
+---
+
+## 常见错误详解
+
+<Tabs>
+  <TabItem label="工具执行失败">
+    **"Tool execution failed"**
+
+    - 检查 `settings.local.json` 中的工具权限
+    - 验证命令语法
+    - 检查缺少的依赖
+  </TabItem>
+  <TabItem label="Agent 不可用">
+    **"Agent not available"**
+
+    - 验证 agent 文件存在于 `.claude/agents/`
+    - 检查 YAML frontmatter 语法
+    - 重启 Claude Code 会话
+  </TabItem>
+  <TabItem label="Hook 阻止操作">
+    **"Hook blocked operation"**
+
+    - 检查 hook 退出码（2 = 已阻止）
+    - 查看 hook 错误信息
+    - 根据需要调整 hook 规则
+  </TabItem>
+</Tabs>
+
+---
+
+## MCP 服务器问题
+
+### 错误 1：工具名称验证失败
+
+```
+API Error 400: "tools.11.custom.name: String should match pattern '^[a-zA-Z0-9_-]{1,64}'"
+```
+
+**原因**：MCP 服务器名称包含无效字符。
+
+**解决方案**：服务器名称只能包含字母、数字、下划线、连字符，最多 64 个字符。
+
+```bash
+# 错误示例
+claude mcp add my-server@v1 -- npx server
+
+# 正确示例
+claude mcp add my-server-v1 -- npx server
+```
+
+### 错误 2：MCP 服务器未找到
+
+```
+MCP server 'my-server' not found
+```
+
+**原因**：服务器未正确注册或作用域错误。
+
+```bash
+# 1. 检查作用域设置
+claude mcp list  # 验证服务器是否已列出
+
+# 2. 确保你在正确的目录中（本地作用域）
+# 3. 重启 Claude Code 会话
+# 4. 如有需要重新添加
+claude mcp add my-server -s user -- npx @my/server
+```
+
+### 错误 3：Windows 路径问题
+
+```
+Error: Cannot find module 'C:UsersusernameDocuments'
+```
+
+**原因**：Windows 路径中的反斜杠未正确转义。
+
+```bash
+# 错误 -- 未转义反斜杠
+claude mcp add fs -- npx -y @modelcontextprotocol/server-filesystem C:\Users\username\Documents
+
+# 正确 -- 使用正斜杠
+claude mcp add fs -- npx -y @modelcontextprotocol/server-filesystem C:/Users/username/Documents
+
+# 正确 -- 转义反斜杠
+claude mcp add fs -- npx -y @modelcontextprotocol/server-filesystem "C:\\Users\\username\\Documents"
+```
+
+---
+
+## MCP 调试技术
+
+<Tabs>
+  <TabItem label="启用调试">
+    ```bash
+    # 调试所有 MCP 连接
+    claude --mcp-debug
+
+    # 在 Claude Code 内查看 MCP 状态
+    /mcp
+    ```
+  </TabItem>
+  <TabItem label="查看日志">
+    ```bash
+    # macOS
+    tail -f ~/Library/Logs/Claude/mcp*.log
+
+    # Linux
+    tail -f ~/.local/share/claude/logs/mcp*.log
+
+    # Windows (PowerShell)
+    Get-Content "$env:APPDATA\Claude\logs\mcp*.log" -Wait -Tail 50
+    ```
+  </TabItem>
+  <TabItem label="手动测试">
+    ```bash
+    # 测试服务器是否能独立运行
+    npx -y @modelcontextprotocol/server-filesystem ~/Documents
+    # 预期：服务器启动并输出 JSON-RPC 消息
+
+    # 快速诊断命令
+    claude mcp list
+    claude --mcp-debug -p "List available tools"
+
+    # 删除并重新添加服务器
+    claude mcp remove my-server
+    claude mcp add my-server -s user -- npx @my/server
+    ```
+  </TabItem>
+</Tabs>
+
+### 连接失败常见原因
+
+| 错误 | 原因 | 解决方案 |
+|------|------|---------|
+| `ECONNREFUSED` | 服务器未运行 | 检查 `mcp.json` 命令是否正确 |
+| `Timeout after 30s` | 初始化缓慢 | 增加超时或检查服务器日志 |
+| `Module not found` | 缺少依赖 | 在服务器目录运行 `npm install` |
+| `Permission denied` | 文件访问受限 | 检查服务器可执行文件的文件权限 |
+| `ENOENT` | 服务器二进制文件未找到 | 验证 npx/npm 在 PATH 中 |
+| `Invalid JSON` | 服务器输出格式错误 | 检查服务器版本兼容性 |
+
+---
+
+## 权限问题
+
+**模式匹配问题：**
+
+```json
+// 错误 -- 过于具体
+{
+  "allowedTools": ["Bash(npm test)"]
+}
+// 这只允许精确的 "npm test"
+
+// 正确 -- 使用通配符
+{
+  "allowedTools": ["Bash(npm *)"]
+}
+// 这允许任何 npm 命令
+```
+
+**常用权限模式：**
+
+```json
+{
+  "allowedTools": [
+    "Bash(git *)",
+    "Bash(npm *)",
+    "Bash(pytest *)",
+    "Edit",
+    "Write",
+    "Read",
+    "mcp__serena__*",
+    "mcp__context7__*",
+    "Task"
+  ]
+}
+```
+
+---
+
+## 超时问题
+
+**Claude 在任务执行中停止响应：**
+
+可能的原因：
+
+1. **网络中断** -- 检查网络连接
+2. **API 速率限制** -- 等待 1-2 分钟后重试
+3. **上下文耗尽** -- 使用 `/compact` 或 `/clear`
+4. **长时间运行的操作** -- 部分 MCP 操作需要 30 秒以上
+
+<Aside type="tip" title="长操作的解决方法">
+不要让 Claude 一次分析所有 500 个文件，而是分块处理：
+
+```
+"先分析 /src/components/ 中的文件"
+"现在分析 /src/utils/"
+"最后分析 /src/services/"
+```
+</Aside>
+
+---
+
+## 安装问题
+
+<Tabs>
+  <TabItem label="Windows">
+    ```powershell
+    # npm 全局安装失败
+    # 以管理员身份运行 PowerShell
+    npm install -g @anthropic-ai/claude-code
+
+    # PATH 未更新
+    # 手动添加到 PATH：
+    $env:Path += ";$env:APPDATA\npm"
+
+    # 权限错误
+    # 检查杀毒软件是否阻止了 Node.js
+    ```
+  </TabItem>
+  <TabItem label="macOS">
+    ```bash
+    # 安装后 "Command not found"
+    # 检查 shell 配置已加载：
+    source ~/.zshrc  # 或 ~/.bashrc
+
+    # /usr/local 权限被拒绝
+    # 不要使用 sudo 安装 npm
+    # 修复权限：
+    sudo chown -R $(whoami) /usr/local
+
+    # curl 安装被阻止
+    # 检查防火墙/VPN 设置
+    ```
+  </TabItem>
+  <TabItem label="Linux">
+    ```bash
+    # npm 未找到
+    # 先安装 Node.js：
+    curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+    sudo apt-get install -y nodejs
+
+    # 全局安装权限问题
+    # 配置 npm 使用主目录：
+    mkdir ~/.npm-global
+    npm config set prefix '~/.npm-global'
+    echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc
+    source ~/.bashrc
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## 健康检查与完全重装
+
+<CardGrid>
+  <Card title="一键健康检查" icon="approve-check-circle">
+    诊断脚本可即时排除故障。适用于 Windows（PowerShell）、macOS/Linux（Bash）。
+  </Card>
+  <Card title="完全重装" icon="warning">
+    当所有其他方法都失败时的最终手段。用于损坏的安装、持续的神秘错误或重大更新后的问题。
+  </Card>
+</CardGrid>
+
+### 何时使用完全重装
+
+- 正常故障排除后仍存在的神秘错误
+- 损坏的配置文件
+- Claude Code 更新后的破坏性变更
+- 迁移到新机器（导出/导入工作流）
+
+### 完全重装会删除什么
+
+| 内容 | 状态 |
+|------|------|
+| Claude Code 二进制文件和 npm 包 | 会删除 |
+| 下载的模型和缓存 | 会删除 |
+| 本地会话数据 | 会删除 |
+| 配置文件 | 可选（默认会备份） |
+
+### 完全重装后保留的内容
+
+| 内容 | 状态 |
+|------|------|
+| 项目级 `.claude/` 文件夹 | 保留 |
+| 项目 `CLAUDE.md` 文件 | 保留 |
+| 自定义 agents、skills、commands、hooks | 保留 |
+| MCP 服务器配置（`mcp.json` 中） | 保留 |

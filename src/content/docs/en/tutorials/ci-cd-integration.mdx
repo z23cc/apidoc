@@ -1,0 +1,682 @@
+---
+title: "CI/CD Integration"
+description: "Integrate Claude Code into your continuous integration and deployment workflows"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## Overview
+
+Claude Code integrates seamlessly into CI/CD workflows, from automated code reviews to release note generation. With headless mode and Unix piping, you can leverage AI capabilities throughout your automation pipelines.
+
+<CardGrid>
+  <Card title="Headless Mode" icon="laptop">
+    Run Claude Code non-interactively for automation scripts and CI environments.
+  </Card>
+  <Card title="Unix Piping" icon="right-arrow">
+    Pipe any command output to Claude for analysis and transformation.
+  </Card>
+  <Card title="GitHub Actions" icon="github">
+    Automate Claude Code in PR reviews, testing, and release workflows.
+  </Card>
+  <Card title="Release Automation" icon="rocket">
+    Auto-generate release notes and changelogs.
+  </Card>
+</CardGrid>
+
+---
+
+## Headless Mode
+
+Run Claude Code without interactive prompts using the `-p` flag:
+
+```bash
+# Basic headless execution
+claude -p "Run the tests and report results"
+
+# With timeout
+claude -p --timeout 300 "Build the project"
+
+# With specific model
+claude -p --model sonnet "Analyze code quality"
+```
+
+---
+
+## Unix Piping Workflows
+
+Claude Code supports Unix pipe operations, enabling powerful shell integration for automated code analysis and transformation.
+
+### Basic Usage
+
+```bash
+# Pipe content to Claude with a prompt
+cat file.txt | claude -p 'analyze this code'
+
+# Pipe command output for analysis
+git diff | claude -p 'explain these changes'
+
+# Chain commands with Claude
+npm test 2>&1 | claude -p 'summarize test failures and suggest fixes'
+```
+
+### Common Patterns
+
+<Tabs>
+  <TabItem label="Code Review">
+    ```bash
+    # Automated PR diff review
+    git diff main...feature-branch | claude -p 'Review this diff for security issues'
+    ```
+  </TabItem>
+  <TabItem label="Log Analysis">
+    ```bash
+    # Analyze application logs
+    tail -n 100 /var/log/app.log | claude -p 'Find the root cause of errors'
+    ```
+  </TabItem>
+  <TabItem label="Test Analysis">
+    ```bash
+    # Parse test output
+    npm test 2>&1 | claude -p 'Create a summary of failing tests with priority order'
+    ```
+  </TabItem>
+  <TabItem label="Documentation">
+    ```bash
+    # Generate API documentation
+    cat src/api/*.ts | claude -p 'Generate API documentation in Markdown'
+    ```
+  </TabItem>
+  <TabItem label="Batch Analysis">
+    ```bash
+    # Batch file analysis
+    find . -name "*.js" -exec cat {} \; | claude -p 'Identify unused dependencies'
+    ```
+  </TabItem>
+</Tabs>
+
+### Output Format Control
+
+The `--output-format` flag controls Claude's response format:
+
+| Format | Use Case | Example |
+|--------|----------|---------|
+| `text` | Human-readable output (default) | `claude -p 'explain' --output-format text` |
+| `json` | Machine-parseable structured data | `claude -p 'analyze' --output-format json` |
+| `stream-json` | Real-time streaming for large outputs | `claude -p 'transform' --output-format stream-json` |
+
+```bash
+# Get structured JSON output
+git status --short | claude -p 'Categorize changes' --output-format json
+
+# Structured analysis example
+git log --oneline -10 | claude -p 'Categorize commits by type' --output-format json
+
+# Combine with jq for JSON processing
+echo "const x = 1" | claude -p 'analyze' --output-format json | jq '.suggestions[]'
+```
+
+### Best Practices
+
+<Steps>
+1. **Be specific with prompts**
+
+   ```bash
+   # Good: Specific task
+   git diff | claude -p 'List all function signature changes'
+
+   # Less effective: Vague request
+   git diff | claude -p 'analyze this'
+   ```
+
+2. **Limit input size**
+
+   ```bash
+   # Good: Filtered scope
+   git diff --name-only | head -n 10 | xargs cat | claude -p 'review'
+
+   # Risky: Could exceed context
+   cat entire-codebase/* | claude -p 'review'
+   ```
+
+3. **Use `-p` flag for automation**
+
+   ```bash
+   cat file.txt | claude -p 'fix linting errors' > output.txt
+   ```
+
+4. **Combine with jq for JSON output**
+
+   ```bash
+   echo "const x = 1" | claude -p 'analyze' --output-format json | jq '.suggestions[]'
+   ```
+</Steps>
+
+### Integration with Build Scripts
+
+Add Claude Code commands to your `package.json`:
+
+```json
+{
+  "scripts": {
+    "claude-review": "git diff main | claude -p 'Review for security issues' --output-format json > review.json",
+    "claude-test-summary": "npm test 2>&1 | claude -p 'Summarize failures and suggest fixes'",
+    "claude-docs": "cat src/**/*.ts | claude -p 'Generate API documentation' > API.md",
+    "precommit-check": "git diff --cached | claude -p 'Check for secrets or anti-patterns' && git diff --cached | prettier --check"
+  }
+}
+```
+
+<Aside type="caution">
+**Limitations to keep in mind**: Large pipes may exceed token limits; always use `-p` for automation to avoid blocking; pipe failures don't always propagate -- add `set -e` for strict mode; automated pipes consume API credits.
+</Aside>
+
+<Aside type="tip">
+Combine piping with aliases for frequently used patterns:
+
+```bash
+# Add to ~/.bashrc or ~/.zshrc
+alias claude-review='git diff | claude -p "Review for bugs and suggest improvements"'
+alias claude-logs='tail -f /var/log/app.log | claude -p "Monitor for errors and alert on critical issues"'
+```
+</Aside>
+
+---
+
+## Git Hooks Integration
+
+Integrate Claude Code into Git Hooks for automated pre-commit and pre-push checks.
+
+<Aside type="note">
+**Windows Note**: Git hooks run in Git Bash on Windows, so the bash syntax below works. Alternatively, you can create `.cmd` or `.ps1` versions and reference them from a wrapper script.
+</Aside>
+
+<Tabs>
+  <TabItem label="Pre-commit Hook">
+    ```bash
+    #!/bin/bash
+    # .git/hooks/pre-commit
+
+    # Run Claude Code for commit message validation
+    COMMIT_MSG=$(cat "$1")
+    claude -p "Is this commit message good? '$COMMIT_MSG'. Reply YES or NO with reason."
+    ```
+  </TabItem>
+  <TabItem label="Pre-push Hook">
+    ```bash
+    #!/bin/bash
+    # .git/hooks/pre-push
+
+    # Security check before push
+    claude -p "Scan staged files for secrets and security issues. Exit 1 if found."
+    EXIT_CODE=$?
+
+    if [ $EXIT_CODE -ne 0 ]; then
+        echo "Security issues found. Push blocked."
+        exit 1
+    fi
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## GitHub Actions Integration
+
+### Basic PR Review
+
+```yaml
+# .github/workflows/claude-review.yml
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run Review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          claude -p "Review the changes in this PR. \
+            Focus on security, performance, and code quality. \
+            Output as markdown."
+```
+
+### Advanced PR Review (with Comments)
+
+```yaml
+# .github/workflows/claude-review.yml
+name: AI Code Review
+on: [pull_request]
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run Claude Review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          git diff origin/main...HEAD | \
+            claude -p 'Review this PR diff for security issues, performance problems, and code quality. Format as JSON.' \
+            --output-format json > review.json
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const review = JSON.parse(fs.readFileSync('review.json', 'utf8'));
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Claude Code Review\n\n${review.summary}`
+            });
+```
+
+### Debugging Failed CI Runs
+
+When GitHub Actions fails, use the `gh` CLI to investigate without leaving your terminal:
+
+```bash
+# List recent workflow runs
+gh run list --limit 10
+
+# View specific run details
+gh run view <run-id>
+
+# View logs for failed run
+gh run view <run-id> --log-failed
+
+# Download logs for detailed analysis
+gh run download <run-id>
+```
+
+**Common debugging commands**:
+
+| Command | Purpose |
+|---------|---------|
+| `gh run list --workflow=test.yml` | Filter by workflow file |
+| `gh run view --job=<job-id>` | View specific job details |
+| `gh run watch` | Watch the current run in real-time |
+| `gh run rerun <run-id>` | Retry a failed run |
+| `gh run rerun <run-id> --failed` | Retry only failed jobs |
+
+**Combine with Claude for automated analysis**:
+
+```bash
+# Get the latest failed run
+FAILED_RUN=$(gh run list --status failure --limit 1 --json databaseId --jq '.[0].databaseId')
+
+# View the failure
+gh run view $FAILED_RUN --log-failed
+
+# Ask Claude to analyze
+gh run view $FAILED_RUN --log-failed | claude -p "Analyze this CI failure and suggest fixes"
+```
+
+---
+
+## Verify Gate Pattern
+
+Before creating a PR, ensure all local checks pass. This prevents wasted CI cycles and review time.
+
+```
+Build ✓ → Lint ✓ → Test ✓ → Type-check ✓ → THEN create PR
+```
+
+### Implementation as a Custom Command
+
+Create `.claude/commands/complete-task.md`:
+
+```markdown
+# Complete Task
+
+Run the full verification gate before creating a PR:
+
+1. **Build**: Run `pnpm build` - must succeed
+2. **Lint**: Run `pnpm lint` - must have zero errors
+3. **Test**: Run `pnpm test` - all tests must pass
+4. **Type-check**: Run `pnpm typecheck` - no type errors
+
+If ANY step fails:
+- Stop immediately
+- Report what failed and why
+- Suggest fixes
+- Do NOT proceed to PR creation
+
+If ALL steps pass:
+- Create the PR with `gh pr create`
+- Wait for CI with `gh pr checks --watch`
+- If CI fails, fetch feedback and auto-fix
+- Loop until mergeable or blocked
+```
+
+### Autonomous Retry Loop
+
+```
+┌─────────────────────────────────────────┐
+│         VERIFY GATE + AUTO-FIX          │
+├─────────────────────────────────────────┤
+│                                         │
+│   Local checks (build/lint/test)        │
+│        │                                │
+│        ▼ FAIL?                          │
+│   ┌─────────┐                           │
+│   │ Auto-fix│ ──► Re-run checks         │
+│   └─────────┘                           │
+│        │                                │
+│        ▼ PASS                           │
+│   Create PR                             │
+│        │                                │
+│        ▼                                │
+│   Wait for CI (gh pr checks --watch)    │
+│        │                                │
+│        ▼ FAIL?                          │
+│   ┌─────────────────────┐               │
+│   │ Fetch CI feedback   │               │
+│   │ (CodeRabbit, etc.)  │               │
+│   └─────────────────────┘               │
+│        │                                │
+│        ▼                                │
+│   Auto-fix + push + loop                │
+│        │                                │
+│        ▼                                │
+│   PR mergeable OR blocked (ask human)   │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+### Fetching CI Feedback
+
+Use GitHub's GraphQL API to get PR review status and comments:
+
+```bash
+# Get PR review status and comments
+gh api graphql -f query='
+  query($pr: Int!) {
+    repository(owner: "OWNER", name: "REPO") {
+      pullRequest(number: $pr) {
+        reviewDecision
+        reviewThreads(first: 100) {
+          nodes {
+            isResolved
+            comments(first: 1) {
+              nodes { body }
+            }
+          }
+        }
+      }
+    }
+  }' -F pr=$PR_NUMBER
+```
+
+---
+
+## Release Notes Generation
+
+Automate release notes and changelog generation using Claude Code.
+
+<CardGrid>
+  <Card title="Consistent Format" icon="document">
+    Ensure uniform formatting across every release.
+  </Card>
+  <Card title="Technical Detail" icon="information">
+    Capture technical details directly from commits.
+  </Card>
+  <Card title="Multi-Version Output" icon="list-format">
+    Generate technical changelog, GitHub Release, and user announcement in one pass.
+  </Card>
+  <Card title="Save Time" icon="rocket">
+    Save 30-60 minutes per release.
+  </Card>
+</CardGrid>
+
+### Approach 1: Command-Based
+
+Create `.claude/commands/release-notes.md`:
+
+```markdown
+# Generate Release Notes
+
+Analyze git commits since last release and generate release notes.
+
+## Process
+
+1. **Get commits since last tag**:
+   git log $(git describe --tags --abbrev=0)..HEAD --oneline
+
+2. **Read full commit details**: Include commit messages, file changes, PR numbers
+
+3. **Categorize changes**:
+   - Features - New functionality
+   - Bug Fixes - Issue resolutions
+   - Performance - Speed/efficiency improvements
+   - Security - Security patches
+   - Documentation - Doc updates
+   - Maintenance - Refactoring, dependencies
+   - Breaking Changes - API changes (highlight prominently)
+
+4. **Generate three versions**:
+   A. CHANGELOG.md format (technical, for developers)
+   B. GitHub Release Notes (balanced, technical + context)
+   C. User Announcement (non-technical, benefits-focused)
+
+5. **Output files**:
+   - Prepend to CHANGELOG.md
+   - Save to release-notes-[version].md
+```
+
+### Approach 2: CI/CD Automation
+
+```yaml
+# .github/workflows/release.yml
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for changelog
+
+      - name: Generate Release Notes
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get version from tag
+          VERSION=${GITHUB_REF#refs/tags/}
+
+          # Generate with Claude
+          claude -p "Generate release notes for $VERSION. \
+            Analyze commits since last tag. \
+            Output in GitHub Release format. \
+            Save to release-notes.md"
+
+          # Create GitHub Release
+          gh release create $VERSION \
+            --title "Release $VERSION" \
+            --notes-file release-notes.md
+
+      - name: Update CHANGELOG.md
+        run: |
+          cat release-notes.md CHANGELOG.md > CHANGELOG.tmp
+          mv CHANGELOG.tmp CHANGELOG.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "docs: update changelog for $VERSION"
+          git push
+```
+
+### Approach 3: Interactive Workflow
+
+For more control, use an interactive session:
+
+```bash
+# 1. Start Claude Code
+claude
+
+# 2. Request release notes
+You: "Generate release notes for v2.0.0"
+
+# 3. Claude will:
+# - Run git log to get commits
+# - Ask clarifying questions:
+#   - "Is this a major/minor/patch release?"
+#   - "Any breaking changes users should know?"
+
+# 4. Review and refine
+You: "Add more detail to the authentication feature"
+
+# 5. Finalize
+You: "Save these notes and update CHANGELOG.md"
+```
+
+### Output Example
+
+Given these commits:
+```
+feat: add user avatar upload (PR #123)
+fix: resolve login timeout issue (PR #124)
+perf: optimize database queries by 40% (PR #125)
+BREAKING: change API endpoint from /api/v1 to /v2 (PR #126)
+```
+
+Claude generates three formats:
+
+<Tabs>
+  <TabItem label="CHANGELOG.md (Technical)">
+    ```markdown
+    ## [2.0.0] - 2025-01-10
+
+    ### Added
+    - User avatar upload functionality (#123)
+
+    ### Fixed
+    - Login timeout issue affecting mobile users (#124)
+
+    ### Performance
+    - Optimized database queries, reducing load time by 40% (#125)
+
+    ### Breaking Changes
+    - **API Endpoints**: Migrated from `/api/v1/*` to `/v2/*`
+      - Update client code: replace `/api/v1/` with `/v2/`
+      - Old endpoints will return 410 Gone after 2025-02-01
+      - Migration guide: docs/migration-v2.md (#126)
+    ```
+  </TabItem>
+  <TabItem label="GitHub Release (Balanced)">
+    ```markdown
+    ## What's New in v2.0.0
+
+    This release brings performance improvements, bug fixes,
+    and a new avatar feature.
+
+    ### New Features
+    - **Avatar Upload**: Users can now upload custom profile pictures
+
+    ### Bug Fixes
+    - Fixed login timeout issue that affected some mobile users
+
+    ### Performance
+    - Database queries are now 40% faster
+
+    ### Breaking Changes
+    - **API Endpoint Migration**: All endpoints moved from
+      `/api/v1` to `/v2`
+      - **Action Required**: Update your API client code
+      - **Timeline**: Old endpoints stop working February 1, 2025
+      - **Migration Guide**: See docs/migration-v2.md
+
+    **Full Changelog**: v1.9.0...v2.0.0
+    ```
+  </TabItem>
+  <TabItem label="User Announcement">
+    ```markdown
+    Version 2.0 is here!
+
+    We've made your experience faster and more personal:
+
+    **Customize Your Profile** - Upload your own avatar
+    **Lightning Fast** - Pages load 40% faster
+    **More Reliable** - Fixed the login timeout issue
+
+    **For Developers**: This is a breaking release.
+    See our migration guide for API changes.
+    ```
+  </TabItem>
+</Tabs>
+
+### Release Notes Best Practices
+
+<Tabs>
+  <TabItem label="Before Generation">
+    - Ensure commits follow conventional commits format
+    - All PRs have been merged
+    - Version number decided (semver)
+  </TabItem>
+  <TabItem label="During Generation">
+    - Review for accuracy (Claude might miss context)
+    - Add migration guides for breaking changes
+    - Include upgrade instructions if needed
+  </TabItem>
+  <TabItem label="After Generation">
+    - Cross-reference with closed issues/PRs
+    - Test upgrade path on a staging project
+    - Share draft with team before publishing
+  </TabItem>
+</Tabs>
+
+### Common Issues
+
+| Problem | Solution |
+|---------|----------|
+| Release notes are too technical | Specify audience in prompt: "Generate for non-technical users" |
+| Claude missed a breaking change | Explicitly list breaking changes in prompt, or use "BREAKING:" prefix in commit messages |
+| Generated notes are generic | Provide more context: "This release focuses on mobile performance" |
+| Commits are messy/unclear | Clean up commit history before generation (interactive rebase), or enforce commit message format with git hooks |
+
+---
+
+## Best Practices Summary
+
+<CardGrid>
+  <Card title="Always Use -p Flag" icon="laptop">
+    Always use the `-p` flag for non-interactive execution in CI/CD pipelines.
+  </Card>
+  <Card title="Control Input Size" icon="warning">
+    Limit pipe input size to avoid exceeding context token limits.
+  </Card>
+  <Card title="Structured Output" icon="document">
+    Use `--output-format json` for parseable structured output in automation scenarios.
+  </Card>
+  <Card title="Secure Credentials" icon="approve-check-circle">
+    Store API keys in GitHub Secrets -- never hard-code them in your codebase.
+  </Card>
+</CardGrid>

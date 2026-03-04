@@ -1,0 +1,706 @@
+---
+title: "为 Agent 设计代码库"
+description: "如何设计和优化代码库以提升 AI Agent 的生产力，包括领域知识嵌入、代码可发现性、测试驱动和防护栏"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+传统代码库为人类开发者优化。AI Agent 有不同的需求——它们擅长模式匹配，但在隐式知识和分散上下文方面会遇到困难。本指南介绍如何设计"Agent 友好"的代码库。
+
+<Aside type="tip" title="关键原则">
+- **领域知识嵌入**: 将业务逻辑和设计决策直接放入代码中
+- **代码可发现性**: 像 SEO 一样让代码"可搜索"
+- **Token 效率**: 拆分大文件，删除显而易见的注释
+- **测试驱动自主性**: TDD 对 Agent 比对人类更关键
+- **防护栏**: Hooks、CI 检查和 PR 审查尽早捕获错误
+</Aside>
+
+---
+
+## 范式转变：为 Agent 设计
+
+### 传统 vs AI 原生代码库
+
+| 方面 | 人类优化 | Agent 优化 |
+|------|---------|-----------|
+| **注释** | 稀疏，假设有上下文 | 明确的"为什么" + 同义词 |
+| **文件大小** | 1000+ 行 OK | 在 500 行处拆分 |
+| **架构文档** | 独立的 Wiki/Confluence | 嵌入 CLAUDE.md + ADR |
+| **约定** | 口头传统，部落知识 | 书面、可发现、有标签 |
+| **测试** | 原型可选 | 关键——Agent 遵循测试 |
+| **错误消息** | 通用 | 具体且带恢复提示 |
+
+### Agent 体验（AX）框架
+
+Netlify 提出的"Agent Experience"概念，是 DX（开发者体验）的 Agent 版本：
+
+1. **Agent 能找到它需要的东西吗？**（可发现性）
+2. **它能理解设计决策吗？**（领域知识）
+3. **它能验证自己的工作吗？**（测试 + 防护栏）
+4. **它能高效工作吗？**（Token 预算）
+
+### 何时投资 AX
+
+<CardGrid>
+  <Card title="推荐优化" icon="approve-check">
+    - 绿地项目（从头设计 Agent 友好）
+    - 高频修改文件（业务逻辑、API 路由）
+    - 大量使用 Agent 的团队（&gt;50% 提交）
+  </Card>
+  <Card title="不需要优化" icon="close">
+    - 稳定的遗留代码（不要仅为 Agent 重构）
+    - 小脚本（&lt;100 行，Agent 处理没问题）
+  </Card>
+</CardGrid>
+
+### 约定优于配置
+
+选择有主见的框架来减少 Agent 的决策空间：
+
+| 方面 | 自定义架构 | 有主见的框架 |
+|------|-----------|------------|
+| **文件组织** | Agent 必须学习你的结构 | 标准约定（如 Next.js `app/`、Rails MVC） |
+| **路由** | 自定义逻辑，需要文档 | 基于约定（文件 = 路由） |
+| **数据访问** | 多种模式可能 | 单一模式强制 |
+| **CLAUDE.md 大小** | 大（必须记录一切） | 小（约定已知） |
+
+**举例**：
+
+```markdown
+# 自定义架构（500+ 行 CLAUDE.md）
+## File Organization
+- API routes in `src/endpoints/`
+- Business logic in `src/domain/`
+- Data access in `src/repositories/`
+... (大量自定义模式文档)
+
+# Next.js（50 行 CLAUDE.md）
+## Project Context
+We use Next.js 14 with App Router.
+... (最少上下文，其余是框架约定)
+```
+
+---
+
+## 领域知识嵌入
+
+### CLAUDE.md 高级模式
+
+在 CLAUDE.md 中编码深层领域知识：
+
+```markdown
+# CLAUDE.md
+
+## Domain Context
+**Product**: SaaS platform for event management (B2B, enterprise)
+**Business model**: Subscription-based, tiered pricing
+
+## Design Principles
+1. **Idempotency First**: All API mutations must be idempotent
+2. **Eventual Consistency**: Calendar sync uses queue-based reconciliation
+3. **Graceful Degradation**: If external API fails, store locally + retry
+
+## Domain Terms
+- **Event**: User-created calendar entry (our domain model)
+- **Appointment**: External calendar system's term (Google/Outlook)
+- **Sync Job**: Background process reconciling our DB with external calendars
+
+## Gotchas
+- Google Calendar API has 10 req/sec rate limit per user
+- Outlook timezone handling is non-standard → use normalizeTimezone()
+- Event deletion = soft delete (set deletedAt) for compliance audit trail
+```
+
+### 代码注释：What vs Why
+
+<Tabs>
+  <TabItem label="差：显而易见的注释">
+    ```typescript
+    // Get user by ID
+    function getUserById(id: string) {
+      return db.users.findOne({ id });
+    }
+    ```
+  </TabItem>
+  <TabItem label="好：解释「为什么」">
+    ```typescript
+    // Fetch user with calendar permissions.
+    // Returns null if user exists but lacks calendar access
+    // (common after OAuth token expiration).
+    // Callers should handle null by redirecting to re-auth flow.
+    function getUserById(id: string) {
+      return db.users.findOne({ id });
+    }
+    ```
+  </TabItem>
+  <TabItem label="最佳：领域知识 + 边界情况">
+    ```typescript
+    // Fetch user with calendar permissions for event sync.
+    //
+    // Returns null in two cases:
+    // 1. User doesn't exist (rare, DB inconsistency)
+    // 2. User exists but calendar OAuth token expired
+    //    (common, ~5% of calls)
+    //
+    // Callers MUST handle null by:
+    // - Redirecting to /auth/calendar/reauth (UI flows)
+    // - Logging + skipping sync (background jobs)
+    //
+    // Related: See refreshCalendarToken() for auto refresh.
+    // Rate limits: Google = 10 req/sec, Outlook = 20 req/sec
+    function getUserById(id: string): Promise<User | null> {
+      return db.users.findOne({ id });
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### 架构决策记录（ADR）
+
+在 `docs/decisions/` 中存储 ADR 并从代码中引用：
+
+```typescript
+// Soft delete per ADR-007. Never use db.events.delete()
+// due to compliance requirements (GDPR audit trail).
+async function deleteEvent(eventId: string) {
+  await db.events.update(
+    { id: eventId },
+    { deletedAt: new Date() }
+  );
+}
+```
+
+---
+
+## 代码可发现性（Agent 的 SEO）
+
+Agent 使用关键词匹配来搜索代码。如果你的变量名是 `usr`，Agent 搜索 "user" 时找不到。
+
+### 使用完整术语
+
+<Tabs>
+  <TabItem label="Agent 不友好">
+    ```typescript
+    function calcEvtDur(evt: Evt): number {
+      const st = evt.stTm;
+      const et = evt.etTm;
+      return et - st;
+    }
+    ```
+  </TabItem>
+  <TabItem label="Agent 友好">
+    ```typescript
+    // Calculate event duration in milliseconds.
+    // Also known as: event length, time span,
+    // appointment duration
+    function calculateEventDuration(event: Event): number {
+      const startTime = event.startTime;
+      const endTime = event.endTime;
+      return endTime - startTime;
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### 在注释中添加同义词
+
+```typescript
+// User account record. Also called: member,
+// subscriber, customer, client.
+// In external calendar APIs, this maps to their
+// "principal" or "identity" concepts.
+interface User {
+  id: string;
+  email: string;
+  calendarToken: string;  // aka "access token", "auth credential"
+}
+```
+
+### 标签和分面
+
+使用 JSDoc 风格的标签进行分类：
+
+```typescript
+/**
+ * Process incoming webhook from Google Calendar.
+ *
+ * @domain calendar-sync
+ * @external google-calendar-api
+ * @rate-limit 100/min (Google's limit, not ours)
+ * @failure-mode Queues failed webhooks for retry
+ * @related syncEvents, refreshCalendarToken
+ */
+async function handleGoogleWebhook(payload: WebhookPayload) {
+  // implementation
+}
+```
+
+### 目录 README 模式
+
+在每个主要目录放置 `README.md` 解释其用途：
+
+```markdown
+# Services Layer
+
+**Purpose**: Business logic and domain operations.
+Services are framework-agnostic (no Express/HTTP concerns).
+
+**Conventions**:
+- One service per domain entity
+- Services may call other services or repositories
+- Services must NOT import from controllers/ (layering violation)
+
+**Testing**: Unit test with mocked repositories.
+See tests/services/ for examples.
+```
+
+---
+
+## 文档格式：llms.txt
+
+### 什么是 llms.txt？
+
+llms.txt 是让文档对 LLM 可发现的轻量级标准。它类似于 AI Agent 的 `robots.txt`——一个简单的索引文件。
+
+**规范**: https://llmstxt.org/
+
+### 为项目创建 llms.txt
+
+```
+# MyProject
+
+Enterprise SaaS platform for event management
+
+## Getting Started
+- Setup: docs/setup.md
+- Architecture: docs/architecture.md
+- API Reference: docs/api.md
+
+## Common Patterns
+- Authentication flow: src/services/auth-service.ts (line 78-125)
+- Error handling: CLAUDE.md#error-patterns (line 150)
+- Rate limiting: src/middleware/rate-limiter.ts (line 45)
+
+## Domain Knowledge
+- Event lifecycle: docs/domain/events.md
+- Payment processing: docs/domain/payments.md
+```
+
+### llms.txt vs MCP 文档服务器
+
+| 方面 | llms.txt | Context7 MCP |
+|------|----------|--------------|
+| **用途** | 静态文档索引 | 运行时库查询 |
+| **设置** | 零配置（只是一个文件） | 需要安装 MCP 服务器 |
+| **内容** | 项目特定文档 | 官方库文档 |
+| **Token 成本** | 低（仅索引，~500 tokens） | 中等 |
+| **使用场景** | 项目 README、架构 | React API、Next.js 模式 |
+
+**最佳实践**：同时使用两者。
+
+---
+
+## Token 高效代码库
+
+### 拆分大文件
+
+**准则**: 文件保持在 500 行以内。Agent 通常一次读取 200-300 行。
+
+```
+# 差：单体文件（1200 行）
+src/services/event-service.ts
+
+# 好：按关注点拆分
+src/services/event/
+├── event-service.ts         (200 行：公共 API + 编排)
+├── event-validator.ts       (150 行：验证逻辑)
+├── event-calendar-sync.ts   (300 行：外部日历同步)
+├── event-conflict-resolver.ts (250 行：重叠检测)
+└── README.md                (解释模块结构)
+```
+
+### 删除显而易见的注释
+
+<Tabs>
+  <TabItem label="浪费 Token">
+    ```typescript
+    // Import React
+    import React from 'react';
+
+    // Import useState hook
+    import { useState } from 'react';
+
+    // Define Props interface
+    interface Props {
+      // User name
+      name: string;
+      // User age
+      age: number;
+    }
+    ```
+  </TabItem>
+  <TabItem label="保留有价值的">
+    ```typescript
+    import React, { useState } from 'react';
+
+    interface Props {
+      name: string;
+      age: number;
+    }
+
+    // Displays user name. Age is required for
+    // future age-gating feature (see ADR-012).
+    function User(props: Props) {
+      return <div>{props.name}</div>;
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+**节省**：从 ~150 tokens 减少到 ~80 tokens（47% 减少），不丢失关键信息。
+
+### 调试输出使用详细标志
+
+```typescript
+export const DEBUG = process.env.DEBUG === 'true';
+
+class EventService {
+  async syncEvent(eventId: string) {
+    if (DEBUG) {
+      console.log(`[EventService.syncEvent] Starting sync for ${eventId}`);
+    }
+    const event = await this.getEvent(eventId);
+    // sync logic
+  }
+}
+```
+
+---
+
+## 测试驱动自主性
+
+### 为什么 TDD 对 Agent 更关键
+
+**人类**: 能从模糊需求推断意图，在实现过程中自我修正。
+
+**Agent**: 严格按测试指定的内容实现。没有测试 = 没有功能。
+
+<Aside type="caution">
+对 Agent 而言，**测试就是规格说明**。手动编写全面的测试。
+</Aside>
+
+### 不要让 Agent 写测试
+
+```
+# 差：
+User: "Implement email validation and write tests for it"
+
+# 好：先自己写测试
+# tests/validation/email.test.ts 已手动编写
+User: "Implement the email validation function to pass
+all tests in tests/validation/email.test.ts"
+```
+
+**原因**：Agent 写的测试可能匹配其实现（循环验证），无法独立验证。
+
+### TDD 工作流
+
+<Steps>
+1. **编写失败测试**（你，人类）
+
+   ```typescript
+   describe('EventService.createEvent', () => {
+     it('prevents double-booking for same user + time', async () => {
+       await eventService.createEvent({
+         userId: 'user-123',
+         startTime: '2026-01-21T10:00:00Z',
+         endTime: '2026-01-21T11:00:00Z'
+       });
+
+       await expect(
+         eventService.createEvent({
+           userId: 'user-123',
+           startTime: '2026-01-21T10:30:00Z',
+           endTime: '2026-01-21T11:30:00Z'
+         })
+       ).rejects.toThrow('Scheduling conflict detected');
+     });
+   });
+   ```
+
+2. **给 Agent 测试**并附加实现约束
+
+   ```
+   User: "Implement EventService.createEvent() to pass
+   the double-booking test. Requirements:
+   - Check conflicts using conflictResolver.detectOverlap()
+   - Throw SchedulingConflictError
+   - See ADR-009 for conflict resolution algorithm"
+   ```
+
+3. **Agent 实现**以通过测试
+
+4. **验证**
+
+   ```bash
+   npm test tests/services/event-service.test.ts
+   ```
+
+5. **迭代**（测试失败则 Agent 修复实现）
+</Steps>
+
+### 测试覆盖率作为防护栏
+
+```json
+{
+  "jest": {
+    "coverageThreshold": {
+      "global": {
+        "statements": 80,
+        "branches": 80,
+        "functions": 80,
+        "lines": 80
+      }
+    }
+  }
+}
+```
+
+---
+
+## 约定与模式
+
+### Agent 熟悉的设计模式
+
+Agent 在大量使用标准设计模式的代码库上训练。利用这一点。
+
+<Tabs>
+  <TabItem label="标准模式（Agent 认识）">
+    ```typescript
+    // Singleton pattern (widely known)
+    class DatabaseConnection {
+      private static instance: DatabaseConnection;
+
+      private constructor() {}
+
+      public static getInstance(): DatabaseConnection {
+        if (!DatabaseConnection.instance) {
+          DatabaseConnection.instance = new DatabaseConnection();
+        }
+        return DatabaseConnection.instance;
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="自定义模式（需要文档）">
+    ```typescript
+    /**
+     * Database connection using Lazy Singleton.
+     *
+     * Pattern: Singleton with lazy initialization.
+     * Why custom: "make()" aligns with our
+     * framework (Laravel-inspired).
+     * Standard Singleton uses "getInstance()" but
+     * we use "make()" for consistency.
+     *
+     * Related: See ADR-004.
+     */
+    class DatabaseConnection {
+      private static conn: DatabaseConnection;
+
+      static make() {
+        return this.conn ?? (this.conn = new DatabaseConnection());
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### "无聊技术"优势
+
+流行框架和库有更多训练数据，Agent 表现更好：
+
+| 框架/库 | GitHub 仓库数 | Agent 表现 |
+|---------|-------------|-----------|
+| React | 10M+ | 优秀 |
+| Express | 5M+ | 优秀 |
+| Vue | 3M+ | 良好 |
+| Svelte | 500K | 一般 |
+| 自定义框架 | &lt;1K | 差 |
+
+**建议**: 除非有充分理由，否则使用主流技术。
+
+---
+
+## 防护栏与验证
+
+### Hook 作为反模式验证器
+
+使用 Hook 强制代码库约定：
+
+```bash
+#!/bin/bash
+# .claude/hooks/PreToolUse.sh
+
+INPUT=$(cat)
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool.name')
+
+if [[ "$TOOL_NAME" == "Edit" ]] || [[ "$TOOL_NAME" == "Write" ]]; then
+  FILE_PATH=$(echo "$INPUT" | jq -r '.tool.input.file_path')
+
+  # 阻止 controller 直接调用 repository（层级违规）
+  if [[ "$FILE_PATH" == *"/controllers/"* ]]; then
+    CONTENT=$(echo "$INPUT" | jq -r '.tool.input.new_string // .tool.input.content')
+
+    if echo "$CONTENT" | grep -q "Repository\\."; then
+      echo "Layering violation: Controllers must call Services, not Repositories" >&2
+      echo "See ADR-011 for architecture rules" >&2
+      exit 2  # Block
+    fi
+  fi
+fi
+
+exit 0  # Allow
+```
+
+### 验证层级总结
+
+| 层级 | 捕获内容 | 速度 | 自动化 |
+|------|---------|------|--------|
+| **Hooks** | 执行前（密钥、反模式） | 即时 | 100% |
+| **Linter** | 语法、风格违规 | &lt;10s | 100% |
+| **类型检查** | 类型不匹配 | &lt;30s | 100% |
+| **测试** | 逻辑错误、功能破坏 | &lt;2min | 100% |
+| **CI 检查** | 覆盖率、TODO、架构 | &lt;5min | 100% |
+| **人工审查** | 意图、安全、上下文 | 小时级 | 手动 |
+
+---
+
+## 交叉引用与知识发现
+
+### 模块交叉引用
+
+```typescript
+// src/services/event-service.ts
+/**
+ * Event management service.
+ *
+ * Related modules:
+ * - src/services/calendar-sync-service.ts (external calendar sync)
+ * - src/services/conflict-resolver.ts (overlap detection)
+ * - src/repositories/event-repository.ts (data access)
+ * - src/jobs/reminder-sender.ts (event reminders via queue)
+ *
+ * See also: ADR-007 (event deletion), ADR-009 (conflict resolution)
+ */
+class EventService {
+  // implementation
+}
+```
+
+### 嵌入式技术文档
+
+将文档放在代码附近，而非独立 wiki：
+
+```
+src/integrations/google-calendar/
+├── google-calendar.ts
+├── google-calendar.test.ts
+├── README.md               ← "How to use integration"
+├── RATE_LIMITS.md          ← "API rate limits + handling"
+└── TROUBLESHOOTING.md      ← "Common errors + solutions"
+```
+
+---
+
+## 使用说明与 API 设计
+
+### 带示例的文档块
+
+```typescript
+/**
+ * Validate email address format and uniqueness.
+ *
+ * Checks:
+ * 1. Valid email format (RFC 5322 compliant)
+ * 2. Not a disposable email domain
+ * 3. Not already registered in database
+ *
+ * @param email - Email address to validate
+ * @returns Promise resolving to true if valid
+ * @throws {ValidationError} If format invalid
+ * @throws {DuplicateEmailError} If already registered
+ *
+ * @example
+ * await validateEmail('user@example.com');  // Returns true
+ *
+ * @example
+ * await validateEmail('invalid-email');
+ * // Throws ValidationError: "Invalid email format"
+ */
+async function validateEmail(email: string | null): Promise<boolean> {
+  // implementation
+}
+```
+
+### 合理的默认值
+
+```typescript
+// 最小用法（应用默认值）
+const client = new GoogleCalendarClient(credentials);
+
+// 仅覆盖需要的选项
+const client = new GoogleCalendarClient(credentials, {
+  timeout: 60000  // 只覆盖 timeout
+});
+```
+
+---
+
+## 实施清单
+
+### Agent 友好代码库评分
+
+**领域知识**（满分 5）
+- CLAUDE.md 包含业务上下文、设计原则、领域术语
+- ADR 记录关键决策
+- 注释解释"为什么"
+- 交叉引用链接相关模块
+- 目录 README 解释模块用途
+
+**可发现性**（满分 6）
+- 使用完整术语（`user` 非 `usr`）
+- 注释包含同义词
+- JSDoc 标签（`@domain`、`@related`）
+- 主要目录有 README
+- CLI 工具有 `--help` 和示例
+- 嵌入式文档在代码附近
+
+**Token 效率**（满分 4）
+- 文件在 500 行以内
+- 移除显而易见的注释
+- 调试输出由详细标志控制
+- 大型生成文件通过 `.claudeignore` 排除
+
+**测试**（满分 5）
+- 测试手动编写（不委托给 Agent）
+- TDD 工作流
+- UI 功能有 E2E 测试
+- CI 中测试覆盖率 &gt;80%
+- 测试覆盖边界情况
+
+**评分标准**：
+- **25-33**: 优秀的 Agent 友好度
+- **18-24**: 良好，有改进空间
+- **10-17**: 一般，存在明显差距
+- **&lt;10**: 差，需要大幅重构
+
+### 快速见效项（2 小时内）
+
+<Steps>
+1. **添加 CLAUDE.md**（30 分钟）
+2. **添加目录 README**（每个目录 15 分钟）
+3. **为热点文件添加交叉引用**（每个文件 10 分钟）
+4. **拆分一个大文件**（30 分钟）
+5. **在 CI 中启用测试覆盖率**（15 分钟）
+</Steps>

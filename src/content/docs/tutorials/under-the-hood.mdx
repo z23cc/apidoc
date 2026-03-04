@@ -1,0 +1,257 @@
+---
+title: "深入内部机制"
+description: "理解 Claude Code 的核心架构：主循环、工具系统、任务管理及内部工作原理"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+本教程揭示 Claude Code 的内部工作原理。理解这些机制可以帮助你更有效地使用它，并在遇到问题时更好地诊断。
+
+---
+
+## 主循环
+
+Claude Code 的核心是一个简单的 `while` 循环：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    主循环（简化版）                           │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   你的提示                                                   │
+│       │                                                     │
+│       ▼                                                     │
+│   ┌────────────────────────────────────────────────────┐    │
+│   │   Claude 推理（无分类器，无路由器）                   │    │
+│   └───────────────────────┬────────────────────────────┘    │
+│                           │                                 │
+│              需要工具？    │                                 │
+│                     ┌─────┴─────┐                           │
+│                    是          否                            │
+│                     │           │                           │
+│                     ▼           ▼                           │
+│              执行工具     文本回复（完成）                    │
+│                     │                                       │
+│                     └──────── 将结果反馈给 Claude            │
+│                                        │                    │
+│                               （循环继续）                   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+<Aside type="note" title="没有复杂的编排">
+Claude Code 内部**没有**：意图分类器或任务路由器、RAG/嵌入管道、DAG 编排器、规划器/执行器分离。模型本身决定何时调用工具、调用哪些工具以及何时完成。
+</Aside>
+
+---
+
+## 工具库
+
+Claude Code 拥有 8 个核心工具：
+
+| 工具 | 用途 |
+|------|------|
+| `Bash` | 执行 shell 命令（通用适配器） |
+| `Read` | 读取文件内容（最多 2000 行） |
+| `Edit` | 修改现有文件（基于 diff） |
+| `Write` | 创建/覆盖文件 |
+| `Grep` | 搜索文件内容（基于 ripgrep） |
+| `Glob` | 按模式查找文件 |
+| `Task` | 派生子 Agent（隔离上下文） |
+| `TodoWrite` | 跟踪进度（旧版，见下文） |
+
+<Aside type="tip">
+`Bash` 是最通用的工具 — 任何能在终端做的事情，Claude 都可以通过它完成。这包括安装包、运行测试、操作 git 等等。
+</Aside>
+
+---
+
+## 任务管理系统
+
+Claude Code 提供两种任务管理方式：
+
+<Tabs>
+  <TabItem label="Tasks API（v2.1.16+）">
+    **推荐方案** — 持久化、跨会话、支持依赖
+
+    | 特性 | 说明 |
+    |------|------|
+    | **持久化** | 磁盘存储（`~/.claude/tasks/`） |
+    | **多会话** | 跨会话存活 |
+    | **依赖关系** | 任务 A 阻塞任务 B |
+    | **协调** | 多 Agent 广播 |
+    | **状态** | `pending` / `in_progress` / `completed` / `failed` |
+
+    **可用工具**：
+    - `TaskCreate` — 创建带层级和依赖的新任务
+    - `TaskUpdate` — 修改任务状态、元数据和依赖
+    - `TaskGet` — 获取单个任务详情
+    - `TaskList` — 列出当前任务列表中的所有任务
+  </TabItem>
+  <TabItem label="TodoWrite（旧版）">
+    **简单方案** — 仅会话内、无持久化
+
+    | 特性 | 说明 |
+    |------|------|
+    | **持久化** | 仅会话内存 |
+    | **多会话** | 会话结束即丢失 |
+    | **依赖关系** | 需手动排序 |
+    | **状态** | `pending` / `in_progress` / `completed` |
+
+    **适用场景**：
+    - 单会话简单实现
+    - 快速修复或探索性编码
+    - Claude Code &lt; v2.1.16
+  </TabItem>
+</Tabs>
+
+### 配置任务持久化
+
+```bash
+# 启用多会话任务持久化
+export CLAUDE_CODE_TASK_LIST_ID="project-name"
+claude
+
+# 示例：项目特定的任务列表
+export CLAUDE_CODE_TASK_LIST_ID="api-v2-auth-refactor"
+claude
+```
+
+<Aside type="caution">
+使用仓库特定的任务列表 ID 以避免跨项目污染。具有相同 ID 的任务会在使用该 ID 的所有会话之间共享。
+</Aside>
+
+### 任务 Schema 示例
+
+```json
+{
+  "id": "task-auth-login",
+  "title": "实现登录端点",
+  "description": "POST /auth/login 带 JWT token 生成",
+  "status": "in_progress",
+  "dependencies": [],
+  "metadata": {
+    "priority": "high",
+    "estimated_duration": "2h",
+    "related_files": ["src/auth/login.ts", "src/middleware/auth.ts"]
+  }
+}
+```
+
+### 何时使用 Tasks API
+
+<CardGrid>
+  <Card title="跨多个编码会话的项目">
+    任务状态在会话之间自动保留
+  </Card>
+  <Card title="复杂任务层级和依赖">
+    任务 A 完成后才能开始任务 B
+  </Card>
+  <Card title="多 Agent 协调场景">
+    多个 Claude 实例共享任务状态
+  </Card>
+  <Card title="上下文压缩后恢复工作">
+    任务状态不受 `/compact` 或 `/clear` 影响
+  </Card>
+</CardGrid>
+
+---
+
+## Tasks API 限制
+
+<Aside type="caution" title="关键限制：字段可见性">
+`TaskList` 只返回 `id`、`subject`、`status`、`owner`、`blockedBy` 字段。`description`、`activeForm`、`metadata` 只在 `TaskGet` 中可见。这意味着查看 10 个任务的描述需要 1 次 `TaskList` + 10 次 `TaskGet` = 11 次 API 调用。
+</Aside>
+
+### 解决方案
+
+<Tabs>
+  <TabItem label="混合方案（推荐）">
+    - 使用 Tasks API 进行**状态跟踪**和**依赖协调**
+    - 使用仓库中的 markdown 文件保存**详细实施计划**
+    - 示例：`docs/plans/auth-refactor.md` + Tasks 用于状态
+  </TabItem>
+  <TabItem label="Subject 摘要模式">
+    - 在 `subject` 字段中存储关键信息（始终在 TaskList 中可见）
+    - `description` 保留给深度上下文（按需用 TaskGet 获取）
+    - 示例 subject：`"[P0] 修复登录 bug (src/auth.ts:45)"` 而非 `"修复 bug"`
+  </TabItem>
+  <TabItem label="选择性获取">
+    - 使用 TaskList 识别需要关注的任务（status、blockedBy）
+    - 只对正在进行的任务调用 TaskGet
+  </TabItem>
+</Tabs>
+
+---
+
+## 任务层级设计
+
+```
+项目（父级）
+└── 功能 A（子级）
+    ├── 组件 A1（叶子任务）
+    │   ├── 实现
+    │   └── 测试（依赖于实现）
+    └── 组件 A2
+```
+
+### 最佳实践
+
+<Steps>
+1. **创建任务时始终定义依赖关系**
+2. 使用**任务 ID**（而非标题）作为依赖引用
+3. 执行前用 `TaskGet` **验证依赖**
+4. 开始工作时标记 `in_progress`（防止并行执行）
+5. 频繁更新状态以保持可见性
+6. 只有完全完成时才标记 `completed`（测试通过、已验证）
+7. 对失败的任务使用 `failed` 状态并附加错误元数据
+</Steps>
+
+### 元数据约定
+
+```json
+{
+  "priority": "high|medium|low",
+  "estimated_duration": "2h",
+  "related_files": ["path/to/file.ts"],
+  "related_issue": "https://github.com/org/repo/issues/123",
+  "type": "feature|bugfix|refactor|test"
+}
+```
+
+---
+
+## 任务列表作为诊断工具
+
+当 Claude 的任务列表与你的意图不匹配时，问题不在 Claude — 在于你的指令。
+
+任务列表是指令清晰度的**镜子**：
+
+```
+你的指令："重构认证系统"
+
+Claude 的任务列表：
+- [ ] 读取所有认证相关文件
+- [ ] 识别代码重复
+- [ ] 提取共享工具
+- [ ] 更新导入
+- [ ] 运行测试
+
+你的反应："这不是我的意思 — 我想从 session 切换到 JWT"
+
+诊断：你的指令有歧义。"重构" 不等于 "替换"。
+```
+
+### 偏差类型及含义
+
+| 偏差类型 | 含义 | 修复 |
+|---------|------|------|
+| 任务太宽泛 | 指令缺乏具体性 | 添加什么、在哪里、如何做、如何验证 |
+| 任务太窄 | 指令过于详细，缺少全局视角 | 陈述目标，而非仅列步骤 |
+| 优先级错误 | 缺少关于什么重要的上下文 | 添加约束和优先级 |
+| 缺少任务 | 隐含知识未共享 | 在提示中明确假设 |
+| 多余任务 | Claude 推断了你未意图的需求 | 添加明确的范围边界 |
+
+<Aside type="tip">
+在初始规划后运行 `TaskList` 作为**健全性检查**。如果超过 30% 的任务让你意外，说明你的提示需要改进。迭代提示，而非任务。
+</Aside>

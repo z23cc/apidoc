@@ -1,0 +1,462 @@
+---
+title: "Custom Commands"
+description: "Accelerate your Claude Code workflow with slash commands and custom commands"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## What Are Slash Commands?
+
+Slash commands are shortcuts for common workflows in Claude Code. You can use built-in commands or create your own custom commands tailored to your team's needs.
+
+<CardGrid>
+  <Card title="Built-in Commands" icon="rocket">
+    Ready-to-use shortcuts for common operations.
+  </Card>
+  <Card title="Custom Commands" icon="add-document">
+    Define reusable workflows with Markdown files.
+  </Card>
+  <Card title="Argument Support" icon="setting">
+    Commands support variable interpolation for flexible parameter passing.
+  </Card>
+  <Card title="Team Sharing" icon="puzzle">
+    Commit to version control for team-wide usage.
+  </Card>
+</CardGrid>
+
+---
+
+## Built-in Commands
+
+Claude Code ships with the following built-in slash commands:
+
+| Command | Action |
+|---------|--------|
+| `/help` | Show all available commands |
+| `/clear` | Clear current conversation |
+| `/compact` | Summarize and compress context |
+| `/status` | Show session info |
+| `/plan` | Enter Plan Mode |
+| `/rewind` | Undo changes |
+| `/simplify` | Review changed code and fix over-engineering |
+| `/batch` | Large-scale changes via parallel worktree agents |
+| `/insights` | Generate usage analytics report |
+| `/exit` | Exit Claude Code |
+
+### The /insights Command
+
+`/insights` analyzes your Claude Code usage history to generate a comprehensive report identifying patterns, friction points, and optimization opportunities.
+
+<Tabs>
+  <TabItem label="What It Analyzes">
+    The command processes your session data to detect:
+
+    - **Project areas**: Clusters your work into thematic areas (e.g., "Frontend Development", "CLI Tooling")
+    - **Interaction style**: Identifies workflow patterns (plan-driven, exploratory, iterative, supervisory)
+    - **Success patterns**: Highlights what works well in your usage
+    - **Friction categories**: Pinpoints recurring issues
+    - **Tool usage**: Tracks which tools you use most and optimization opportunities
+    - **Multi-clauding behavior**: Detects parallel session patterns
+    - **Temporal patterns**: Identifies your most productive time windows
+  </TabItem>
+  <TabItem label="Report Output">
+    Running `/insights` generates an interactive HTML report at `~/.claude/usage-data/report.html` containing:
+
+    - **At a Glance Summary**: What's working, what's hindering, quick wins, ambitious workflows
+    - **What You Work On**: 3-5 auto-detected project areas
+    - **How You Use Claude Code**: Narrative analysis of your interaction style
+    - **Impressive Things You Did**: 3 "big wins" -- sophisticated workflows detected
+    - **Where Things Go Wrong**: 3 friction categories with examples and mitigations
+    - **Features to Try**: 6+ CLAUDE.md additions, 3 features with setup code
+    - **New Usage Patterns**: 3 patterns with copyable prompts
+    - **Interactive Elements**: Copy buttons, charts, navigation TOC
+  </TabItem>
+</Tabs>
+
+```bash
+# Basic usage
+/insights
+
+# Example output
+# 1281 sessions · 10,442 messages · 3445h · 1160 commits
+# 2025-12-15 to 2026-02-06
+# Report URL: file:///Users/you/.claude/usage-data/report.html
+
+# Open the report
+open ~/.claude/usage-data/report.html          # macOS
+xdg-open ~/.claude/usage-data/report.html      # Linux
+```
+
+<Aside type="tip">
+Recommended frequency: Run `/insights` monthly, `/status` per session. Most effective after major projects, when feeling stuck, or before optimizing CLAUDE.md.
+</Aside>
+
+### The /simplify Command
+
+`/simplify` (available from v2.1.63+) reviews recently changed code for over-engineering and redundant abstractions, then automatically fixes the issues it finds.
+
+```bash
+# Review everything changed since last commit
+/simplify
+
+# Focus on a specific concern
+/simplify focus on error handling
+/simplify check for unnecessary dependencies
+/simplify look at the database query patterns
+```
+
+It analyzes code at the architecture and structure level:
+
+| Aspect | Description |
+|--------|-------------|
+| **Reuse** | Duplicated logic that could be extracted |
+| **Quality** | Patterns that reduce readability or maintainability |
+| **Efficiency** | Algorithmic and structural improvements |
+
+<Aside type="note">
+`/simplify` operates at the architecture level, complementing tools like ESLint or Prettier rather than replacing them.
+</Aside>
+
+### The /batch Command
+
+`/batch` (available from v2.1.63+) orchestrates large-scale codebase changes by distributing work across 5-30 parallel agents in isolated git worktrees, each opening its own pull request.
+
+```bash
+/batch migrate from react to vue
+/batch replace all uses of lodash with native equivalents
+/batch add type annotations to all JavaScript files
+```
+
+<Aside type="tip">
+Both `/simplify` and `/batch` are bundled slash commands that ship with Claude Code v2.1.63+. No configuration required.
+</Aside>
+
+---
+
+## Creating Custom Commands
+
+Custom commands are Markdown files placed in the `.claude/commands/` directory that define workflows for Claude to follow.
+
+### Directory Structure
+
+```
+.claude/commands/
+├── tech/           # Development workflows
+│   ├── commit.md
+│   └── pr.md
+├── product/        # Product workflows
+│   └── problem-framer.md
+└── support/        # Support workflows
+    └── ticket-analyzer.md
+```
+
+### Naming Convention
+
+Commands are invoked using the directory path and filename:
+
+| File Location | Invocation |
+|---------------|------------|
+| `tech/commit.md` | `/tech:commit` |
+| `tech/pr.md` | `/tech:pr` |
+| `product/problem-framer.md` | `/product:problem-framer` |
+
+### Variable Interpolation
+
+Commands can accept arguments:
+
+```markdown
+# My Command
+
+You received the following arguments: $ARGUMENTS[0] $ARGUMENTS[1] $ARGUMENTS[2]
+(Or use shorthand: $0 $1 $2)
+
+Process them accordingly.
+```
+
+Usage:
+```
+/tech:deploy production
+```
+
+`$ARGUMENTS[0]` (or `$0`) becomes `production`.
+
+<Aside type="caution">
+**Breaking Change (v2.1.19)**: The argument syntax changed from dot notation (`$ARGUMENTS.0`) to bracket syntax (`$ARGUMENTS[0]`). Update any existing custom commands using the old syntax.
+</Aside>
+
+---
+
+## Command Template
+
+Here is the recommended structure for custom commands:
+
+```markdown
+# Command Name
+
+## Purpose
+
+[Brief description of what this command does]
+
+## Process
+
+Follow these steps:
+
+1. **Step 1 Name**
+   [Detailed instructions]
+
+2. **Step 2 Name**
+   [Detailed instructions]
+
+3. **Step 3 Name**
+   [Detailed instructions]
+
+## Arguments
+
+If arguments provided:
+- First argument: $ARGUMENTS[0] (or $0)
+- Second argument: $ARGUMENTS[1] (or $1)
+- Handle accordingly: [Instructions]
+If no arguments: [Default behavior]
+
+## Output Format
+
+[Expected output structure]
+
+## Examples
+
+### Example 1
+Input: `/command arg1`
+Output: [Expected result]
+
+## Error Handling
+
+If [error condition]:
+- [Recovery action]
+```
+
+---
+
+## Practical Command Examples
+
+### Example 1: Commit Command
+
+<Steps>
+1. Create `commit.md` inside `.claude/commands/tech/`
+2. Add the content below
+3. Invoke with `/tech:commit` or `/tech:commit "fix login issue"`
+</Steps>
+
+```markdown
+# Commit Current Changes
+
+## Purpose
+
+Create a well-formatted git commit following Conventional Commits.
+
+## Process
+
+1. **Check Status**
+   Run `git status` to see all changes.
+
+2. **Analyze Changes**
+   Run `git diff` to understand what changed.
+
+3. **Review History**
+   Run `git log -5 --oneline` to see recent commit style.
+
+4. **Draft Message**
+   Create commit message following:
+   - `feat`: New feature
+   - `fix`: Bug fix
+   - `refactor`: Code restructuring
+   - `docs`: Documentation
+   - `test`: Test changes
+   - `chore`: Maintenance
+
+5. **Stage and Commit**
+   git add [relevant files]
+   git commit -m "[type](scope): description"
+
+6. **Verify**
+   Run `git status` to confirm commit succeeded.
+
+## Arguments
+
+If $ARGUMENTS[0] provided:
+- Use as commit message hint: "$0"
+```
+
+### Example 2: PR Command
+
+```markdown
+# Create Pull Request
+
+## Purpose
+
+Create a well-documented pull request on GitHub.
+
+## Process
+
+1. **Check Branch State**
+   - `git status` - Verify clean working directory
+   - `git branch` - Confirm on feature branch
+   - `git log main..HEAD` - Review all commits
+
+2. **Analyze Changes**
+   - `git diff main...HEAD` - See all changes vs main
+   - Understand the full scope of the PR
+
+3. **Push if Needed**
+   If branch not pushed:
+   git push -u origin [branch-name]
+
+4. **Create PR**
+   gh pr create --title "[title]" --body "[body]"
+
+## PR Body Template
+
+## Summary
+[1-3 bullet points describing changes]
+
+## Changes
+- [Specific change 1]
+- [Specific change 2]
+
+## Testing
+- [ ] Unit tests pass
+- [ ] Manual testing completed
+- [ ] No regressions
+
+## Arguments
+
+If $ARGUMENTS[0] provided:
+- Use as PR title hint: "$0"
+
+## Error Handling
+
+If not on feature branch:
+- WARN: "Create a feature branch first"
+
+If working directory dirty:
+- ASK: "Commit changes first?"
+```
+
+### Example 3: Problem Framer Command
+
+```markdown
+# Problem Framer
+
+## Purpose
+
+Challenge and refine problem definitions before solution design.
+
+## Process
+
+1. **Capture Initial Problem**
+   Record the problem as stated by user.
+
+2. **5 Whys Analysis**
+   Ask "Why?" 5 times to find root cause:
+   - Why 1: [First answer]
+   - Why 2: [Deeper answer]
+   - Why 3: [Even deeper]
+   - Why 4: [Getting to root]
+   - Why 5: [Root cause]
+
+3. **Stakeholder Analysis**
+   - Who is affected?
+   - Who has decision power?
+   - Who benefits from solution?
+
+4. **Constraint Identification**
+   - Technical constraints
+   - Business constraints
+   - Time constraints
+   - Resource constraints
+
+5. **Success Criteria**
+   Define measurable outcomes:
+   - [Metric 1]: [Target]
+   - [Metric 2]: [Target]
+
+6. **Reframe Problem**
+   Write refined problem statement:
+   "How might we [action] for [user] so that [outcome]?"
+
+## Output Format
+
+### Problem Analysis Report
+
+**Original Problem**: [As stated]
+**Root Cause**: [From 5 Whys]
+**Refined Problem Statement**: "How might we [X] for [Y] so that [Z]?"
+**Success Criteria**: 1. [Measurable outcome]
+**Constraints**: [Constraint list]
+```
+
+---
+
+## Deep Dive: /insights Architecture
+
+### Analysis Pipeline
+
+The `/insights` analysis pipeline processes session data through 7 stages:
+
+<Steps>
+1. **Session Filtering**: Loads from `~/.claude/projects/`, excludes agent sub-sessions, sessions with fewer than 2 user messages, or under 1 minute duration
+2. **Transcript Summarization**: Chunks sessions exceeding 30,000 characters into 25,000-character segments
+3. **Facet Extraction**: Uses Claude Haiku to classify sessions into structured categories
+4. **Aggregated Analysis**: Detects cross-session patterns and recurring workflows
+5. **Executive Summary**: Generates "At a Glance" synthesis across four dimensions
+6. **Report Generation**: Renders interactive HTML with visualizations and narrative sections
+7. **Facet Caching**: Saves classifications to `~/.claude/usage-data/facets/` for fast subsequent runs
+</Steps>
+
+### Classification Dimensions
+
+<Tabs>
+  <TabItem label="Goals">
+    13 goal types: Debug/Investigate, Implement Feature, Fix Bug, Write Script/Tool, Refactor Code, Configure System, Create PR/Commit, Analyze Data, Understand Codebase, Write Tests, Write Docs, Deploy/Infra, Cache Warmup
+  </TabItem>
+  <TabItem label="Friction Types">
+    12 friction categories: Misunderstood requests, Wrong approach, Buggy code, User rejected actions, Claude blocked, Early user stoppage, Wrong file locations, Over-engineering, Slowness/verbosity, Tool failures, Unclear requests, External issues
+  </TabItem>
+  <TabItem label="Satisfaction">
+    6 levels: Frustrated, Dissatisfied, Likely Satisfied, Satisfied, Happy, Unsure
+  </TabItem>
+  <TabItem label="Outcomes">
+    4 states: Not Achieved, Partially Achieved, Mostly Achieved, Fully Achieved
+  </TabItem>
+</Tabs>
+
+### Comparison with Other Analytics
+
+| Tool | Scope | Output | Use Case |
+|------|-------|--------|----------|
+| `/insights` | Session behavior, friction, patterns | Interactive HTML report | Workflow optimization |
+| `/status` | Current session only | Text summary | Real-time monitoring |
+| `ccboard` | Economics, cost analysis | TUI/Web dashboard | Budget tracking |
+| Git history | Code changes only | Commit log | Delivery metrics |
+
+<Aside type="tip">
+**Best practice**: Run `/insights` monthly, `/status` per session, and `ccboard` weekly for comprehensive visibility into your Claude Code usage.
+</Aside>
+
+---
+
+## Best Practices
+
+<CardGrid>
+  <Card title="Organize by Function" icon="seti:folder">
+    Structure directories by team function: `tech/`, `product/`, `support/` for clear organization.
+  </Card>
+  <Card title="Detailed Steps" icon="list-format">
+    Include clear step-by-step instructions so Claude executes precisely.
+  </Card>
+  <Card title="Flexible Arguments" icon="setting">
+    Support both parameterized invocations and sensible defaults when no arguments are provided.
+  </Card>
+  <Card title="Error Handling" icon="warning">
+    Anticipate error scenarios and define recovery strategies for robust commands.
+  </Card>
+</CardGrid>

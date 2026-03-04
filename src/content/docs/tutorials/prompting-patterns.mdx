@@ -1,0 +1,225 @@
+---
+title: "提示词模式"
+description: "Claude Code 中有命名的提示词模式，帮助你更有效地与 AI 编码助手交互"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+可记忆的命名模式，用于与 Claude Code 的高效交互。这些模式来源于社区最佳实践，帮助你更有效地沟通。
+
+---
+
+## "As If" 模式
+
+通过建立上下文和标准来设定质量期望。
+
+**模式**: "Implement as if you were a [角色] at [高标准公司/场景]"
+
+```markdown
+# 高质量代码
+Implement this authentication system as if you were
+a senior security engineer at a major bank.
+
+# 生产就绪
+Review this code as if preparing for a SOC2 audit.
+
+# 性能优先
+Optimize this function as if it will handle
+10,000 requests per second.
+```
+
+<Aside type="tip">
+**为什么有效**: 激活相关知识模式，将输出质量提升到与所述上下文匹配的水平。
+</Aside>
+
+---
+
+## 约束模式
+
+通过添加明确限制来强制创造性解决方案。
+
+**模式**: "Solve this [with constraint X] [without using Y]"
+
+```markdown
+# 依赖约束
+Implement this feature without adding any new dependencies.
+
+# 规模约束
+Solve this in under 50 lines of code.
+
+# 时间约束（执行）
+This must complete in under 100ms.
+
+# 简洁约束
+Use only standard library functions.
+```
+
+<Aside type="tip">
+**为什么有效**: 约束防止过度工程化，迫使聚焦于本质解决方案。
+</Aside>
+
+---
+
+## "先解释" 模式
+
+强制在实现之前进行规划。
+
+**模式**: "Before implementing, explain your approach in [N] sentences"
+
+<Tabs>
+  <TabItem label="简单规划">
+    ```markdown
+    Before writing code, explain in 2-3 sentences
+    how you'll approach this.
+    ```
+  </TabItem>
+  <TabItem label="详细规划">
+    ```markdown
+    Before implementing, outline:
+    1. What components you'll modify
+    2. What edge cases you've considered
+    3. What could go wrong
+    ```
+  </TabItem>
+  <TabItem label="权衡分析">
+    ```markdown
+    Before choosing an approach, explain 2-3 alternatives
+    and why you'd pick one.
+    ```
+  </TabItem>
+</Tabs>
+
+<Aside type="tip">
+**为什么有效**: 防止过早编码，尽早捕获误解。对复杂任务特别有用。
+</Aside>
+
+---
+
+## "橡皮鸭" 模式
+
+通过让 Claude 提问来协作调试。
+
+**模式**: "I'm stuck on [X]. Ask me questions to help me figure it out."
+
+```markdown
+# 调试
+I'm stuck on why this test is failing.
+Ask me questions to help diagnose the issue.
+
+# 设计
+I can't decide on the right architecture.
+Ask me questions about my requirements.
+
+# 问题理解
+I don't fully understand what I need to build.
+Ask clarifying questions.
+```
+
+<Aside type="tip">
+**为什么有效**: 通常问题在于不清楚的需求或假设。提问能揭示隐藏的约束。
+</Aside>
+
+---
+
+## 渐进式模式
+
+通过验证逐步构建复杂功能。
+
+**模式**: "Let's build this incrementally. Start with [最小版本], then we'll add [功能]."
+
+<Tabs>
+  <TabItem label="功能开发">
+    ```markdown
+    Build the user registration incrementally:
+    1. First: Basic form that saves to database
+    2. Then: Email validation
+    3. Then: Password strength requirements
+    4. Finally: Email verification flow
+
+    Show me step 1 first.
+    ```
+  </TabItem>
+  <TabItem label="重构">
+    ```markdown
+    Refactor this incrementally.
+    First extract the validation logic,
+    run tests, then we'll continue.
+    ```
+  </TabItem>
+</Tabs>
+
+<Aside type="tip">
+**为什么有效**: 降低风险，在每一步进行验证，始终保持代码可运行。
+</Aside>
+
+---
+
+## 边界模式
+
+定义明确的范围，防止过度工程化。
+
+**模式**: "Only modify [X]. Don't touch [Y]."
+
+```markdown
+# 文件范围
+Only modify auth.ts. Don't change any other files.
+
+# 函数范围
+Fix just the calculateTotal function.
+Don't refactor surrounding code.
+
+# 功能范围
+Add the logout button only.
+Don't add session management or remember-me features.
+```
+
+<Aside type="tip">
+**为什么有效**: 防止范围蔓延，保持更改聚焦且可审查。
+</Aside>
+
+---
+
+## 模式组合
+
+不同场景适合不同的模式组合：
+
+| 场景 | 模式组合 |
+|------|---------|
+| 关键功能 | As If + 先解释 + 渐进式 |
+| 快速修复 | 约束 + 边界 |
+| 调试会话 | 橡皮鸭 + 渐进式 |
+| 架构决策 | 先解释 + As If |
+| 重构 | 边界 + 渐进式 + 约束 |
+
+---
+
+## 反模式
+
+应避免的提示词反模式：
+
+| 反模式 | 问题 | 更好的方式 |
+|--------|------|-----------|
+| "Make it perfect" | 标准未定义 | 使用 "As If" 模式指定具体上下文 |
+| "Fix everything" | 范围爆炸 | 使用 "边界" 模式 |
+| "Just do it" | 缺乏验证 | 使用 "先解释" 模式 |
+| "Make it fast" | 约束模糊 | 指定具体："under 100ms" |
+| 过度详细描述 | 上下文污染 | 仅聚焦相关约束 |
+
+---
+
+## 实践建议
+
+<CardGrid>
+  <Card title="新手起步" icon="rocket">
+    从 **"先解释"** 和 **"边界"** 模式开始。它们最简单且效果最直接。
+  </Card>
+  <Card title="日常开发" icon="pencil">
+    **渐进式** 模式是日常功能开发的默认选择，配合 **约束** 模式保持简洁。
+  </Card>
+  <Card title="疑难调试" icon="magnifier">
+    **橡皮鸭** 模式帮助你理清思路，让 Claude 引导你发现问题根源。
+  </Card>
+  <Card title="关键系统" icon="approve-check">
+    对安全或性能关键的系统，组合使用 **As If** + **先解释** + **渐进式**。
+  </Card>
+</CardGrid>

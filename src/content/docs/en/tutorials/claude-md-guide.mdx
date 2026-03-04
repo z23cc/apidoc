@@ -1,0 +1,329 @@
+---
+title: "CLAUDE.md Configuration & Team Adoption"
+description: "CLAUDE.md configuration strategies and best practices for team adoption of Claude Code"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+CLAUDE.md is the core configuration file for Claude Code, determining how Claude understands your project. This guide covers configuration strategies, team adoption paths, and solutions for common issues.
+
+<Aside type="caution">
+Claude Code is still young (~1 year). These are starting points based on observed patterns, not proven best practices. Adapt heavily to your context.
+</Aside>
+
+---
+
+## What We Know (Empirical Data)
+
+Some patterns have emerged from practitioner studies and team retrospectives:
+
+| Finding | Data | Implication |
+|---------|------|-------------|
+| **Scope matters most** | 1-3 files: ~85% success, 8+ files: ~40% | Start small, expand gradually |
+| **CLAUDE.md sweet spot** | 4-8KB optimal, >16KB degrades coherence | Concise over comprehensive |
+| **Session limits** | 15-25 turns before constraint drift | Reset for new tasks |
+| **Script generation ROI** | 70-90% time savings reported | Best first use case |
+| **Exploration before implementation** | +20-30% decision quality | Ask for alternatives first |
+
+---
+
+## Choosing Your Adoption Path
+
+<CardGrid>
+  <Card title="Turnkey Quickstart" icon="rocket">
+    Limited setup time? Minimal config, iterate based on friction.
+  </Card>
+  <Card title="Autonomous Learning" icon="open-book">
+    Solo developer? Learn concepts first, configure when needed.
+  </Card>
+  <Card title="Hybrid Approach" icon="setting">
+    Small team (4-10)? Shared basics + room for personal preferences.
+  </Card>
+  <Card title="Standardized" icon="list-format">
+    Larger team (10+)? Consistency matters more at scale.
+  </Card>
+</CardGrid>
+
+### Decision Tree
+
+```
+Starting Claude Code?
+|
++-- Need to ship today?
+|   +-- YES --> Turnkey Quickstart
+|   +-- NO  |
+|
++-- Team needs shared conventions?
+|   +-- YES --> Turnkey + document what matters
+|   +-- NO  |
+|
++-- Want to understand before configuring?
+    +-- YES --> Autonomous Learning Path
+    +-- NO  --> Turnkey, adjust as you go
+```
+
+---
+
+## Turnkey Quickstart
+
+<Steps>
+1. **Create Minimal Config**
+
+   ```bash
+   mkdir -p .claude
+   ```
+
+   Create `.claude/CLAUDE.md`:
+
+   ```markdown
+   # Project: [your-project-name]
+
+   ## Stack
+   - Runtime: [Node 20 / Python 3.11 / etc.]
+   - Framework: [Next.js / FastAPI / etc.]
+
+   ## Commands
+   - Test: `npm test` or `pytest`
+   - Lint: `npm run lint` or `ruff check`
+
+   ## Convention
+   - [One rule you care most about, e.g., "TypeScript strict mode required"]
+   ```
+
+2. **Verify Setup**
+
+   ```bash
+   claude
+   ```
+
+   Then ask:
+   ```
+   What's this project's test command?
+   ```
+
+   **Pass**: Returns your configured command.
+   **Fail**: CLAUDE.md not loaded -- check path is `.claude/CLAUDE.md` or `./CLAUDE.md`
+
+3. **First Real Task**
+
+   ```bash
+   claude "Review the README and suggest improvements"
+   ```
+
+   Claude should reference your stack and conventions automatically.
+
+   **Done.** Add more config only when you hit friction.
+</Steps>
+
+---
+
+## Autonomous Learning Path
+
+If you prefer understanding before configuring, here is a progressive approach.
+
+### Phase 1: Build a Mental Model
+
+**Goal**: Understand how Claude Code operates before adding config.
+
+Core concept: Claude works in a loop -- prompt -> plan -> execute -> verify.
+Complete a few real tasks with zero config. Notice where friction appears.
+
+### Phase 2: Context Management
+
+**Goal**: Understand the main constraint of the tool.
+
+The general idea (exact thresholds vary by use case):
+- Low usage: work freely
+- Medium usage: be more selective
+- High usage: consider `/compact`
+- Near limit: `/clear` to reset
+
+<Aside type="tip">
+Check `/status` periodically to see how your usage patterns develop.
+</Aside>
+
+### Phase 3: Memory Files
+
+**Goal**: Give Claude project context.
+
+Precedence: project `.claude/CLAUDE.md` > global `~/.claude/CLAUDE.md`.
+Create a minimal CLAUDE.md and test if Claude picks it up.
+
+### Phase 4: Extensions (When Friction Appears)
+
+Add complexity only when you hit real problems:
+
+| Friction | Possible Solution |
+|----------|-------------------|
+| Repeating same task often | Consider an agent |
+| Security concern | Consider a hook |
+| Need external tool access | Consider MCP |
+| AI repeats same mistake | Add a specific rule |
+
+---
+
+## Sanity Checks
+
+### Basic Setup Works
+
+```bash
+claude --version          # Responds with version
+claude /status            # Shows context info
+claude /mcp               # Lists MCP servers (may be empty)
+```
+
+If these fail: installation issue -- try `claude doctor`.
+
+### Config Is Being Read
+
+**Test**: Ask Claude "What's the test command for this project?"
+
+If it returns your configured command, CLAUDE.md is loaded. If not, check the path.
+
+### Extensions Feel Useful (Or Not Needed)
+
+You have either created something helpful (agent, hook, command), or you have not needed to -- both are fine. Extensions are optional. Do not add them just to have them.
+
+---
+
+## Common Pitfalls
+
+| Pattern | What Happens | Alternative |
+|---------|--------------|-------------|
+| **Large copied config** | Rules get ignored, unclear what matters | Start small, add based on friction |
+| **Over-engineering setup** | Time spent configuring instead of coding | Use templates as starting point |
+| **No shared conventions** | Team members diverge, onboarding confusion | Document a few essentials |
+| **Everything enabled immediately** | Complexity without clear benefit | Enable features when you need them |
+
+---
+
+## Team Size Considerations
+
+### Solo / Small Team (2-3)
+
+**Typical structure**:
+```
+./CLAUDE.md                    # Project basics, committed
+~/.claude/CLAUDE.md            # Personal preferences
+```
+
+**What tends to work**:
+- Short project CLAUDE.md with stack and main commands
+- Personal config for model preferences, flags
+- Extensions only if you find yourself repeating tasks often
+
+### Medium Team (4-10)
+
+**Typical structure**:
+```
+./CLAUDE.md                    # Team conventions (committed)
+./.claude/settings.json        # Shared hooks (committed)
+~/.claude/CLAUDE.md            # Individual preferences (not committed)
+```
+
+**Shared vs. personal split**:
+
+| Shared (repo) | Personal (~/.claude) |
+|---------------|----------------------|
+| Test/lint commands | Model preferences |
+| Project conventions | Custom agents |
+| Commit format | Flag defaults |
+
+### Larger Team (10+)
+
+**Typical structure**:
+```
+./CLAUDE.md                    # Documented, committed
+./.claude/settings.json        # Standard hooks, committed
+./.claude/agents/              # Shared agents, committed
+~/.claude/CLAUDE.md            # Personal additions
+```
+
+**What tends to work**:
+- Documented conventions with rationale
+- Standardized hooks across the team
+- Onboarding that covers basics like `/status`
+
+<Aside>
+Watch for config drift. Without some coordination, setups diverge over time. Whether that matters depends on your team.
+</Aside>
+
+---
+
+## Common Scenarios
+
+### "I'm evaluating Claude Code for my team"
+
+<Steps>
+1. Install: `npm i -g @anthropic-ai/claude-code`
+2. Run in an existing project: `claude`
+3. Try a real task: `claude "Analyze this codebase architecture"`
+4. Check `/status` to understand token usage
+</Steps>
+
+**Questions to answer**:
+- Does Claude understand your stack without config?
+- Does a minimal CLAUDE.md improve results?
+- Can your team learn context management basics?
+
+Consider skipping advanced features (MCP, hooks, agents) during initial evaluation.
+
+### "Claude keeps making the same mistake"
+
+**Tempting**: Add many rules to prevent it.
+
+**Often better**: Add one specific rule, test if it works, iterate.
+
+```markdown
+## [Specific issue]
+When doing [X], avoid [specific mistake].
+Instead: [correct approach]
+```
+
+If the rule does not help, it might be too vague. Make it more specific or reconsider if rules are the right solution.
+
+### "I inherited a large CLAUDE.md"
+
+<Steps>
+1. Ask Claude to summarize what the CLAUDE.md says
+2. Compare to what the team actually does
+3. Remove rules that are not followed or referenced
+4. Keep what is genuinely useful
+</Steps>
+
+**Heuristic**: If you cannot explain why a rule exists, consider removing it.
+
+### "When should I add more complexity?"
+
+| Signal | Possible Response |
+|--------|-------------------|
+| Repeating the same prompt often | Consider a command |
+| Security concern | Consider a hook |
+| Need external tool access | Consider MCP |
+| Same questions from team | Consider documentation |
+
+But also: maybe you do not need more complexity. Simple setups work for many teams.
+
+---
+
+## Quick Reference
+
+### Useful Commands
+
+| Command | Purpose |
+|---------|---------|
+| `/status` | Check context usage |
+| `/compact` | Compress context when it is high |
+| `/clear` | Reset context entirely |
+| `/plan` | Enter planning mode |
+| `/model` | Switch between models |
+
+### Model Costs (Relative)
+
+| Model | Cost | Typical Use Cases |
+|-------|------|-------------------|
+| Haiku | $ | Simple tasks, quick responses |
+| Sonnet | $$ | General development |
+| Opus | $$$ | Complex analysis, architecture |
+
+Most people start with Sonnet. Adjust based on your experience.

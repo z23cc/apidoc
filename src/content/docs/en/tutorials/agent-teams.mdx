@@ -1,0 +1,352 @@
+---
+title: Agent Teams Multi-Agent Collaboration
+description: Orchestrate multiple Claude Code sessions working in parallel with Agent Teams
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## What Are Agent Teams?
+
+Agent Teams is an experimental Claude Code feature that lets you orchestrate **multiple Claude Code sessions** working together on a shared project. One session acts as the team lead, coordinating work, assigning tasks, and synthesizing results. Teammates work independently, each with its own context window, and can **communicate directly with each other**.
+
+<CardGrid>
+  <Card title="Real Collaboration" icon="rocket">
+    Teammates message each other, share discoveries, and challenge assumptions — not just report to the main agent.
+  </Card>
+  <Card title="Shared Task List" icon="list-format">
+    Central work queue visible to all agents, with task states and dependency tracking.
+  </Card>
+  <Card title="Independent Context" icon="open-book">
+    Each teammate gets its own full context window without polluting others.
+  </Card>
+  <Card title="Native Integration" icon="approve-check-circle">
+    Built into Claude Code core. No external dependencies or fragile scripts.
+  </Card>
+</CardGrid>
+
+<Aside>
+Agent Teams shipped as an experimental feature with the Opus 4.6 release and requires an environment variable to enable.
+</Aside>
+
+---
+
+## Subagents vs Agent Teams
+
+Both let you parallelize work, but they operate at different levels. The deciding question: **do your workers need to communicate with each other?**
+
+| Feature | Subagents | Agent Teams |
+|---------|-----------|-------------|
+| **Context** | Own window, results summarized back to caller | Own window, fully independent |
+| **Communication** | Report results back to the main agent only | Teammates message each other directly |
+| **Coordination** | Main agent manages all work | Shared task list with self-coordination |
+| **Best for** | Focused tasks where only the result matters | Complex work requiring discussion and collaboration |
+| **Token cost** | Lower (results summarized back) | Higher (each teammate is a separate Claude instance) |
+| **Communication pattern** | Hub-and-spoke (all through main agent) | Mesh (any teammate to any teammate) |
+| **Setup** | None (built into Claude Code) | Environment variable to enable |
+
+**Analogy**: Subagents are contractors you send on separate errands. Agent Teams is a project team sitting in the same room — each working on their piece while staying in sync through conversation.
+
+---
+
+## When to Use Agent Teams
+
+Agent Teams add coordination overhead and use significantly more tokens. They work best when **teammates can operate independently on distinct scopes while still benefiting from communication**.
+
+### Strong Use Cases
+
+| Scenario | Description |
+|----------|-------------|
+| **Research and review** | Multiple teammates investigate different aspects simultaneously, share and challenge findings |
+| **New modules or features** | Teammates each own a separate component without stepping on each other's files |
+| **Debugging with competing hypotheses** | Teammates test different theories in parallel, actively trying to disprove each other |
+| **Cross-layer coordination** | Changes spanning frontend, backend, and tests, each owned by a different teammate |
+| **Debate and consensus** | Multiple teammates argue different positions on an architectural decision |
+| **Large-scale classification** | Teammates divide a large dataset and process segments independently |
+
+### When to Skip Agent Teams
+
+- **Sequential tasks** — single session is more efficient
+- **Same-file edits** — leads to conflicts
+- **Tightly dependent work** — subagent patterns are more cost-effective
+- **Independent parallel changes without communication needs** — `/batch` is simpler
+- **Simple parallel execution** — async workflows without the collaboration layer
+
+---
+
+## Quick Start
+
+<Steps>
+1. **Enable Agent Teams**
+
+   Set the environment variable:
+
+   ```bash
+   export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+   ```
+
+   Or add to `settings.json` for persistence:
+
+   ```json
+   {
+     "env": {
+       "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+     }
+   }
+   ```
+
+2. **Describe Your Task and Team Structure**
+
+   Tell Claude what you need in natural language. Be specific about roles and scope:
+
+   ```
+   Create an agent team to review our authentication system. Spawn three teammates:
+   - Security reviewer: audit for vulnerabilities, check token handling
+   - Performance analyst: profile response times, identify bottlenecks
+   - Test coverage checker: verify edge cases, find untested paths
+   Have them share findings and coordinate through the task list.
+   ```
+
+3. **Watch the Team Form and Steer**
+
+   Claude creates a team lead (your main session), spawns teammates, and distributes work through the shared task list.
+
+   Keyboard shortcuts:
+
+   | Shortcut | Action |
+   |----------|--------|
+   | Shift+Down | Select teammates (with wrapping) |
+   | Ctrl+T | View task list |
+   | Enter | View selected session |
+   | Escape | Interrupt |
+
+4. **Clean Up**
+
+   When work is done, shut down teammates:
+
+   ```
+   Ask all teammates to shut down, then clean up the team.
+   ```
+
+   <Aside type="caution">
+   Always use the lead to clean up. Shut down all teammates first — the lead won't clean up while teammates are still running.
+   </Aside>
+</Steps>
+
+### Real-World Performance
+
+- Teammates typically spawn within **20-30 seconds** and begin producing results within the first minute
+- A 3-teammate team uses roughly **3-4x the tokens** of a single session doing the same work sequentially
+- For complex tasks, time savings more than justify the cost
+
+---
+
+## Architecture
+
+Agent Teams has four components working together:
+
+```
+┌──────────────────────────────────────────────┐
+│             Team Lead (Main Session)          │
+│  Creates team, spawns teammates, assigns tasks│
+└────────┬──────────────┬──────────────┬───────┘
+         │              │              │
+    ┌────▼────┐   ┌────▼────┐   ┌────▼────┐
+    │Teammate │←→│Teammate │←→│Teammate │
+    │  A: API │   │  B: DB  │   │ C: Test │
+    └─────────┘   └─────────┘   └─────────┘
+         │              │              │
+         └──────────────┼──────────────┘
+                        │
+              ┌─────────▼─────────┐
+              │  Shared Task List  │
+              └───────────────────┘
+```
+
+### Components
+
+| Component | Purpose |
+|-----------|---------|
+| **Team Lead** | Your main Claude Code session. Creates the team, spawns teammates, assigns tasks, synthesizes results |
+| **Teammates** | Separate Claude Code instances. Each gets its own context window and works on assigned tasks |
+| **Shared Task List** | Central work queue all agents can see. Tasks have states (pending/in progress/completed) and dependencies |
+| **Mailbox** | Messaging system for communication between agents |
+
+### File Locations
+
+| File | Path |
+|------|------|
+| Team config | `~/.claude/teams/{team-name}/config.json` |
+| Task list | `~/.claude/tasks/{team-name}/` |
+
+### Teammate Initialization
+
+When spawned, a teammate loads the same project context as a regular Claude Code session:
+
+- Your `CLAUDE.md`
+- MCP servers
+- Skills
+
+It also receives the spawn prompt from the lead. **The lead's conversation history does not carry over.**
+
+### Communication Methods
+
+| Method | Description |
+|--------|-------------|
+| Automatic message delivery | System handles delivery |
+| Idle notifications | Notified when a teammate becomes idle |
+| Shared task list | Visible to all teammates |
+| Direct messages | Sent to a specific teammate |
+| Broadcasts | Sent to all teammates (use sparingly — cost scales with team size) |
+
+### Permissions
+
+Teammates start with the lead's permission settings. You can change individual teammate modes after spawning, but **not at spawn time**.
+
+---
+
+## Practical Examples
+
+### Example 1: Payment Module Refactor
+
+```
+Create an agent team to refactor the payment module. Spawn three teammates:
+- API layer owner: refactor payment API endpoints and request validation
+- Database migration owner: update database schema and migration scripts
+- Test coverage owner: ensure all changes have complete test coverage
+Have them coordinate through the shared task list.
+```
+
+### Example 2: Security Audit
+
+```
+Create a security review team. Spawn three teammates:
+- Vulnerability scanner: review OWASP Top 10 risks
+- Auth auditor: check token handling, session management, password policies
+- Dependency checker: scan dependencies for known vulnerabilities
+Each works independently, then shares findings and challenges assumptions.
+```
+
+### Example 3: Architecture Decision Debate
+
+```
+Create an architecture debate team. Topic: Should our real-time notification
+system use WebSocket or Server-Sent Events?
+- Teammate A: advocate for WebSocket
+- Teammate B: advocate for SSE
+- Teammate C: judge, challenge both sides
+The judge summarizes and recommends based on the debate.
+```
+
+---
+
+## Managing at Scale
+
+As agent teams grow in complexity, three patterns help with orchestration:
+
+### 1. Standardized Spawn Prompt Templates
+
+Create reusable prompt structures for common team configurations:
+
+| Template Type | Defines |
+|---------------|---------|
+| Review team | Roles, file boundaries, success criteria |
+| Implementation team | Component splits, interface contracts |
+| Research team | Investigation directions, reporting format |
+
+### 2. Permission Presets
+
+Pre-approve common operations before spawning teammates to eliminate the flood of permission prompts:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test*)",
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Read",
+      "Edit"
+    ]
+  }
+}
+```
+
+### 3. CLAUDE.md as Shared Runtime Context
+
+A well-structured CLAUDE.md with module boundaries, verification commands, and operational context **significantly reduces per-teammate exploration costs**. Three teammates reading a clear CLAUDE.md is far cheaper than three teammates exploring the codebase independently.
+
+```markdown
+# Project Structure
+- src/api/ — REST API endpoints
+- src/db/ — Database models and migrations
+- src/services/ — Business logic
+- tests/ — Test suite
+
+# Verification Commands
+- npm test — Run all tests
+- npm run lint — Code linting
+- npm run typecheck — Type checking
+
+# Module Boundaries
+- API layer does not access database directly
+- Service layer handles all business logic
+```
+
+---
+
+## The Multi-Agent Spectrum
+
+Agent Teams sits at one end of a spectrum of multi-agent approaches in Claude Code:
+
+| Approach | Communication | Best For |
+|----------|---------------|----------|
+| **Single session** | N/A | Sequential, focused tasks |
+| **Subagents (Task tool)** | Results only, back to main | Parallel focused work |
+| **Builder-validator pairs** | Structured handoff via tasks | Quality-gated implementation |
+| **Agent Teams** | Full mesh, direct messaging | Collaborative exploration and complex work |
+
+<Aside type="tip">
+**Combine approaches** based on your needs: use Agent Teams for the collaborative exploration phase, then switch to builder-validator patterns for the implementation phase where quality gates matter.
+</Aside>
+
+---
+
+## Hook Events
+
+Agent Teams provides dedicated hook events for workflow automation:
+
+| Hook Event | Triggers When |
+|------------|---------------|
+| `TeammateIdle` | A teammate becomes idle |
+| `TaskCompleted` | A task completes |
+
+Use these hooks to enforce rules, send notifications, or trigger follow-up actions when teammates complete work.
+
+---
+
+## Current Limitations
+
+<Aside type="caution">
+Agent Teams is still experimental with these limitations:
+
+- Requires manual environment variable to enable
+- Token consumption is significantly higher than single sessions
+- Cannot specify teammate permission modes at spawn time
+- Broadcast message cost scales linearly with team size
+- Lead's conversation history does not transfer to teammates
+- Requires tmux support (teammates are managed via tmux)
+</Aside>
+
+---
+
+## Summary
+
+| Your Need | Recommended Approach |
+|-----------|---------------------|
+| Quick parallel execution, only care about results | Subagents |
+| Independent parallel file modifications | `/batch` command |
+| Complex work needing discussion, shared findings, mutual challenge | **Agent Teams** |
+| Quality-gated implementation pipeline | Builder-Validator pattern |
+| Simple sequential tasks | Single session |
+
+Start with a review task this week. The overhead is low, and the capabilities will change how you think about complex development work.

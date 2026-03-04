@@ -1,0 +1,191 @@
+---
+title: "常见问题与误区"
+description: "Claude Code 常见问题解答与社区流传误区的澄清"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## 常见问题
+
+### Claude Code vs ClawdBot：有什么区别？
+
+它们面向完全不同的使用场景。不是竞争对手，而是面向不同受众的互补工具。
+
+| 方面 | Claude Code | ClawdBot |
+|------|------------|----------|
+| **界面** | 终端/CLI + IDE 集成 | 消息应用（WhatsApp、Telegram、Discord） |
+| **主要受众** | 软件开发者、DevOps、技术负责人 | 所有人（个人助手、智能家居、知识工作者） |
+| **核心用途** | 软件开发（代码生成、重构、调试、架构） | 个人自动化、任务管理、智能家居控制 |
+| **访问方式** | 本地终端会话 | 通过消息应用从任何设备远程访问 |
+| **安装** | `npm install -g claude-code` | 自托管（Docker/VPS ~$5/月 + LLM API 费用） |
+| **定价** | Anthropic API 按量付费（每个项目约 $3-15） | 开源免费 + 基础设施费用 |
+
+<Tabs>
+  <TabItem label="选择 Claude Code">
+    - 你是在终端/IDE 中工作的开发者
+    - 需要结对编程、代码审查、重构帮助
+    - 工作流是代码库分析和软件架构
+    - 想要深度 IDE 集成和 git 工作流自动化
+  </TabItem>
+  <TabItem label="选择 ClawdBot">
+    - 想要一个 24/7 可从手机访问的个人助手
+    - 需要智能家居自动化（Home Assistant、IoT 设备）
+    - 用途是任务管理、提醒、邮件/日历、监控
+    - 想要消息应用界面（WhatsApp、Telegram 等）
+  </TabItem>
+  <TabItem label="两者都用">
+    它们配合得很好：
+    - **ClawdBot**：处理日常个人自动化、监控、提醒
+    - **Claude Code**：在电脑前处理软件开发工作
+
+    示例工作流：
+    ```
+    ClawdBot（手机上）："提醒我到办公桌时审查 PR"
+      -> 收到通知
+    Claude Code（在办公桌前）："审查认证 PR，检查安全问题"
+      -> 深度代码分析，具有完整代码库上下文
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+### 产品经理可以使用 Claude Code 吗？
+
+**简短回答**：可以，但先考虑你的主要工作流。
+
+<CardGrid>
+  <Card title="技术型 PM" icon="approve-check-circle">
+    审查技术规格、PRD、架构可行性 -- Claude Code CLI 适合技术验证工作流。例如：会议记录 -> PRD 生成 -> Claude Code 优化。
+  </Card>
+  <Card title="非编码 PM" icon="information">
+    策略、研究、利益相关者管理 -- Claude Code CLI 开销不值得。更好的选择：Claude Desktop。用途：研究综合、利益相关者沟通、路线图规划。
+  </Card>
+</CardGrid>
+
+<Aside>
+PM 使用 Claude Code 的工作流是一个**新兴领域**，社区验证有限。如果你是成功使用 Claude Code 的 PM，欢迎分享你的工作流来帮助社区。
+</Aside>
+
+---
+
+### 可以从不同项目文件夹恢复会话吗？
+
+**简短回答**：原生 `--resume` 不支持，但手动文件系统操作可靠有效。
+
+**限制原因**：Claude Code 的 `--resume` 按设计限定在当前工作目录。会话存储在 `~/.claude/projects/<encoded-path>/` 中，路径来自项目的绝对位置。
+
+**手动迁移方法**（推荐）：
+
+```bash
+# 移动项目文件夹时
+cd ~/.claude/projects/
+mv -- -old-location-myapp- -new-location-myapp-
+
+# 将会话分叉到新项目时
+cp -n ./-source-project-/*.jsonl ./-target-project-/
+cp -r ./-source-project-/subagents ./-target-project-/ 2>/dev/null || true
+
+cd /path/to/target/project && claude --continue
+```
+
+<Aside type="caution" title="迁移风险">
+- 硬编码的密钥/凭证可能无法正确迁移
+- 会话上下文中的绝对路径可能失效
+- MCP 服务器配置可能在项目之间不同
+- `.claudeignore` 规则是项目特定的
+</Aside>
+
+---
+
+## 误区 vs 现实
+
+### 误区："Claude Code 有可以用秘密标志解锁的隐藏功能"
+
+**现实**：所有公开功能都在[官方 CHANGELOG](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md) 中记录。
+
+**人们混淆的概念**：
+- **渐进式发布 != 隐藏功能** -- Anthropic 使用功能标志进行分阶段部署（标准行业实践）
+- **实验性功能 != 秘密** -- 实验性功能明确标记为不稳定
+- **社区发现 != 黑客行为** -- 在编译代码中发现未发布功能是探索，不是"解锁秘密"
+
+<Aside type="caution">
+使用未文档化的实验性功能可能导致数据丢失、崩溃、与未来版本不兼容以及失去官方支持。
+</Aside>
+
+---
+
+### 误区："Tasks API 允许完全自主的并行 Agent"
+
+**现实**：Tasks API（v2.1.16+）支持并行工作的**协调**，但 Agent **不是自主的**。
+
+**Tasks API 实际做什么**：
+- 创建带依赖追踪的共享任务列表
+- 允许主会话 + 子 Agent 协调工作
+- 跨会话持久化任务以便恢复
+
+**Tasks API 不做什么**：
+- 不会自动为每个任务生成 Agent
+- 不会创建自组织的独立 Agent "集群"
+- 不会让 Agent 无需人类批准就做决策
+- 不会替代你管理和指导工作的需要
+
+---
+
+### 误区："Claude Code 比其他 AI 编码工具快 100 倍"
+
+**现实**：性能取决于任务复杂度、模型选择和使用方式。没有工具在所有场景下都"快 100 倍"。
+
+| 任务 | Claude Code | 其他工具 | 赢家 |
+|------|------------|---------|------|
+| 简单编辑（拼写、格式） | ~5-10 秒 | ~5-10 秒 | 大致平手 |
+| 多文件重构 | 30-60 秒 | 60-120 秒 | Claude Code（2 倍） |
+| 复杂架构分析 | 2-5 分钟 | 5-15 分钟 | Claude Code（3 倍） |
+| 学习曲线（第一周） | 中等 | 因工具而异 | 取决于工具 |
+
+Claude Code 是**强大且高效的**，但"快 100 倍"是营销夸张。真正的优势来自：200K token 深度上下文窗口、智能子 Agent 系统、MCP 生态系统、强大的系统提示。
+
+---
+
+### 现实：Claude Code 的真正特色
+
+<CardGrid>
+  <Card title="200K 上下文窗口" icon="open-book">
+    约 15 万词 -- 业界最大之一，可以理解完整代码库。
+  </Card>
+  <Card title="子 Agent 系统" icon="rocket">
+    独立的上下文窗口防止探索过程中的上下文污染。
+  </Card>
+  <Card title="MCP 生态系统" icon="puzzle">
+    100+ 社区服务器用于专门任务，可扩展性强。
+  </Card>
+  <Card title="权限系统" icon="approve-check-circle">
+    对工具访问和危险操作的细粒度控制。
+  </Card>
+  <Card title="CLI 优先设计" icon="laptop">
+    终端集成、git 工作流、IDE 兼容性。
+  </Card>
+  <Card title="透明定价" icon="document">
+    按量付费，无订阅，成本可预测。
+  </Card>
+</CardGrid>
+
+---
+
+## 如何辨别可靠信息
+
+<Tabs>
+  <TabItem label="可信来源">
+    - 官方 [Claude Code 文档](https://code.claude.com/docs)
+    - [GitHub CHANGELOG](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md)
+    - [GitHub Issues](https://github.com/anthropics/claude-code/issues) 中有 Anthropic 员工回复的
+    - 引用官方来源的社区资源（如 [Claudelog.com](https://claudelog.com/)）
+  </TabItem>
+  <TabItem label="应持怀疑态度的">
+    - 没有来源的社交媒体帖子
+    - 没有 CHANGELOG 引用的"秘密技巧"
+    - 没有基准测试的百分比声称（"快 50%"、"生产力提升 10 倍"）
+    - 旨在制造焦虑的戏剧性语言
+    - 阻止你阅读官方文档的内容
+  </TabItem>
+</Tabs>

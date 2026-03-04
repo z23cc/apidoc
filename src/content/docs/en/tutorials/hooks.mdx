@@ -1,0 +1,1078 @@
+---
+title: "Hooks Event System"
+description: "Automate Claude Code workflows with the event-driven Hooks system"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## What Are Hooks?
+
+Hooks are scripts that run automatically when specific events occur in Claude Code, similar to Git Hooks. Use them to enforce security guardrails, automate code quality checks, inject context, and maintain audit logs.
+
+<CardGrid>
+  <Card title="Security" icon="warning">
+    Block dangerous commands and prevent sensitive file exposure.
+  </Card>
+  <Card title="Code Quality" icon="approve-check-circle">
+    Auto-format, lint, and run tests after every edit.
+  </Card>
+  <Card title="Context Injection" icon="information">
+    Automatically enrich prompts with project context before Claude processes them.
+  </Card>
+  <Card title="Audit Logging" icon="list-format">
+    Track all tool calls and maintain a change history.
+  </Card>
+</CardGrid>
+
+---
+
+## The Event System
+
+Hooks operate through an event system. When specific events occur in Claude Code, the corresponding hook scripts fire automatically.
+
+### Event Types
+
+| Event | When It Fires | Can Block? | Use Case |
+|-------|---------------|------------|----------|
+| `SessionStart` | Session begins or resumes | No | Initialization, load dev context |
+| `UserPromptSubmit` | User submits prompt, before Claude processes it | Yes | Context enrichment, prompt validation |
+| `PreToolUse` | Before a tool call executes | Yes | Security validation, input modification |
+| `PermissionRequest` | Permission dialog appears | Yes | Custom approval logic |
+| `PostToolUse` | After a tool completes successfully | No | Formatting, logging |
+| `PostToolUseFailure` | After a tool call fails | No | Error logging, recovery actions |
+| `Notification` | Claude sends notification | No | Sound alerts, custom notifications |
+| `SubagentStart` | Sub-agent spawned | No | Subagent initialization |
+| `SubagentStop` | Sub-agent finishes | Yes | Subagent cleanup |
+| `Stop` | Claude finishes responding | Yes | Post-response actions, continue loops |
+| `TeammateIdle` | Agent team member about to go idle | Yes | Team coordination, quality gates |
+| `TaskCompleted` | Task being marked as completed | Yes | Enforce completion criteria |
+| `ConfigChange` | Config file changes during session | Yes (except policy) | Enterprise audit, block unauthorized changes |
+| `WorktreeCreate` | Worktree being created | Yes | Custom VCS setup |
+| `WorktreeRemove` | Worktree being removed | No | Clean up VCS state |
+| `PreCompact` | Before context compaction | No | Save state before compaction |
+| `SessionEnd` | Session terminates | No | Cleanup, logging |
+
+<Aside type="tip">
+**`Stop` and `SubagentStop` events** (v2.1.47+) now include a `last_assistant_message` field, giving direct access to Claude's final response without parsing transcript files.
+</Aside>
+
+### Event Flow
+
+```
+User types message
+      │
+      ▼
+┌──────────────────┐
+│ UserPromptSubmit  │  ← Add context (e.g., git status)
+└──────────────────┘
+      │
+      ▼
+Claude decides to run tool (e.g., Edit)
+      │
+      ▼
+┌──────────────────┐
+│ PreToolUse        │  ← Security check
+└──────────────────┘
+      │
+      ▼ (if allowed)
+Tool executes
+      │
+      ▼
+┌──────────────────┐
+│ PostToolUse       │  ← Auto-format
+└──────────────────┘
+```
+
+### Execution Model
+
+Claude Code supports two execution models for hooks:
+
+<Tabs>
+  <TabItem label="Synchronous (Default)">
+    - Claude **blocks** until the hook completes
+    - Exit code and stdout available immediately for feedback
+    - **Use case**: Critical validation (security, type checking, blocking operations)
+    - **Configuration**: Omit `async` or set `async: false`
+  </TabItem>
+  <TabItem label="Asynchronous (Optional)">
+    - Claude **continues immediately**, hook runs in background
+    - Exit code/stdout NOT available to Claude (no feedback loop)
+    - **Use case**: Non-critical operations (logging, notifications, formatting, metrics)
+    - **Configuration**: Add `async: true`
+  </TabItem>
+</Tabs>
+
+#### Execution Mode Decision Matrix
+
+| Hook Purpose | Execution Mode | Reason |
+|--------------|---------------|--------|
+| Code formatting (Prettier, Black) | **Async** | Cosmetic change, no feedback needed |
+| Linting with auto-fix (eslint --fix) | **Async** | Non-critical improvements |
+| Type checking (tsc, mypy) | **Sync** | Errors must block for iteration |
+| Security validation | **Sync** | Must block dangerous operations |
+| Logging/metrics | **Async** | Pure side-effect, no feedback |
+| Notifications (Slack, email) | **Async** | User alerts, non-blocking |
+| Test execution | **Sync** | Results influence next action |
+| Git context injection | **Sync** | Enriches prompt before processing |
+
+<Aside type="caution">
+Async hooks cannot: block Claude on errors (exit code 2 is ignored), provide real-time feedback via stdout, guarantee execution order with other hooks, or return `additionalContext` that Claude can use. Only use async when the hook's completion is truly independent of Claude's workflow.
+</Aside>
+
+### Shell Scripts vs AI Agents
+
+Not everything needs AI. Choose the right tool:
+
+| Task Type | Best Tool | Why | Example |
+|-----------|-----------|-----|---------|
+| **Deterministic** | Bash script | Fast, predictable, no tokens | Create branch, fetch PR comments |
+| **Pattern-based** | Bash + regex | Reliable for known patterns | Check for secrets, validate format |
+| **Interpretation needed** | AI Agent | Judgment required | Code review, architecture decisions |
+| **Context-dependent** | AI Agent | Needs understanding | "Does this match requirements?" |
+
+<Aside type="tip">
+**Rule of thumb**: If you can write a regex or a simple conditional for it, use a bash script. If it requires "understanding" or "judgment", use an agent.
+</Aside>
+
+---
+
+## Creating Hooks
+
+### Hook Registration (settings.json)
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/security-check.sh",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Configuration Fields
+
+| Field | Description |
+|-------|-------------|
+| `matcher` | Regex pattern filtering when hooks fire (tool name, session start reason, etc.) |
+| `type` | Hook type: `"command"`, `"http"`, `"prompt"`, or `"agent"` |
+| `command` | Shell command to run (for `command` type) |
+| `prompt` | Prompt text for LLM evaluation (for `prompt`/`agent` types). Use `$ARGUMENTS` as placeholder for hook input JSON |
+| `timeout` | Max execution time in seconds (default: 600s command, 30s prompt, 60s agent) |
+| `model` | Model to use for evaluation (for `prompt`/`agent` types). Defaults to a fast model |
+| `async` | If `true`, runs in background without blocking (for `command` type only) |
+| `statusMessage` | Custom spinner message displayed while hook runs |
+| `once` | If `true`, runs only once per session then is removed (skills only) |
+
+### Hook Types
+
+<Tabs>
+  <TabItem label="command">
+    Runs a shell command. Receives JSON on stdin, returns JSON on stdout. The most common type.
+
+    ```json
+    {
+      "type": "command",
+      "command": ".claude/hooks/security-check.sh",
+      "timeout": 5000
+    }
+    ```
+  </TabItem>
+  <TabItem label="http">
+    **(v2.1.63+)** POSTs JSON to a URL and reads JSON response. Useful for CI/CD webhooks and stateless backend integrations without shell dependencies.
+
+    ```json
+    {
+      "type": "http",
+      "url": "https://ci.example.com/webhook/claude-hook",
+      "allowedEnvVars": ["CI_TOKEN"]
+    }
+    ```
+
+    The `allowedEnvVars` field lists environment variables that can be referenced in headers (e.g., for Bearer token authentication).
+  </TabItem>
+  <TabItem label="prompt">
+    Sends prompt + hook input to a Claude model (Haiku by default) for single-turn evaluation. Returns `{ok: true/false, reason: "..."}`.
+
+    ```json
+    {
+      "type": "prompt",
+      "prompt": "Analyze this tool call for safety: $ARGUMENTS",
+      "model": "haiku"
+    }
+    ```
+  </TabItem>
+  <TabItem label="agent">
+    Spawns a subagent with tool access (Read, Grep, Glob, etc.) for multi-turn verification. Up to 50 tool-use turns. Returns same `{ok: true/false}` format.
+
+    ```json
+    {
+      "type": "agent",
+      "prompt": "Verify this code change follows our architecture patterns",
+      "timeout": 60
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Hook Input (stdin JSON)
+
+Hooks receive JSON on stdin with common fields plus event-specific fields:
+
+```json
+{
+  "session_id": "abc123",
+  "transcript_path": "/home/user/.claude/projects/.../transcript.jsonl",
+  "cwd": "/project",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git status"
+  }
+}
+```
+
+<Aside type="note">
+**Common fields (all events)**: `session_id`, `transcript_path`, `cwd`, `permission_mode`, `hook_event_name`. Event-specific fields (like `tool_name` and `tool_input` for PreToolUse) are added on top.
+</Aside>
+
+### Hook Output
+
+Hooks communicate results through exit codes and optional JSON on stdout.
+
+**Universal JSON fields**:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `continue` | `true` | If `false`, Claude stops processing entirely |
+| `stopReason` | none | Message shown to user when `continue` is `false` |
+| `suppressOutput` | `false` | If `true`, hides stdout from verbose mode |
+| `systemMessage` | none | Warning message shown to user |
+
+**Event-specific decision control**:
+
+- **PreToolUse**: Uses `hookSpecificOutput` with `permissionDecision` (allow/deny/ask), `permissionDecisionReason`, `updatedInput`, `additionalContext`
+- **PostToolUse, Stop, SubagentStop, UserPromptSubmit, ConfigChange**: Uses top-level `decision: "block"` with `reason`
+- **TeammateIdle, TaskCompleted**: Exit code 2 only (no JSON decision control)
+- **PermissionRequest**: Uses `hookSpecificOutput` with `decision.behavior` (allow/deny)
+
+**PreToolUse blocking example**:
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "deny",
+    "permissionDecisionReason": "Destructive command blocked by hook"
+  }
+}
+```
+
+**PreToolUse context injection**:
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "additionalContext": "Current git branch: feature/auth. 3 uncommitted files."
+  }
+}
+```
+
+### Exit Codes
+
+| Code | Meaning | Result |
+|------|---------|--------|
+| `0` | Success | Allow operation, parse stdout for JSON output |
+| `2` | Blocking error | Prevent operation (for blocking events), stderr fed to Claude |
+| Other | Non-blocking error | Stderr shown in verbose mode (`Ctrl+O`), execution continues |
+
+---
+
+## Hook Templates
+
+### Template 1: PreToolUse Security Blocker
+
+```bash
+#!/bin/bash
+# .claude/hooks/security-blocker.sh
+# Blocks dangerous commands
+
+INPUT=$(cat)
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name')
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
+
+# List of dangerous patterns
+DANGEROUS_PATTERNS=(
+    "rm -rf /"
+    "rm -rf ~"
+    "rm -rf *"
+    "sudo rm"
+    "git push --force origin main"
+    "git push -f origin main"
+    "npm publish"
+    "> /dev/sda"
+)
+
+# Check if command matches any dangerous pattern
+for pattern in "${DANGEROUS_PATTERNS[@]}"; do
+    if [[ "$COMMAND" == *"$pattern"* ]]; then
+        echo "BLOCKED: Dangerous command detected: $pattern" >&2
+        exit 2
+    fi
+done
+
+exit 0
+```
+
+### Template 2: PostToolUse Auto-Formatter
+
+```bash
+#!/bin/bash
+# .claude/hooks/auto-format.sh
+# Auto-formats code after edits
+
+INPUT=$(cat)
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name')
+
+# Only run for Edit/Write operations
+if [[ "$TOOL_NAME" != "Edit" && "$TOOL_NAME" != "Write" ]]; then
+    exit 0
+fi
+
+# Get the file path
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // ""')
+
+# Skip if no file path
+if [[ -z "$FILE_PATH" ]]; then
+    exit 0
+fi
+
+# Run Prettier on supported files
+if [[ "$FILE_PATH" =~ \.(ts|tsx|js|jsx|json|md|css|scss)$ ]]; then
+    npx prettier --write "$FILE_PATH" 2>/dev/null
+fi
+
+exit 0
+```
+
+### Template 3: UserPromptSubmit Context Enricher
+
+```bash
+#!/bin/bash
+# .claude/hooks/git-context.sh
+# Adds git context to every prompt
+
+# Get git information
+BRANCH=$(git branch --show-current 2>/dev/null || echo "not a git repo")
+LAST_COMMIT=$(git log -1 --format='%h %s' 2>/dev/null || echo "no commits")
+STAGED=$(git diff --cached --stat 2>/dev/null | tail -1 || echo "none")
+UNSTAGED=$(git diff --stat 2>/dev/null | tail -1 || echo "none")
+
+# Output JSON with context
+cat << EOF
+{
+  "hookSpecificOutput": {
+    "additionalContext": "[Git] Branch: $BRANCH | Last: $LAST_COMMIT | Staged: $STAGED | Unstaged: $UNSTAGED"
+  }
+}
+EOF
+
+exit 0
+```
+
+### Template 4: Notification Sound Alerts
+
+<Tabs>
+  <TabItem label="macOS">
+    ```bash
+    #!/bin/bash
+    # .claude/hooks/notification.sh
+    # Plays sounds on notifications (macOS)
+
+    INPUT=$(cat)
+    TITLE=$(echo "$INPUT" | jq -r '.title // ""')
+    MESSAGE=$(echo "$INPUT" | jq -r '.message // ""')
+
+    # Determine sound based on content
+    if [[ "$TITLE" == *"error"* ]] || [[ "$MESSAGE" == *"failed"* ]]; then
+        SOUND="/System/Library/Sounds/Basso.aiff"
+    elif [[ "$TITLE" == *"complete"* ]] || [[ "$MESSAGE" == *"success"* ]]; then
+        SOUND="/System/Library/Sounds/Hero.aiff"
+    else
+        SOUND="/System/Library/Sounds/Pop.aiff"
+    fi
+
+    afplay "$SOUND" 2>/dev/null &
+    exit 0
+    ```
+  </TabItem>
+  <TabItem label="Windows">
+    ```powershell
+    # notification.ps1
+    # Shows Windows notifications and plays sounds
+
+    $inputJson = [Console]::In.ReadToEnd() | ConvertFrom-Json
+    $title = $inputJson.title
+    $message = $inputJson.message
+
+    if ($title -match "error" -or $message -match "failed") {
+        [System.Media.SystemSounds]::Hand.Play()
+    } elseif ($title -match "complete" -or $message -match "success") {
+        [System.Media.SystemSounds]::Asterisk.Play()
+    } else {
+        [System.Media.SystemSounds]::Beep.Play()
+    }
+
+    exit 0
+    ```
+  </TabItem>
+</Tabs>
+
+### Windows Hook Templates
+
+<Aside type="note">
+Windows hooks should use the full PowerShell invocation with `-ExecutionPolicy Bypass` to avoid execution policy restrictions.
+</Aside>
+
+<Tabs>
+  <TabItem label="Security Check (PowerShell)">
+    ```powershell
+    # security-check.ps1 - Blocks dangerous commands
+
+    $inputJson = [Console]::In.ReadToEnd() | ConvertFrom-Json
+    $command = $inputJson.tool_input.command
+
+    $dangerousPatterns = @(
+        "rm -rf /",
+        "rm -rf ~",
+        "Remove-Item -Recurse -Force C:\",
+        "git push --force origin main",
+        "git push -f origin main",
+        "npm publish"
+    )
+
+    foreach ($pattern in $dangerousPatterns) {
+        if ($command -like "*$pattern*") {
+            Write-Error "BLOCKED: Dangerous command detected: $pattern"
+            exit 2
+        }
+    }
+
+    exit 0
+    ```
+  </TabItem>
+  <TabItem label="Auto-Formatter (PowerShell)">
+    ```powershell
+    # auto-format.ps1 - Auto-formats code after edits
+
+    $inputJson = [Console]::In.ReadToEnd() | ConvertFrom-Json
+    $toolName = $inputJson.tool_name
+
+    if ($toolName -ne "Edit" -and $toolName -ne "Write") {
+        exit 0
+    }
+
+    $filePath = $inputJson.tool_input.file_path
+
+    if (-not $filePath) {
+        exit 0
+    }
+
+    if ($filePath -match '\.(ts|tsx|js|jsx|json|md|css|scss)$') {
+        npx prettier --write $filePath 2>$null
+    }
+
+    exit 0
+    ```
+  </TabItem>
+  <TabItem label="Context Enricher (Batch)">
+    ```batch
+    @echo off
+    setlocal enabledelayedexpansion
+
+    for /f "tokens=*" %%i in ('git branch --show-current 2^>nul') do set BRANCH=%%i
+    if "%BRANCH%"=="" set BRANCH=not a git repo
+
+    for /f "tokens=*" %%i in ('git log -1 --format^="%%h %%s" 2^>nul') do set LAST_COMMIT=%%i
+    if "%LAST_COMMIT%"=="" set LAST_COMMIT=no commits
+
+    echo {"hookSpecificOutput":{"additionalContext":"[Git] Branch: %BRANCH% | Last: %LAST_COMMIT%"}}
+    exit /b 0
+    ```
+  </TabItem>
+</Tabs>
+
+**Windows settings.json configuration**:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -ExecutionPolicy Bypass -File .claude/hooks/security-check.ps1",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -ExecutionPolicy Bypass -File .claude/hooks/auto-format.ps1",
+            "timeout": 10000
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Security Hooks
+
+Security hooks are critical for protecting your system from dangerous operations.
+
+### Comprehensive Security Rules
+
+```bash
+#!/bin/bash
+# .claude/hooks/comprehensive-security.sh
+
+INPUT=$(cat)
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
+
+# === CRITICAL BLOCKS (Exit 2) ===
+
+# Filesystem destruction
+[[ "$COMMAND" =~ rm.*-rf.*[/~] ]] && { echo "BLOCKED: Recursive delete of root/home" >&2; exit 2; }
+
+# Disk operations
+[[ "$COMMAND" =~ ">/dev/sd" ]] && { echo "BLOCKED: Direct disk write" >&2; exit 2; }
+[[ "$COMMAND" =~ "dd if=" ]] && { echo "BLOCKED: dd command" >&2; exit 2; }
+
+# Git force operations on protected branches
+[[ "$COMMAND" =~ "git push".*"-f".*"(main|master)" ]] && { echo "BLOCKED: Force push to main" >&2; exit 2; }
+[[ "$COMMAND" =~ "git push --force".*"(main|master)" ]] && { echo "BLOCKED: Force push to main" >&2; exit 2; }
+
+# Package publishing
+[[ "$COMMAND" =~ "npm publish" ]] && { echo "BLOCKED: npm publish" >&2; exit 2; }
+
+# Privileged operations
+[[ "$COMMAND" =~ ^sudo ]] && { echo "BLOCKED: sudo command" >&2; exit 2; }
+
+# === WARNINGS (Exit 0 but log) ===
+[[ "$COMMAND" =~ "rm -rf" ]] && echo "WARNING: Recursive delete detected" >&2
+
+exit 0
+```
+
+### Testing Security Hooks
+
+Always test hooks before deploying:
+
+```bash
+# Test with a blocked command
+echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | \
+  .claude/hooks/security-blocker.sh
+echo "Exit code: $?"  # Should be 2
+
+# Test with a safe command
+echo '{"tool_name":"Bash","tool_input":{"command":"git status"}}' | \
+  .claude/hooks/security-blocker.sh
+echo "Exit code: $?"  # Should be 0
+```
+
+### Advanced: Model-as-Security-Gate
+
+A pattern where permission requests are routed to a more capable model acting as a security gate, rather than relying solely on static rule matching:
+
+```bash
+# .claude/hooks/opus-security-gate.sh (conceptual)
+# PreToolUse hook that routes to Opus for security screening
+
+INPUT=$(cat)
+TOOL=$(echo "$INPUT" | jq -r '.tool_name')
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+
+# Fast-path: known safe tools skip the gate
+[[ "$TOOL" == "Read" || "$TOOL" == "Grep" || "$TOOL" == "Glob" ]] && exit 0
+
+# Route to Opus for security analysis
+VERDICT=$(echo "$INPUT" | claude --model opus --print \
+  "Analyze this tool call for security risks. Is it safe? Reply SAFE or BLOCKED:reason")
+
+[[ "$VERDICT" == SAFE* ]] && exit 0
+echo "BLOCKED by security gate: $VERDICT" >&2
+exit 2
+```
+
+<Aside type="note">
+**Why use a model as a gate**: Static rules catch known patterns but miss novel attacks. A capable model understands intent and context -- it can distinguish `rm -rf node_modules` (cleanup) from `rm -rf /` (destruction) based on the surrounding conversation. **Trade-off**: Each gated call adds latency and cost. Use fast-path exemptions for read-only tools and only gate write/execute operations.
+</Aside>
+
+### File Protection Strategy
+
+Protecting sensitive files requires a multi-layered approach:
+
+```
+┌─────────────────────────────────────────────┐
+│         FILE PROTECTION ARCHITECTURE         │
+├─────────────────────────────────────────────┤
+│                                             │
+│  Layer 1: permissions.deny (Native)         │
+│  ─────────────────────────                  │
+│  • Built into settings.json                │
+│  • No hooks required                        │
+│  • Blocks all tool access instantly         │
+│  • Use for: Absolutely forbidden files      │
+│                                             │
+│  Layer 2: Pattern Matching (Hook)           │
+│  ────────────────────────                   │
+│  • PreToolUse hook with .agentignore        │
+│  • Supports gitignore-style syntax          │
+│  • Use for: Sensitive file categories       │
+│                                             │
+│  Layer 3: Bypass Detection (Hook)           │
+│  ──────────────────────────                 │
+│  • Detects variable expansion ($VAR)        │
+│  • Detects command substitution $(cmd)      │
+│  • Use for: Defense against attacks         │
+│                                             │
+└─────────────────────────────────────────────┘
+```
+
+<Tabs>
+  <TabItem label="Layer 1: permissions.deny">
+    ```json
+    {
+      "permissions": {
+        "deny": [
+          ".env",
+          ".env.local",
+          ".env.production",
+          "**/*.key",
+          "**/*.pem",
+          "credentials.json",
+          ".aws/credentials"
+        ]
+      }
+    }
+    ```
+
+    **Pros**: Instant blocking, no hooks needed
+    **Cons**: No custom logic, cannot log attempts
+  </TabItem>
+  <TabItem label="Layer 2: .agentignore">
+    Create `.agentignore` (or `.aiignore`) in your project root:
+
+    ```gitignore
+    # Credentials
+    .env*
+    *.key
+    *.pem
+    *.p12
+    credentials.json
+    secrets.yaml
+
+    # Config
+    config/secrets/
+    .aws/credentials
+    .ssh/id_*
+
+    # Build artifacts
+    dist/.env
+    build/config/production.json
+    ```
+
+    **Pros**: Familiar gitignore syntax, centralized rules, version controlled
+    **Cons**: Requires hook implementation
+  </TabItem>
+  <TabItem label="Layer 3: Bypass Detection">
+    Detect sophisticated attack attempts using variable expansion:
+
+    ```bash
+    # Attack attempts
+    FILE="sensitive.key"
+    cat $FILE              # Variable expansion bypass
+
+    HOME_DIR=$HOME
+    cat $HOME_DIR/.env     # Variable substitution bypass
+
+    cat $(echo ".env")     # Command substitution bypass
+    ```
+
+    Detection logic:
+
+    ```bash
+    detect_bypass() {
+        local file="$1"
+
+        # Variable expansion
+        [[ "$file" =~ \$\{?[A-Za-z_][A-Za-z0-9_]*\}? ]] && return 0
+
+        # Command substitution
+        [[ "$file" =~ \$\( || "$file" =~ \` ]] && return 0
+
+        return 1
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Complete Protection Example
+
+<Steps>
+1. **Configure settings.json**
+
+   ```json
+   {
+     "permissions": {
+       "deny": [".env", "*.key", "*.pem"]
+     },
+     "hooks": {
+       "PreToolUse": [
+         {
+           "matcher": "Read|Write|Edit",
+           "hooks": [
+             {
+               "type": "command",
+               "command": ".claude/hooks/file-guard.sh",
+               "timeout": 2000
+             }
+           ]
+         }
+       ]
+     }
+   }
+   ```
+
+2. **Create .agentignore**
+
+   ```gitignore
+   .env*
+   config/secrets/
+   **/*.key
+   **/*.pem
+   credentials.json
+   ```
+
+3. **Copy hook template**
+
+   ```bash
+   cp examples/hooks/bash/file-guard.sh .claude/hooks/
+   chmod +x .claude/hooks/file-guard.sh
+   ```
+
+4. **Test protection**
+
+   ```bash
+   # Test direct access
+   echo '{"tool_name":"Read","tool_input":{"file_path":".env"}}' | \
+     .claude/hooks/file-guard.sh
+   # Should show "File access blocked"
+
+   # Test bypass attempt
+   echo '{"tool_name":"Read","tool_input":{"file_path":"$HOME/.env"}}' | \
+     .claude/hooks/file-guard.sh
+   # Should show "Variable expansion detected"
+   ```
+</Steps>
+
+---
+
+## Practical Hook Examples
+
+### Smart Hook Dispatching
+
+Instead of configuring dozens of individual hooks, use a **single dispatcher** that routes events intelligently based on file type, tool, and context.
+
+```bash
+#!/bin/bash
+# .claude/hooks/dispatch.sh
+# Single entry point for all PostToolUse hooks
+
+INPUT=$(cat)
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name')
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.command // ""')
+
+HOOKS_DIR="$(dirname "$0")/handlers"
+
+# Route by file extension
+case "$FILE_PATH" in
+    *.ts|*.tsx)
+        [[ -x "$HOOKS_DIR/typescript.sh" ]] && echo "$INPUT" | "$HOOKS_DIR/typescript.sh"
+        ;;
+    *.py)
+        [[ -x "$HOOKS_DIR/python.sh" ]] && echo "$INPUT" | "$HOOKS_DIR/python.sh"
+        ;;
+    *.rs)
+        [[ -x "$HOOKS_DIR/rust.sh" ]] && echo "$INPUT" | "$HOOKS_DIR/rust.sh"
+        ;;
+    *.sql|*.prisma)
+        [[ -x "$HOOKS_DIR/database.sh" ]] && echo "$INPUT" | "$HOOKS_DIR/database.sh"
+        ;;
+esac
+
+# Route by tool (always runs, regardless of file type)
+case "$TOOL_NAME" in
+    Bash)
+        [[ -x "$HOOKS_DIR/security.sh" ]] && echo "$INPUT" | "$HOOKS_DIR/security.sh"
+        ;;
+    Write)
+        [[ -x "$HOOKS_DIR/new-file.sh" ]] && echo "$INPUT" | "$HOOKS_DIR/new-file.sh"
+        ;;
+esac
+
+exit 0
+```
+
+**Minimal settings.json**:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [{
+      "matcher": "Edit|Write|Bash",
+      "hooks": [{
+        "type": "command",
+        "command": ".claude/hooks/dispatch.sh"
+      }]
+    }]
+  }
+}
+```
+
+**Handler directory structure**:
+
+```
+.claude/hooks/
+├── dispatch.sh              # Single entry point
+└── handlers/
+    ├── typescript.sh         # ESLint + tsc for .ts/.tsx
+    ├── python.sh             # Ruff + mypy for .py
+    ├── rust.sh               # cargo clippy for .rs
+    ├── database.sh           # Schema validation for .sql/.prisma
+    ├── security.sh           # Block dangerous bash commands
+    └── new-file.sh           # Check naming conventions on Write
+```
+
+<Aside type="tip">
+**Dispatcher benefits**: Single matcher in settings.json instead of N matchers; easy to extend by dropping a new handler into `handlers/` with no config changes; language-aware with different validation per file type; fully testable via `echo "$INPUT" | .claude/hooks/dispatch.sh`.
+</Aside>
+
+### Activity Logger
+
+```bash
+#!/bin/bash
+# .claude/hooks/activity-logger.sh
+# Logs all tool usage to JSONL file
+
+INPUT=$(cat)
+LOG_DIR="$HOME/.claude/logs"
+LOG_FILE="$LOG_DIR/activity-$(date +%Y-%m-%d).jsonl"
+
+# Create log directory
+mkdir -p "$LOG_DIR"
+
+# Clean up old logs (keep 7 days)
+find "$LOG_DIR" -name "activity-*.jsonl" -mtime +7 -delete
+
+# Extract tool info
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name')
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
+
+# Create log entry
+LOG_ENTRY=$(jq -n \
+  --arg timestamp "$TIMESTAMP" \
+  --arg tool "$TOOL_NAME" \
+  --arg session "$SESSION_ID" \
+  '{timestamp: $timestamp, tool: $tool, session: $session}')
+
+# Append to log
+echo "$LOG_ENTRY" >> "$LOG_FILE"
+
+exit 0
+```
+
+### Linting Gate
+
+```bash
+#!/bin/bash
+# .claude/hooks/lint-gate.sh
+# Runs linter after code changes
+
+INPUT=$(cat)
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name')
+
+# Only check after Edit/Write
+if [[ "$TOOL_NAME" != "Edit" && "$TOOL_NAME" != "Write" ]]; then
+    exit 0
+fi
+
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // ""')
+
+# Only lint TypeScript/JavaScript
+if [[ ! "$FILE_PATH" =~ \.(ts|tsx|js|jsx)$ ]]; then
+    exit 0
+fi
+
+# Run ESLint
+LINT_OUTPUT=$(npx eslint "$FILE_PATH" 2>&1)
+LINT_EXIT=$?
+
+if [[ $LINT_EXIT -ne 0 ]]; then
+    cat << EOF
+{
+  "systemMessage": "Lint errors found in $FILE_PATH:\n$LINT_OUTPUT"
+}
+EOF
+fi
+
+exit 0
+```
+
+### Validation Pipeline Pattern
+
+Chain multiple validation hooks to catch issues immediately after code changes:
+
+```
+Edit/Write → TypeCheck → Lint → Tests → Notify Claude
+   ↓            ↓         ↓       ↓
+  file.ts    tsc check  eslint  jest file.test.ts
+```
+
+**Three-stage pipeline configuration**:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/typecheck-on-save.sh",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/lint-gate.sh",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/test-on-change.sh",
+            "timeout": 10000
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+<Aside type="tip">
+**Hook order matters**: Run fast checks first (typecheck ~1s), then slower ones (tests ~3-5s).
+</Aside>
+
+**Test file detection logic**:
+
+| Source File | Test File Patterns |
+|-------------|-------------------|
+| `auth.ts` | `auth.test.ts`, `__tests__/auth.test.ts` |
+| `utils.py` | `utils_test.py`, `test_utils.py` |
+| `main.go` | `main_test.go` |
+
+**Performance considerations**:
+
+| Project Size | Pipeline Time | Acceptable? |
+|--------------|---------------|-------------|
+| Small (&lt;100 files) | ~1-2s per edit | Yes |
+| Medium (100-1000 files) | ~2-5s per edit | Yes (with incremental) |
+| Large (1000+ files) | ~5-10s per edit | Consider async or skip tests |
+
+**Optimization strategies**:
+1. Use `async: true` for lint/format (cosmetic checks)
+2. Keep typecheck sync (errors must block)
+3. Skip full test suite, run only changed file's tests
+4. Use incremental compilation (`tsc --incremental`)
+
+### Session Summary Hook
+
+Use the `SessionEnd` event to display comprehensive session statistics when Claude Code ends:
+
+```json
+{
+  "hooks": {
+    "SessionEnd": [{
+      "hooks": [{
+        "type": "command",
+        "command": "~/.claude/hooks/session-summary.sh"
+      }]
+    }]
+  }
+}
+```
+
+**Example output**:
+
+```
+═══ Session Summary ═══════════════════
+ID:       abc-123-def-456
+Name:     Security hardening v3.26
+Branch:   main
+Duration: Wall 1h 34m | Active 14m 24s
+
+Tool Calls: 47 (OK 45 / ERR 2)
+  Read: 12  Bash: 10  Edit: 8  Write: 6
+  Grep: 5   Glob: 4   WebSearch: 2
+
+Model Usage         Reqs    Input    Output
+claude-sonnet-4-5     42   493.9K     2.5K
+claude-haiku-4-5       5    12.4K       46
+
+Cache: 1.2M read / 45.3K created
+Est. Cost: $0.74
+═══════════════════════════════════════
+```
+
+---
+
+## Best Practices
+
+<CardGrid>
+  <Card title="Test Before Deploying" icon="approve-check-circle">
+    Pipe JSON to your hook script via echo to verify exit codes are correct before using in Claude Code.
+  </Card>
+  <Card title="Set Reasonable Timeouts" icon="setting">
+    Configure appropriate timeout values for each hook: 2-5s for security checks, 10s for tests, 5s for formatting.
+  </Card>
+  <Card title="Use the Dispatcher Pattern" icon="seti:folder">
+    When hooks grow in number, use a single dispatcher instead of configuring many individual hooks in settings.json.
+  </Card>
+  <Card title="Sync vs Async" icon="list-format">
+    Use sync for critical validations, async for non-critical operations. Balance safety with performance.
+  </Card>
+</CardGrid>

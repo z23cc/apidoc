@@ -1,0 +1,269 @@
+---
+title: "从其他 AI 工具迁移"
+description: "从 GitHub Copilot、Cursor 等 AI 编码工具迁移到 Claude Code 的完整指南"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+从 GitHub Copilot、Cursor 或其他 AI 编码助手迁移到 Claude Code？本指南将帮助你理解差异、制定迁移策略并顺利完成过渡。
+
+---
+
+## Claude Code 与其他工具的区别
+
+<Aside type="note">
+**核心理念转变**：Claude Code 是一个**结构化上下文系统**，而非聊天机器人或自动补全工具。你构建的持久化上下文（CLAUDE.md、Skills、Hooks）会随时间积累，产生复合效应。
+</Aside>
+
+| 特性 | GitHub Copilot | Cursor | Windsurf | Claude Code |
+|------|---------------|--------|----------|-------------|
+| **交互方式** | 行内自动补全 | 聊天 + 补全 | 级联代理 | CLI + 对话 |
+| **上下文范围** | 当前文件 | 打开的文件 | ~200K tokens | 整个项目（智能搜索） |
+| **自主程度** | 仅建议 | 编辑 + 聊天 | 多代理 | 完整任务执行 |
+| **自定义能力** | 有限 | 扩展 | Hooks Cascade | Agents、Skills、Hooks、MCP |
+| **计费模式** | $10-20/月固定 | 基于额度 | 基于额度 | 订阅制（Pro $20 起） |
+| **行内补全** | 原生支持 | Tab 补全 | Supercomplete | 不支持（可配合 Copilot 使用） |
+
+---
+
+## 从 GitHub Copilot 迁移
+
+<Tabs>
+  <TabItem label="Copilot 的优势">
+    - **行内建议** — 输入时快速自动补全
+    - **熟悉的工作流** — 在编辑器内工作
+    - **低摩擦** — 无需切换上下文
+  </TabItem>
+  <TabItem label="Claude Code 更强的地方">
+    - **多文件重构** — Copilot 一次只能处理一个文件，Claude 可以跨文件读取和编辑
+    - **复杂任务** — Copilot 建议代码行，Claude 实现整个功能
+    - **上下文理解** — Copilot 仅限当前文件，Claude 可以搜索整个项目
+    - **代码解释** — Copilot 能力有限，Claude 提供详细解释
+    - **调试** — Copilot 较弱，Claude 可以系统性地进行根因分析
+  </TabItem>
+</Tabs>
+
+### 推荐：混合使用方案
+
+<CardGrid>
+  <Card title="使用 Copilot" icon="pencil">
+    - 输入时的快速自动补全
+    - 模板代码生成
+    - 简单函数补全
+  </Card>
+  <Card title="使用 Claude Code" icon="rocket">
+    - 功能实现（多文件变更）
+    - 复杂问题调试
+    - 代码审查和重构
+    - 理解陌生代码库
+    - 为整个模块编写测试
+  </Card>
+</CardGrid>
+
+**混合工作流示例：**
+
+```bash
+# 上午：用 Claude Code 规划功能
+claude
+You: "我需要添加用户认证功能。针对这个代码库最好的方案是什么？"
+# Claude 分析项目，建议架构方案
+
+# 编码过程中：使用 Copilot 进行行内补全
+# 在 VS Code 中输入，Copilot 自动补全
+
+# 下午：用 Claude Code 调试
+claude
+You: "登录在移动端失败但桌面端正常。帮我调试。"
+# Claude 系统性地排查问题
+
+# 结束时：用 Claude Code 审查
+claude
+You: "审查我今天的变更，检查安全问题。"
+# Claude 审查所有修改的文件
+```
+
+---
+
+## 从 Cursor 迁移
+
+<Tabs>
+  <TabItem label="Cursor 的优势">
+    - **行内编辑** — 直接在编辑器中修改代码
+    - **GUI 界面** — 熟悉的 VS Code 体验
+    - **聊天 + 补全** — 两种模式合一
+  </TabItem>
+  <TabItem label="Claude Code 更强的地方">
+    - **终端原生工作流** — 更适合 CLI 重度用户
+    - **高级自定义** — Agents、Skills、Hooks、Commands
+    - **MCP 服务器** — 超越 Cursor 的可扩展性
+    - **Git 集成** — 原生 Git 操作，自动生成提交信息
+    - **CI/CD 集成** — 无头模式支持自动化
+  </TabItem>
+</Tabs>
+
+### 什么时候该切换？
+
+<CardGrid>
+  <Card title="继续用 Cursor" icon="seti:config">
+    - 强烈偏好 GUI 而非 CLI
+    - 想要一体化 IDE 体验
+    - 每天使用超过 4 小时（固定费率更划算）
+    - 不需要高级自定义功能
+  </Card>
+  <Card title="切换到 Claude Code" icon="rocket">
+    - 习惯终端工作流
+    - 需要深度自定义（Agents、Hooks）
+    - 处理复杂的多仓库项目
+    - 想要将 AI 集成到 CI/CD
+    - 偏好按需付费
+  </Card>
+</CardGrid>
+
+### 同时使用两者
+
+```bash
+# Cursor 用于编辑和快速修改
+# Claude Code 在终端中处理复杂任务
+
+# 示例工作流：
+# 1. 用 Cursor 浏览代码和快速编辑
+# 2. 打开终端：claude
+# 3. 让 Claude Code："审查我的修改并提出改进建议"
+# 4. 在 Cursor 中应用建议
+# 5. 用 Claude Code 生成测试
+```
+
+---
+
+## 迁移时间表
+
+<Steps>
+
+1. **第 1 周：学习阶段**
+
+   - 完成基础教程
+   - 理解上下文管理（关键！）
+   - 尝试 3-5 个小任务（Bug 修复、小功能）
+   - 学习 `/plan` 模式的使用时机
+   - 练习在接受前审查 diff
+
+2. **第 2 周：建立工作流**
+
+   - 创建项目 CLAUDE.md 文件
+   - 设置 1-2 个常用任务的自定义命令
+   - 配置 MCP 服务器
+   - 定义混合工作流（何时用 Claude Code vs 其他工具）
+   - 跟踪成本并根据使用情况优化
+
+3. **第 3-4 周：高级使用**
+
+   - 创建专用任务的自定义 Agents
+   - 设置自动化 Hooks（格式化、代码检查）
+   - 如有需要，集成到 CI/CD
+   - 如果有团队协作，建立团队模式
+   - 根据学习经验优化 CLAUDE.md
+
+</Steps>
+
+---
+
+## 常见迁移问题
+
+<Tabs>
+  <TabItem label="怀念行内建议">
+    **问题：** "我想念行内自动补全"
+
+    **解决方案：**
+    - 继续使用 Copilot/Cursor 的自动补全功能，用 Claude Code 处理复杂任务
+    - 另一种方式：让 Claude 生成代码片段，然后粘贴到编辑器中
+  </TabItem>
+  <TabItem label="上下文切换">
+    **问题：** "在工具之间切换很烦"
+
+    **解决方案：**
+    - 使用分屏终端（编辑器在左，Claude Code 在右）
+    - 设置快捷键来切换终端焦点
+  </TabItem>
+  <TabItem label="不知道用哪个">
+    **问题：** "不知道什么时候用哪个工具"
+
+    **经验法则：**
+    - **少于 5 行代码** — 用 Copilot/自动补全
+    - **5-50 行，单文件** — 两个工具都可以
+    - **超过 50 行或跨文件** — 用 Claude Code
+  </TabItem>
+  <TabItem label="速度和成本">
+    **问题：** "Claude Code 比自动补全慢" / "成本不可预测"
+
+    **关于速度：**
+    - Claude Code 解决的是不同类型的问题
+    - 不要拿自动补全和完整任务执行做比较
+    - 使用具体查询，合理管理上下文
+
+    **关于成本：**
+    - 在 Anthropic 控制台跟踪成本
+    - 为每次会话设定心理预算（$0.10-$0.50）
+    - 使用 `/compact` 压缩上下文，提问要具体
+  </TabItem>
+</Tabs>
+
+---
+
+## 过渡策略
+
+<Tabs>
+  <TabItem label="渐进式（推荐）">
+    ```
+    第 1 周：每天使用 Claude Code 1-2 次，处理特定任务
+    第 2 周：所有调试和审查都用 Claude Code
+    第 3 周：功能实现也用 Claude Code
+    第 4 周：完全集成到工作流
+    ```
+  </TabItem>
+  <TabItem label="完全切换">
+    ```
+    第 1 天：禁用 Copilot/Cursor，强制只用 Claude Code
+    第 2-3 天：适应期（学习曲线）
+    第 4-7 天：生产力恢复
+    第 2 周起：完全熟练
+    ```
+  </TabItem>
+  <TabItem label="基于任务">
+    ```
+    Claude Code 专门用于：
+    - 所有新功能开发
+    - 所有调试会话
+    - 所有代码审查
+
+    保留 Copilot/Cursor 用于：
+    - 快速编辑
+    - 自动补全
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## 迁移成功标志
+
+当你达到以下状态时，说明迁移已经成功：
+
+<Steps>
+
+1. 遇到复杂任务时本能地想到用 Claude Code
+
+2. 不假思索地管理上下文
+
+3. 已创建至少 2-3 个自定义命令/Agents
+
+4. 能在开始会话前估算成本
+
+5. 更偏好 Claude Code 的解释而非行内文档
+
+6. 已将 Claude Code 集成到日常工作流中
+
+</Steps>
+
+<Aside type="tip">
+**衡量生产力提升的主观指标**（因人而异）：处理复杂任务时感觉更高效、在模板代码和调试上花的时间更少、通过 Claude 审查发现更多问题、更好地理解陌生代码。
+</Aside>

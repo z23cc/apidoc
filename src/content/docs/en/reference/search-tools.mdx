@@ -1,0 +1,238 @@
+---
+title: "Search Tools Quick Reference"
+description: "Quick reference for choosing between rg, grepai, Serena and ast-grep"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+A quick reference for choosing the right search tool in Claude Code. Covers rg (ripgrep), grepai, Serena, and ast-grep -- when to use each, how they compare, and a combined workflow.
+
+---
+
+## Quick Decision (5 Seconds)
+
+```
+Know exact text?     → rg
+Know exact name?     → rg or Serena
+Know concept?        → grepai
+Know structure?      → ast-grep
+Need dependencies?   → grepai trace
+```
+
+<Aside type="tip">
+Start with `rg` for 90% of searches. Escalate to other tools only when rg does not give you what you need.
+</Aside>
+
+---
+
+## Speed vs Intelligence
+
+```
+Fast ←────────────────────────────────→ Smart
+
+rg        Serena       ast-grep      grepai
+~20ms     ~100ms       ~200ms        ~500ms
+
+Exact     Symbols      Structure     Meaning
+```
+
+<CardGrid>
+  <Card title="rg (ripgrep)" icon="magnifying-glass">
+    Fastest. Exact text and regex pattern matching. Zero setup.
+  </Card>
+  <Card title="Serena" icon="seti:folder">
+    Symbol-aware search. Find function/class definitions. Session memory.
+  </Card>
+  <Card title="ast-grep" icon="seti:json">
+    AST-level pattern matching. Find code structures regardless of formatting.
+  </Card>
+  <Card title="grepai" icon="star">
+    Semantic search by meaning. Call graph tracing for understanding dependencies.
+  </Card>
+</CardGrid>
+
+---
+
+## Use Cases
+
+| Task | Tool | Command |
+|------|------|---------|
+| Find TODO comments | `rg` | `rg "TODO"` |
+| Find login function | `rg` / `Serena` | `rg "login"` or `serena find_symbol` |
+| Find auth code | `grepai` | `grepai search "authentication"` |
+| Who calls login? | `grepai` | `grepai trace callers "login"` |
+| Get file structure | `Serena` | `serena get_symbols_overview` |
+| Async without try/catch | `ast-grep` | `ast-grep "async function $F"` |
+| React class to hooks | `ast-grep` | Migration pattern |
+| Remember decision | `Serena` | `serena write_memory` |
+
+---
+
+## Capabilities Matrix
+
+| Feature | rg | grepai | Serena | ast-grep |
+|---------|:--:|:------:|:------:|:--------:|
+| **Exact match** | Yes | No | Yes | Yes |
+| **Semantic search** | No | Yes | No | No |
+| **Call graph** | No | Yes | No | No |
+| **Symbol awareness** | No | No | Yes | No |
+| **AST patterns** | No | No | No | Yes |
+| **Session memory** | No | No | Yes | No |
+| **Zero setup** | Yes | Needs config | Needs config | Needs config |
+
+---
+
+## Combined Workflow
+
+A practical 5-step workflow for a refactoring task (e.g., refactor authentication):
+
+<Steps>
+1. **Discover** (grepai -- semantic)
+
+   ```bash
+   grepai search "authentication flow"
+   ```
+
+2. **Structure** (Serena -- symbols)
+
+   ```bash
+   serena get_symbols_overview --file auth.service.ts
+   ```
+
+3. **Dependencies** (grepai -- call graph)
+
+   ```bash
+   grepai trace callers "login"
+   ```
+
+4. **Patterns** (ast-grep -- structure)
+
+   ```bash
+   ast-grep "async function login"
+   ```
+
+5. **Verify** (rg -- exact)
+
+   ```bash
+   rg "validateSession" --type ts
+   ```
+</Steps>
+
+---
+
+## Common Mistakes
+
+| Wrong | Right |
+|-------|-------|
+| `grepai search "createSession"` (exact text with semantic tool) | `rg "createSession"` |
+| `rg "auth.*login.*session"` (concept with regex) | `grepai search "auth flow"` |
+| `rg + sed` for refactoring | `Serena find_symbol` |
+| Refactor without checking callers | `grepai trace callers` first |
+
+<Aside type="caution">
+Do not use grepai for exact text searches -- it is slower and less precise than rg for literal matches. Do not use rg for conceptual searches -- complex regex patterns are brittle and miss semantic matches.
+</Aside>
+
+---
+
+## Escalation Path
+
+```
+Start: rg (90% of searches)
+  |
+  Need meaning? → grepai
+  Need symbols? → Serena
+  Need AST?     → ast-grep
+```
+
+### When to Escalate from rg
+
+| Situation | Escalate to | Why |
+|-----------|-------------|-----|
+| Searching for a concept, not exact text | grepai | Semantic understanding |
+| Need to find all callers/callees | grepai trace | Call graph analysis |
+| Need function/class definitions only | Serena | Symbol-level filtering |
+| Need to match code patterns with variable names | ast-grep | AST awareness |
+| Too many false positives with regex | grepai or Serena | Higher precision |
+
+---
+
+## Tool Setup
+
+<Tabs>
+  <TabItem label="rg (ripgrep)">
+    Pre-installed with Claude Code. No setup needed.
+
+    ```bash
+    rg "pattern"                    # Basic search
+    rg "pattern" --type ts          # Filter by file type
+    rg "pattern" -g "!node_modules" # Exclude directories
+    rg "pattern" -C 3               # Show 3 lines of context
+    ```
+  </TabItem>
+  <TabItem label="grepai">
+    MCP server for semantic search.
+
+    ```json
+    // .mcp.json
+    {
+      "mcpServers": {
+        "grepai": {
+          "command": "npx",
+          "args": ["-y", "grepai-mcp"]
+        }
+      }
+    }
+    ```
+
+    ```bash
+    grepai search "authentication flow"
+    grepai trace callers "login"
+    grepai trace callees "validateToken"
+    ```
+  </TabItem>
+  <TabItem label="Serena">
+    MCP server for symbol-aware search with session memory.
+
+    ```bash
+    # Initial indexation
+    uvx --from git+https://github.com/oraios/serena serena project index
+
+    # Incremental update
+    serena project index --incremental --parallel 4
+    ```
+
+    ```bash
+    serena find_symbol --name "UserController"
+    serena get_symbols_overview --file auth.service.ts
+    serena write_memory "Decision: use JWT for auth"
+    serena read_memory
+    ```
+  </TabItem>
+  <TabItem label="ast-grep">
+    Pattern matching on the abstract syntax tree.
+
+    ```bash
+    # Install
+    npm install -g @ast-grep/cli
+
+    # Find async functions without error handling
+    ast-grep "async function $F($$$) { $$$ }"
+
+    # Find React class components
+    ast-grep "class $C extends React.Component"
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## Quick Comparison Table
+
+| Aspect | rg | grepai | Serena | ast-grep |
+|--------|-----|--------|--------|----------|
+| **Speed** | ~20ms | ~500ms | ~100ms | ~200ms |
+| **Search type** | Text/regex | Semantic | Symbols | AST patterns |
+| **Best for** | Known patterns | Unknown code, concepts | Definitions, structure | Code migrations |
+| **Setup** | None | MCP config | MCP + index | npm install |
+| **False positives** | Can be high with broad regex | Low | Low | Low |

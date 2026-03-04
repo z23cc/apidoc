@@ -1,0 +1,294 @@
+---
+title: "Search Tools Mastery"
+description: "Combine rg, grepai, Serena and ast-grep for maximum code search efficiency"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Mastering code search is not about becoming an expert in one tool -- it is about learning to **combine the right tools** for maximum efficiency. This guide covers how to orchestrate rg (ripgrep), grepai, Serena, and ast-grep together.
+
+---
+
+## Quick Reference Matrix
+
+| I need to... | Use This Tool | Command Example |
+|--------------|---------------|-----------------|
+| Find exact text | `rg` (Grep tool) | `rg "authenticate" --type ts` |
+| Find by meaning | `grepai` | `grepai search "user login flow"` |
+| Find function definition | `Serena` | `serena find_symbol --name "login"` |
+| Find structural pattern | `ast-grep` | `ast-grep "async function $F"` |
+| See who calls function | `grepai` | `grepai trace callers "login"` |
+| Get file structure | `Serena` | `serena get_symbols_overview` |
+| Refactor across files | `Serena + ast-grep` | Combined workflow |
+| Explore unknown codebase | `grepai → Serena` | Discovery pattern |
+
+---
+
+## Tool Comparison
+
+### Complete Feature Matrix
+
+| Feature | rg (ripgrep) | grepai | Serena | ast-grep |
+|---------|-------------|--------|--------|----------|
+| **Search Type** | Regex/text | Semantic (meaning) | Symbol-aware | AST structure |
+| **Technology** | Pattern matching | Embeddings (Ollama) | Symbol parsing | Abstract Syntax Tree |
+| **Speed** | ~20ms | ~500ms | ~100ms | ~200ms |
+| **Setup** | None (built-in) | Ollama + install | MCP config | npm install |
+| **Integration** | Native (`Grep`) | MCP server | MCP server | Plugin |
+| **Privacy** | 100% local | 100% local | 100% local | 100% local |
+| **Call graph** | No | Yes | No | No |
+| **Symbol tracking** | No | No | Yes | No |
+| **Session memory** | No | No | Yes | No |
+| **False positives** | Medium | Low | Very low | Very low |
+
+### Token Cost Comparison
+
+| Tool | Typical Query | Tokens Consumed | Results Returned |
+|------|---------------|-----------------|------------------|
+| **rg** | "authenticate" | ~500 | Exact matches only |
+| **grepai** | "auth flow" | ~2000 | Intent-based matches |
+| **Serena** | find_symbol | ~1000 | Symbol + context |
+| **ast-grep** | AST pattern | ~1500 | Structural matches |
+
+<Aside type="tip">
+Key insight: rg is 4x more token-efficient but 10x less intelligent than semantic tools. Choose the right tool for the job.
+</Aside>
+
+---
+
+## Decision Tree
+
+### Level 1: What Do You Know?
+
+```
+Do you know the EXACT text/pattern?
+│
+├─ YES → Use rg (ripgrep)
+│  ├─ Known function name: rg "createSession"
+│  ├─ Known import: rg "import.*React"
+│  └─ Known pattern: rg "async function"
+│
+└─ NO → Go to Level 2
+```
+
+### Level 2: What Are You Looking For?
+
+```
+What's your search intent?
+│
+├─ "Find by MEANING/CONCEPT"
+│  → Use grepai
+│  └─ Example: grepai search "payment validation logic"
+│
+├─ "Find FUNCTION/CLASS definition"
+│  → Use Serena
+│  └─ Example: serena find_symbol --name "UserController"
+│
+├─ "Find by CODE STRUCTURE"
+│  → Use ast-grep
+│  └─ Example: async without error handling
+│
+└─ "Understand DEPENDENCIES"
+   → Use grepai trace
+   └─ Example: grepai trace callers "validatePayment"
+```
+
+---
+
+## Combined Workflows
+
+### Workflow 1: Exploring an Unknown Codebase
+
+**Goal**: Understand a new project quickly
+
+<Steps>
+1. **Semantic Discovery** (grepai): Find files related to authentication
+   ```bash
+   grepai search "user authentication and session management"
+   ```
+2. **Structural Overview** (Serena): Understand each file's structure
+   ```bash
+   serena get_symbols_overview --file auth.service.ts
+   ```
+3. **Dependency Mapping** (grepai trace): See how login is used
+   ```bash
+   grepai trace callers "login"
+   ```
+4. **Exact Search** (rg): Find specific implementation details
+   ```bash
+   rg "validateSession" --type ts -A 5
+   ```
+</Steps>
+
+**Result**: Complete understanding in 4 commands (vs 30+ file reads).
+
+---
+
+### Workflow 2: Large-Scale Refactoring
+
+**Goal**: Rename `createSession` to `initializeUserSession` across 50+ files
+
+<Steps>
+1. **Impact Analysis** (grepai trace): Understand the full scope
+   ```bash
+   grepai trace callers "createSession"
+   grepai trace callees "createSession"
+   ```
+2. **Structural Validation** (ast-grep): Ensure consistent usage pattern
+   ```bash
+   ast-grep "createSession($$$ARGS)"
+   ```
+3. **Symbol-Aware Refactoring** (Serena): Precise renaming
+   ```bash
+   serena find_symbol --name "createSession" --include-body true
+   serena replace_symbol_body --name "createSession" --new-name "initializeUserSession"
+   ```
+4. **Verification** (rg): Confirm no old references remain
+   ```bash
+   rg "createSession" --type ts
+   ```
+</Steps>
+
+---
+
+### Workflow 3: Security Audit
+
+**Goal**: Find security vulnerabilities
+
+<Steps>
+1. **Semantic Discovery** (grepai): Find security-sensitive code
+   ```bash
+   grepai search "SQL query construction"
+   grepai search "user input validation"
+   grepai search "password handling"
+   ```
+2. **Structural Patterns** (ast-grep): Find specific vulnerability patterns
+   ```bash
+   # SQL injection risks
+   ast-grep 'db.query(`${$VAR}`)'
+   # XSS risks
+   ast-grep 'innerHTML = $VAR'
+   # Missing error handling
+   ast-grep -p 'async function $F($$$) { $$$BODY }' --without 'try { $$$TRY } catch'
+   ```
+3. **Dependency Tracing** (grepai): See where vulnerable code is called
+   ```bash
+   grepai trace callers "executeQuery"
+   ```
+4. **Exact Verification** (rg): Confirm findings
+   ```bash
+   rg "innerHTML\s*=" --type ts
+   ```
+</Steps>
+
+---
+
+### Workflow 4: Framework Migration
+
+**Goal**: Migrate React class components to hooks
+
+<Steps>
+1. **Inventory** (ast-grep): Find all class components
+   ```bash
+   ast-grep 'class $C extends React.Component'
+   ```
+2. **Dependency Analysis** (grepai): Understand component relationships and build migration order (leaf components first)
+3. **Pattern Detection** (ast-grep): Identify lifecycle methods used
+   ```bash
+   ast-grep 'componentDidMount() { $$$BODY }'
+   ast-grep 'componentWillReceiveProps($$$) { $$$BODY }'
+   ```
+4. **Incremental Migration** (Serena + ast-grep): Migrate one component at a time
+5. **Verification** (rg + grepai): Ensure migration is successful
+   ```bash
+   rg "React.Component" --type tsx
+   grepai search "component lifecycle methods"
+   ```
+</Steps>
+
+---
+
+### Workflow 5: Performance Optimization
+
+**Goal**: Identify and fix performance bottlenecks
+
+<Steps>
+1. **Hotspot Discovery** (grepai): Find performance-critical code
+   ```bash
+   grepai search "heavy computation or loops"
+   grepai search "database queries in loops"
+   ```
+2. **Pattern Detection** (ast-grep): Find N+1 query patterns
+   ```bash
+   ast-grep 'for ($$$) { await db.query($$$) }'
+   ```
+3. **Call Graph Analysis** (grepai trace): Find hot paths
+   ```bash
+   grepai trace graph "renderUserList" --depth 3
+   ```
+4. **Symbol Tracking** (Serena): Track function performance changes over time
+5. **Verification** (rg): Confirm optimizations are applied
+</Steps>
+
+---
+
+## Performance Benchmarks
+
+**Test**: Find authentication code in a 500k line codebase
+
+| Strategy | Time | Results Quality |
+|----------|------|-----------------|
+| rg "auth" only | 0.2s | 5000+ false positives |
+| grepai "auth" only | 2.5s | 50 relevant results |
+| grepai → rg (combined) | 2.7s | 50 relevant, verified |
+| Serena symbols only | 1.5s | 12 auth functions |
+| ast-grep patterns | 3.0s | 8 auth flows |
+
+---
+
+## Common Pitfalls
+
+<CardGrid>
+  <Card title="Semantic Search for Exact Matches" icon="warning">
+    If you know the exact text, do not use `grepai search "createSession"`. Use `rg "createSession" --type ts` instead.
+  </Card>
+  <Card title="Regex for Conceptual Search" icon="warning">
+    Regex does not understand meaning. Use `grepai search "authentication and session management"` instead of `rg "auth.*login.*session"`.
+  </Card>
+  <Card title="Skipping Call Graph Before Refactoring" icon="warning">
+    Always trace dependencies with `grepai trace callers` before modifying shared code.
+  </Card>
+  <Card title="Over-Engineering Simple Searches" icon="warning">
+    Finding TODOs? Just use `rg "TODO"`. No need to set up grepai + Ollama for that.
+  </Card>
+</CardGrid>
+
+---
+
+## Tool Selection Cheatsheet
+
+| Your Situation | Use This | Not This |
+|----------------|----------|----------|
+| "Find function `login`" | rg "login" | grepai search "login" |
+| "Find login-related code" | grepai "login flow" | rg "login.*" |
+| "Rename function safely" | Serena find_symbol | rg + sed |
+| "Who calls this function?" | grepai trace callers | rg + grep |
+| "Get file structure" | Serena overview | rg "class\|function" |
+| "Find async without try/catch" | ast-grep | rg `async.*\{` |
+| "Migrate React classes" | ast-grep | rg + manual |
+| "Find TODOs" | rg "TODO" | Any other tool |
+
+---
+
+## Recommended Setup Order
+
+<Steps>
+1. **Start**: rg (already built-in with Grep tool)
+2. **Next**: Serena MCP (symbol awareness, session memory)
+3. **Then**: grepai (semantic search + call graph)
+4. **Finally**: ast-grep (structural patterns, large refactoring)
+</Steps>
+
+<Aside>
+90% of searches work with rg + Serena. Add grepai for semantic needs. Only add ast-grep if doing large-scale refactoring or migration.
+</Aside>

@@ -1,0 +1,353 @@
+---
+title: "MCP Server Ecosystem"
+description: "Validated community MCP servers evaluated for production readiness and security"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+The MCP (Model Context Protocol) server ecosystem is evolving rapidly. This guide covers validated community MCP servers -- all listed servers have been evaluated for production readiness, maintenance activity, and security.
+
+---
+
+## Official vs Community Servers
+
+| Type | Examples | Characteristics | Use When |
+|------|----------|-----------------|----------|
+| **Official** | filesystem, memory, brave-search, github | Anthropic-maintained, guaranteed stability | Default choice, core functionality |
+| **Community** | Playwright, Semgrep, Kubernetes | Maintained by orgs/individuals, can be production-ready | Specialized needs, ecosystem integration |
+
+<Aside type="tip">
+Key difference: Official servers have Anthropic SLA backing, community servers require individual evaluation.
+</Aside>
+
+---
+
+## Evaluation Framework
+
+All community servers are evaluated against these criteria:
+
+| Criterion | Threshold | Justification |
+|-----------|-----------|---------------|
+| **GitHub Stars** | ≥50 | Minimum community validation |
+| **Recent Release** | &lt;3 months | Active maintenance |
+| **Documentation** | README + examples + config | Reduces adoption friction |
+| **Tests/CI** | Automated | Ensures stability |
+| **Use Case** | Not covered by official servers | Avoids redundancy |
+| **License** | OSS required | Sustainability and auditability |
+
+**Quality Score Components**:
+- Maintenance (10 points): Release frequency, issue response time
+- Documentation (10 points): README completeness, examples, troubleshooting
+- Tests (10 points): Test coverage, CI/CD automation
+- Performance (10 points): Response time, resource efficiency
+- Adoption (10 points): Community usage, production deployments
+
+**Total Score**: `/50` → Normalized to `/10` for final rating.
+
+---
+
+## Ecosystem Evolution
+
+<CardGrid>
+  <Card title="Linux Foundation Standardization" icon="star">
+    MCP becomes an official standard via the **Agentic AI Foundation** under Linux Foundation governance, enabling enterprise adoption and long-term stability.
+  </Card>
+  <Card title="Advanced MCP Tool Use" icon="rocket">
+    Anthropic deploys MCP context management optimizations: deferred tool loading on-demand and search-based tool discovery for large tool sets.
+  </Card>
+  <Card title="MCPB Bundle Format" icon="seti:config">
+    Standardized bundle format for one-click MCP server installation, replacing runtime dependency management with deterministic installations.
+  </Card>
+  <Card title="MCP Apps (Interactive Work Tools)" icon="puzzle">
+    Claude now supports interactive tools via the MCP Apps spec, enabling Slack drafting, Figma diagrams, Asana timelines, and more.
+  </Card>
+</CardGrid>
+
+---
+
+## Version Control (Official Servers)
+
+### Git MCP (Anthropic)
+
+Official Anthropic server for Git repository interaction via Model Context Protocol with structured output and cross-platform safety.
+
+| Tool | Description |
+|------|-------------|
+| `git_status` | Working tree status (staged, unstaged, untracked) |
+| `git_log` | Commit history with advanced filtering |
+| `git_diff` | Diff between commits/branches |
+| `git_commit` | Create commit |
+| `git_add` | Stage files/patterns |
+| `git_branch` | List/filter branches |
+| `git_create_branch` | Create new branch |
+| `git_checkout` | Switch branches/commits |
+| `git_show` | Show commit details |
+
+**Installation**:
+
+```bash
+# Method 1: UV (recommended)
+uvx mcp-server-git --repository /path/to/repo
+
+# Method 2: pip + Python module
+pip install mcp-server-git
+python -m mcp_server_git
+
+# Method 3: Docker (sandboxed)
+docker run -v /path/to/repo:/repo ghcr.io/modelcontextprotocol/mcp-server-git
+```
+
+**Claude Code Configuration** (`~/.claude.json`):
+
+```json
+{
+  "mcpServers": {
+    "git": {
+      "command": "uvx",
+      "args": ["mcp-server-git", "--repository", "/Users/you/projects/myrepo"]
+    }
+  }
+}
+```
+
+#### Git MCP vs GitHub MCP vs Bash Tool
+
+| Operation | Git MCP | GitHub MCP | Bash Tool |
+|-----------|---------|------------|-----------|
+| **Local commits** | Best | No | OK |
+| **Branch management** | Best | No | OK |
+| **Diff/log analysis** | Best | No | OK |
+| **PR creation** | No | Best | gh CLI |
+| **Issue management** | No | Best | gh CLI |
+| **Interactive rebase** | No | No | Best |
+| **Reflog recovery** | No | No | Best |
+
+---
+
+## Validated Community Servers
+
+### Browser Automation
+
+#### Playwright MCP (Microsoft)
+
+Official Microsoft server for browser automation optimized for LLMs. Uses accessibility trees instead of screenshots, reducing token usage.
+
+| Capability | Details |
+|------------|---------|
+| Browser Automation | Navigate, click, fill, hover (Playwright API) |
+| Content Extraction | Structured data via accessibility trees |
+| Screenshots | Full-page + element-specific |
+| JavaScript Execution | Run code in page context |
+| Supported Browsers | Chromium, Firefox, WebKit |
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["--yes", "@microsoft/playwright-mcp"]
+    }
+  }
+}
+```
+
+**Quality Score**: 8.8/10
+
+#### Browserbase MCP
+
+Official Browserbase server for cloud browser automation. Includes Stagehand AI agent for autonomous task execution with stealth mode and proxy support.
+
+**Use Case**: Complex web interactions requiring stealth mode, proxy support, or autonomous execution.
+
+**Quality Score**: 7.6/10 | **Cost**: Freemium, ~$0.10/session
+
+#### Chrome DevTools MCP
+
+Official Anthropic server for Chrome DevTools Protocol integration, providing debugging and inspection capabilities.
+
+| Scenario | Chrome DevTools MCP | Playwright MCP |
+|----------|---------------------|----------------|
+| Debug runtime errors | Best | Limited |
+| Inspect network calls | Best | Basic navigation only |
+| Test user interactions | Not designed for testing | Best |
+| Profile performance | Best | No profiling tools |
+
+---
+
+### DevOps & Infrastructure
+
+#### Kubernetes MCP (Red Hat)
+
+Official Containers Community server (Red Hat-backed) for Kubernetes/OpenShift management in natural language.
+
+| Capability | Details |
+|------------|---------|
+| Resource CRUD | Create, Read, Update, Delete any K8s resource |
+| Pod Operations | Logs, events, exec, metrics (top) |
+| Deployment Management | Scale, rollout, status |
+| Multi-Cluster | Switch kubeconfig contexts |
+| OpenShift Support | Native OpenShift resources |
+
+**Quality Score**: 8.4/10
+
+#### Vercel MCP
+
+Community server for Vercel platform operations (deployments, projects, env vars, teams).
+
+**Use Case**: AI assistant generates Next.js code, creates Vercel project, configures env vars, triggers deployment -- full CI/CD loop without leaving the IDE.
+
+**Quality Score**: 7.6/10
+
+---
+
+### Security & Code Analysis
+
+#### Semgrep MCP
+
+Official Semgrep server for vulnerability scanning (SAST, secrets, supply chain). Includes custom rules engine.
+
+<Aside type="caution">
+Semgrep supports Python, JS/TS, Java, Go, C#, Rust, PHP, and more. Integrate security scanning directly into your Claude Code workflow.
+</Aside>
+
+```bash
+# Installation
+claude mcp add semgrep -- uvx semgrep-mcp
+```
+
+**Quality Score**: 9.0/10
+
+---
+
+### Code Search & Analysis
+
+#### Grepai MCP
+
+Community server for semantic code search and call graph analysis via local Ollama embeddings. Search code by intent ("payment flow", "auth logic") instead of exact patterns.
+
+| Capability | Details |
+|------------|---------|
+| `grepai_search` | Semantic search by natural language query |
+| `grepai_trace_callers` | Find all functions that call a given symbol |
+| `grepai_trace_callees` | Find all functions called by a given symbol |
+| `grepai_trace_graph` | Full call graph with configurable depth |
+
+**Token Efficiency**:
+
+| Workflow | Tokens | Verdict |
+|----------|--------|---------|
+| Grep + Read files (brute force) | ~15K | Noisy, lots of irrelevant context |
+| grepai search + trace | ~4K | Targeted, relevant results only |
+
+**Quality Score**: 7.8/10
+
+---
+
+### Documentation & Knowledge
+
+#### Context7 MCP
+
+Official Upstash server for real-time library documentation covering 500+ libraries. Eliminates API hallucination.
+
+**Use Case**: When Claude Code needs to use a library API, Context7 provides up-to-date docs and examples.
+
+```bash
+claude mcp add context7 -- npx -y @upstash/context7-mcp --api-key YOUR_API_KEY
+```
+
+**Quality Score**: 8.2/10
+
+---
+
+### Project Management
+
+#### Linear MCP
+
+Community server for Linear (project management SaaS) via GraphQL API with issue management, projects, teams, and comments.
+
+**Use Case**: Claude Code automatically creates tickets, updates status, and links issues -- closing the loop between development and project management.
+
+**Quality Score**: 7.6/10
+
+---
+
+### Orchestration
+
+#### MCP-Compose
+
+Community tool for managing multiple MCP servers Docker Compose-style. Declarative YAML configuration with multi-transport support (STDIO/HTTP/SSE).
+
+```yaml
+version: "1.0"
+mcpServers:
+  filesystem:
+    command: npx
+    args:
+      - "@modelcontextprotocol/server-filesystem"
+      - "/tmp"
+    transport: stdio
+  memory:
+    command: npx
+    args:
+      - "@modelcontextprotocol/server-memory"
+    transport: stdio
+proxy:
+  port: 3000
+  listen: "127.0.0.1"
+```
+
+**Quality Score**: 7.4/10
+
+---
+
+## Production Deployment
+
+### Security Checklist
+
+<Steps>
+1. **API keys** stored in `.env`, not in config files
+2. **RBAC/permissions** reviewed (especially Kubernetes, Semgrep)
+3. **Rate limits** understood (Linear GraphQL complexity, Vercel API)
+4. **Fallback mechanisms** for API downtime implemented
+5. **Monitoring + logging** enabled for all MCP servers
+</Steps>
+
+### Quick Start Stack
+
+<Tabs>
+  <TabItem label="MVP Essentials">
+    1. **Playwright MCP** -- E2E testing, web verification
+    2. **Semgrep MCP** -- Security-first coding
+  </TabItem>
+  <TabItem label="Important Additions">
+    3. **Context7 MCP** -- API reference accuracy
+    4. **Linear MCP** -- Issue tracking integration (optional)
+  </TabItem>
+  <TabItem label="DevOps/SRE">
+    5. **Kubernetes MCP** -- Cluster management
+    6. **Vercel MCP** -- Next.js deployment automation
+  </TabItem>
+  <TabItem label="Complex Setups">
+    7. **MCP-Compose** -- Multi-server orchestration
+    8. **Browserbase MCP** -- Heavy web automation
+  </TabItem>
+</Tabs>
+
+### Performance Metrics
+
+| Metric | Median | Range | Notes |
+|--------|--------|-------|-------|
+| **Response Time** | ~200ms | 100-500ms | Cloud-dependent (Browserbase ~500ms) |
+| **Token Overhead** | ~200-500 tokens | Minimal | Accessibility trees vs screenshots |
+| **Setup Time** | ~5 minutes | 2-10 minutes | Cargo build (MCP-Compose) = 10 min |
+
+---
+
+## Excluded Servers
+
+| Server | Reason | Date Evaluated |
+|--------|--------|----------------|
+| **X/Twitter MCP** | API instability, frequent auth issues | Jan 2026 |
+| **Vector Search MCP** | &lt;50 stars, incomplete documentation | Jan 2026 |
+| **GitHub MCP** | Archived, migrated to official Go SDK | Jan 2026 |
+| **Jira MCP** | No recent release, less stable than Linear | Jan 2026 |

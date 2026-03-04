@@ -1,0 +1,221 @@
+---
+title: "Skeleton Projects Workflow"
+description: "Use battle-tested repositories as scaffolding for new projects"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Use existing, battle-tested repositories as scaffolding for new projects instead of starting from scratch. This workflow helps you rapidly bootstrap project foundations while preserving mature architectural patterns and best practices.
+
+---
+
+## When to Use
+
+<CardGrid>
+  <Card title="Starting a New Project" icon="rocket">
+    Technology stack is decided, and you need to scaffold the project quickly.
+  </Card>
+  <Card title="Standardizing Team Patterns" icon="setting">
+    Unify architecture patterns and code conventions across multiple services.
+  </Card>
+  <Card title="Rapid Prototyping" icon="pencil">
+    Architecture decisions are already made; you need to get into business logic fast.
+  </Card>
+  <Card title="Onboarding" icon="open-book">
+    Provide new team members with a working reference project to accelerate ramp-up.
+  </Card>
+</CardGrid>
+
+<Aside type="caution">
+**When NOT to use:** If you're exploring unknown technology, try exploratory development (Vibe Coding) first. If requirements are too unique for existing templates, a skeleton may hinder more than help.
+</Aside>
+
+---
+
+## Prerequisites
+
+- Claude Code installed and configured
+- Git access to reference repositories
+- Clear understanding of target project requirements
+
+---
+
+## Complete Workflow
+
+### Phase 1: Find and Evaluate a Skeleton
+
+Don't build from zero. Find an existing repo that matches your target architecture.
+
+<Steps>
+1. **Search for candidates**
+
+   ```bash
+   # Ask Claude to help find reference repos
+   claude -p "I need a skeleton for a Next.js 15 app with:
+   - App Router
+   - Prisma ORM with PostgreSQL
+   - tRPC for type-safe API
+   - Tailwind CSS
+   - Jest + Playwright testing
+
+   Search GitHub for well-maintained starter templates.
+   Evaluate the top 3 by: last commit date, stars, dependency freshness, test coverage."
+   ```
+
+2. **Clone and audit**
+
+   ```bash
+   git clone <candidate-repo> skeleton-eval
+   cd skeleton-eval
+   claude
+   ```
+
+   Then run the audit inside Claude:
+
+   ```
+   Audit this repository as a potential skeleton for our project:
+   1. List all dependencies and their versions (flag outdated ones)
+   2. Assess code quality: patterns, consistency, test coverage
+   3. Identify what we'd keep vs. what we'd remove
+   4. Flag any security concerns (vulnerable deps, exposed secrets)
+   5. Rate overall suitability (1-5) with specific justification
+   ```
+
+3. **Multi-perspective evaluation** (optional, for thorough analysis)
+
+   ```
+   Run a multi-perspective evaluation of this skeleton:
+
+   Agent 1 (Security): Check for vulnerabilities, hardcoded secrets, unsafe patterns
+   Agent 2 (Architecture): Assess modularity, separation of concerns, scalability
+   Agent 3 (DX): Evaluate developer experience - setup time, documentation, tooling
+
+   Synthesize findings into a go/no-go recommendation.
+   ```
+</Steps>
+
+### Phase 2: Fork and Customize
+
+<Steps>
+1. **Create your project from the skeleton**
+
+   ```bash
+   mkdir my-project
+   cp -r skeleton-eval/. my-project/
+   cd my-project
+   rm -rf .git
+   git init
+   ```
+
+2. **Strip and adapt with Claude**
+
+   ```
+   Customize this skeleton for our project "Acme Dashboard":
+
+   1. Remove: example routes, demo data, sample tests
+   2. Keep: config structure, auth setup, database schema pattern, CI pipeline
+   3. Update: package.json (name, description, version 0.1.0)
+   4. Add: our CLAUDE.md with project conventions
+   5. Verify: pnpm install && pnpm build && pnpm test all pass after changes
+
+   Important: Don't break the working skeleton. Each removal should be followed
+   by a build check.
+   ```
+</Steps>
+
+### Phase 3: Expand from Skeleton to MVP
+
+<Steps>
+1. **Build the first real feature**
+
+   ```
+   Using the patterns established in this skeleton, implement our first feature:
+   User Authentication (login + registration + password reset)
+
+   Follow the skeleton's existing patterns for:
+   - Route structure (match the example routes pattern)
+   - Service layer (match the existing service pattern)
+   - Test structure (match the example test pattern)
+   - Error handling (match the existing error pattern)
+
+   Create a task plan before starting implementation.
+   ```
+
+2. **Validate skeleton integrity**
+
+   ```
+   Now that we have one real feature, verify the skeleton still works:
+   1. Run full test suite
+   2. Check that the CI pipeline passes
+   3. Verify no skeleton patterns were broken
+   4. Confirm new code follows skeleton conventions consistently
+   ```
+</Steps>
+
+### Phase 4: Document and Iterate
+
+Record your decisions in CLAUDE.md:
+
+```
+Update CLAUDE.md with:
+1. Which skeleton we started from (repo URL, commit hash)
+2. What we kept and why
+3. What we removed and why
+4. Any pattern deviations from the original skeleton
+5. Conventions we've added on top
+```
+
+---
+
+## Skeleton Expansion Timeline
+
+| Stage | Day 1 (Skeleton) | Week 1 (MVP) | Month 1 (Production) |
+|-------|------------------|---------------|----------------------|
+| **Routes** | 1 example route | 5 real routes | 20+ routes |
+| **Tests** | 1 example test | 30 tests | 200+ tests |
+| **Config** | Basic config | Env-based config | Multi-env + secrets |
+| **Database** | SQLite / local DB | Docker PostgreSQL | Managed DB + migrations |
+| **CI/CD** | None | Basic CI | Full CI/CD pipeline |
+| **Docs** | README only | CLAUDE.md + ADRs | Full documentation |
+
+---
+
+## Real-World Example: Microservice from Skeleton
+
+```bash
+# 1. Clone proven skeleton
+git clone https://github.com/example/express-prisma-starter skeleton
+cd skeleton && claude
+
+# 2. Audit (about 2 minutes)
+# "Audit this skeleton. Is it suitable for a billing microservice?"
+# Claude reports deps, patterns, suitability score
+
+# 3. Customize (about 5 minutes)
+# "Strip examples, rename to billing-service, add our CLAUDE.md"
+# Claude removes demo code, updates config, adds project context
+
+# 4. First feature (about 30 minutes)
+# "Implement invoice creation endpoint following skeleton patterns"
+# Claude creates route, service, repo, tests matching skeleton conventions
+
+# 5. Verify (about 2 minutes)
+# "Run all tests, verify build, check skeleton patterns preserved"
+# Claude verifies all green, patterns consistent
+```
+
+---
+
+## Common Pitfalls
+
+| Pitfall | Symptom | Fix |
+|---------|---------|-----|
+| **Skeleton too complex** | Spending more time stripping than building | Choose a simpler skeleton, or build a minimal one yourself |
+| **Outdated dependencies** | Security warnings on install | Check last commit date before cloning (< 6 months ideal) |
+| **Breaking skeleton patterns** | New code diverges from skeleton conventions | Add skeleton patterns to CLAUDE.md as constraints |
+| **Keeping dead code** | Unused example code cluttering the project | Strip ruthlessly in Phase 2, verify build after each removal |
+| **No documentation** | Forgetting why the skeleton was chosen | Document in CLAUDE.md immediately (Phase 4) |
+
+<Aside type="tip">
+The core idea behind the Skeleton Projects workflow is "borrow first, customize second." Instead of spending time building infrastructure from scratch, stand on the shoulders of mature projects and focus your energy on business logic.
+</Aside>

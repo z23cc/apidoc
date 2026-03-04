@@ -1,0 +1,479 @@
+---
+title: "Context Management"
+description: "Master the most important concept in Claude Code: context window management, cost optimization, session handoffs, and persistence strategies"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Context management is **the most important concept** in Claude Code. Context is Claude's "working memory" — understanding and managing it directly determines your efficiency and cost.
+
+---
+
+## What Is Context?
+
+Context is Claude's working memory during a conversation. It includes:
+
+- All messages in the conversation
+- Files Claude has read
+- Command outputs
+- Tool results
+
+Claude has a **200,000 token** context window. Think of it like RAM — when it fills up, performance degrades or errors occur.
+
+---
+
+## Context Zones Quick Reference
+
+<CardGrid>
+  <Card title="Green Zone: 0-50%">
+    Work freely. No need to worry about context usage.
+  </Card>
+  <Card title="Yellow Zone: 50-75%">
+    Start being selective. Avoid unnecessary file reads.
+  </Card>
+  <Card title="Red Zone: 75-90%">
+    Use `/compact` now to compress context.
+  </Card>
+  <Card title="Critical Zone: 90%+">
+    Must `/clear` or risk errors.
+  </Card>
+</CardGrid>
+
+---
+
+## Reading the Statusline
+
+The statusline shows your context usage in real-time:
+
+```
+Claude Code │ Ctx(u): 45% │ Cost: $0.23 │ Session: 1h 23m
+```
+
+| Metric | Meaning |
+|--------|---------|
+| `Ctx(u): 45%` | You've used 45% of context |
+| `Cost: $0.23` | API cost so far |
+| `Session: 1h 23m` | Time elapsed |
+
+### Custom Statusline
+
+The recommended tool is [ccstatusline](https://github.com/sirmalloc/ccstatusline). Add to `~/.claude/settings.json`:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "npx -y ccstatusline@latest",
+    "padding": 0
+  }
+}
+```
+
+Output: `Model: Sonnet 4.6 | Ctx: 0 | ⎇ main | (+0,-0) | Cost: $0.27 | Session: 0m | Ctx(u): 0.0%`
+
+---
+
+## Context Recovery Strategies
+
+When context usage gets high, you have several options:
+
+<Tabs>
+  <TabItem label="/compact">
+    - Summarizes the conversation
+    - Preserves key context
+    - Reduces usage by ~50%
+    - **Best for**: Continuing the current conversation
+  </TabItem>
+  <TabItem label="/clear">
+    - Starts fresh
+    - Loses all context
+    - **Best for**: Switching topics or when context is badly poisoned
+  </TabItem>
+  <TabItem label="Summarize from here">
+    - Use `/rewind` (or `Esc + Esc`) to open the checkpoint list
+    - Select a checkpoint and choose "Summarize from here"
+    - Claude summarizes everything from that point forward, keeping earlier context intact
+    - More precise than full `/compact`
+    - **Requires v2.1.32+**
+  </TabItem>
+  <TabItem label="Targeted Approach">
+    - Be specific in queries
+    - Avoid "read the entire file"
+    - Use symbol references: `"read the calculateTotal function"`
+  </TabItem>
+</Tabs>
+
+---
+
+## Context Triage: What to Keep vs. Evacuate
+
+When approaching the red zone (75%+), you need to actively decide what information to preserve.
+
+<Tabs>
+  <TabItem label="Priority: Keep">
+    | Keep | Why |
+    |------|-----|
+    | CLAUDE.md content | Core instructions must persist |
+    | Files being actively edited | Current work context |
+    | Tests for the current component | Validation context |
+    | Critical decisions made | Architectural choices |
+    | Error messages being debugged | Problem context |
+  </TabItem>
+  <TabItem label="Priority: Evacuate">
+    | Evacuate | Why |
+    |----------|-----|
+    | Files read but no longer relevant | One-time lookups |
+    | Debug output from resolved issues | Historical clutter |
+    | Long conversation history | Summarized by /compact |
+    | Files from completed tasks | No longer needed |
+    | Large config files | Can be re-read if needed |
+  </TabItem>
+</Tabs>
+
+### Pre-Compact Checklist
+
+<Steps>
+1. **Document critical decisions** in CLAUDE.md or a session note
+2. **Commit pending changes** to git (creates a restore point)
+3. **Note the current task** explicitly ("We're implementing X")
+4. **Run `/compact`** to summarize and free space
+</Steps>
+
+<Aside type="tip">
+If you know you'll need specific information post-compact, tell Claude explicitly: "Before we compact, remember that we decided to use Strategy A for authentication because of X." Claude will include this in the summary.
+</Aside>
+
+---
+
+## What Consumes Context?
+
+| Action | Context Cost |
+|--------|-------------|
+| Reading a small file | Low (~500 tokens) |
+| Reading a large file | High (~5K+ tokens) |
+| Running commands | Medium (~1K tokens) |
+| Multi-file search | High (~3K+ tokens) |
+| Long conversations | Accumulates over time |
+
+---
+
+## Context Depletion Symptoms
+
+Learn to recognize when context is running low:
+
+| Symptom | Severity | Action |
+|---------|----------|--------|
+| Shorter responses than usual | Warning | Continue with caution |
+| Forgetting CLAUDE.md instructions | Serious | Document state, prepare checkpoint |
+| Inconsistencies with earlier conversation | Critical | New session needed |
+| Errors on code already discussed | Critical | New session needed |
+| "I can't access that file" (when it was read) | Critical | New session immediately |
+
+### Context Inspection
+
+Use the `/context` command for detailed usage information:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ CONTEXT USAGE                                    67% used   │
+├─────────────────────────────────────────────────────────────┤
+│ System Prompt          ████████░░░░░░░░░░░░░░░░  12,450 tk  │
+│ System Tools           ██░░░░░░░░░░░░░░░░░░░░░░   3,200 tk  │
+│ MCP Tools (5 servers)  ████████████░░░░░░░░░░░░  18,600 tk  │
+│ Conversation           ████████████████████░░░░  89,200 tk  │
+├─────────────────────────────────────────────────────────────┤
+│ TOTAL                                           123,450 tk  │
+│ REMAINING                                        76,550 tk  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+<Aside type="caution" title="The Last 20% Rule">
+Reserve ~20% of context for: multi-file operations at end of session, last-minute corrections, and generating summaries or checkpoints.
+</Aside>
+
+---
+
+## Memory Systems
+
+Claude Code has three distinct memory systems. Understanding the difference is crucial for effective long-term work:
+
+| Aspect | Session Memory | Auto-Memory (native) | Persistent Memory (Serena) |
+|--------|----------------|----------------------|---------------------------|
+| **Scope** | Current conversation only | Across sessions, per-project | Across all sessions |
+| **Managed by** | `/compact`, `/clear` | `/memory` command | Serena MCP `write_memory()` |
+| **Lost when** | Session ends or `/clear` | Explicitly deleted via `/memory` | Explicitly deleted from Serena |
+| **Requires** | Nothing | Nothing (v2.1.59+) | Serena MCP server |
+| **Use case** | Immediate working context | Key decisions and context snippets | Architectural decisions and patterns |
+
+### When to Use Which
+
+- **Session memory**: Active problem-solving, debugging, exploration
+- **Auto-memory**: Decisions and context you want Claude to rediscover next session without manual effort (v2.1.59+)
+- **Persistent memory (Serena)**: Structured key-value store for architectural decisions across many projects
+- **CLAUDE.md**: Team conventions, project structure (versioned with git)
+
+---
+
+## Fresh Context Pattern (Ralph Loop)
+
+### The Problem: Context Rot
+
+Research shows LLM performance degrades significantly with accumulated context:
+
+- **20-30% performance gap** between focused and polluted prompts
+- Degradation starts at ~16K tokens for Claude models
+- Failed attempts, error traces, and iteration history dilute attention
+
+### The Solution
+
+Instead of managing context within a session, **restart with a fresh session per task** while persisting state externally:
+
+```bash
+# Canonical "Ralph Loop" (Geoffrey Huntley)
+while :; do cat TASK.md PROGRESS.md | claude -p ; done
+```
+
+**State persists via**:
+- `TASK.md` — Current task definition with acceptance criteria
+- `PROGRESS.md` — Learnings, completed tasks, blockers
+- Git commits — Each iteration commits atomically
+
+### Traditional vs. Fresh Context
+
+| Traditional | Fresh Context |
+|-------------|---------------|
+| Accumulate in chat history | Reset per task |
+| `/compact` to compress | State in files + git |
+| Context bleeds across tasks | Each task gets full attention |
+
+### When to Use
+
+| Situation | Recommendation |
+|-----------|---------------|
+| Context 70-90%, staying interactive | `/compact` |
+| Context 90%+, need fresh start | `/clear` then continue |
+| Long autonomous run, task-based | Fresh Context Pattern |
+| Overnight/AFK execution | Fresh Context Pattern |
+
+<Aside type="tip" title="Variant: Session-per-Concern Pipeline">
+Dedicate a fresh session to each quality dimension: Plan session -> Test session -> Implement session -> Review sessions. Each session generates artifacts that feed the next.
+</Aside>
+
+### Task Definition Template
+
+```markdown
+# TASK.md
+
+## Current Focus
+[Single atomic task with clear deliverable]
+
+## Acceptance Criteria
+- [ ] Tests pass
+- [ ] Build succeeds
+- [ ] [Specific verification]
+
+## Context
+- Related files: [paths]
+- Constraints: [rules]
+
+## Do NOT
+- Start other tasks
+- Refactor unrelated code
+```
+
+---
+
+## Context Poisoning (Bleeding)
+
+<Aside type="caution" title="What Is Context Poisoning?">
+When information from one task contaminates another, causing unexpected behavior.
+</Aside>
+
+### Common Patterns
+
+<Tabs>
+  <TabItem label="Style Bleeding">
+    ```
+    Task 1: "Create a blue button"
+    Claude: [Creates blue button]
+
+    Task 2: "Create a form"
+    Claude: [Creates form... with all buttons blue!]
+            ↑ The "blue" bled into the new task
+
+    Solution: Use explicit boundaries
+    "---NEW TASK---
+    Create a form. Use default design system colors."
+    ```
+  </TabItem>
+  <TabItem label="Instruction Contamination">
+    ```
+    Instruction 1: "Always use arrow functions"
+    Instruction 2: "Follow project conventions" (which uses function)
+
+    Claude: [Paralyzed, alternating between styles]
+
+    Solution: Clarify priority
+    "In case of conflict, project conventions take precedence
+    over my preferences."
+    ```
+  </TabItem>
+  <TabItem label="Temporal Confusion">
+    ```
+    Early session: "auth.ts contains login logic"
+    ... 2h of work ...
+    You renamed auth.ts to authentication.ts
+
+    Claude: "I'll modify auth.ts..."
+            ↑ Using outdated info
+
+    Solution: Explicit updates
+    "Note: auth.ts was renamed to authentication.ts"
+    ```
+  </TabItem>
+</Tabs>
+
+### Context Hygiene Checklist
+
+- New tasks = use explicit markdown boundaries
+- Structural changes = inform Claude explicitly
+- Contradictory instructions = clarify priority
+- Long sessions (&gt;2h) = consider `/clear` or new session
+- Erratic behavior = check with `/context`
+
+---
+
+## Cost Awareness & Optimization
+
+Claude Code uses API credits. Understanding costs helps you optimize usage.
+
+### Pricing Overview
+
+| Model | Input (per 1M tokens) | Output (per 1M tokens) | Context Window |
+|-------|----------------------|------------------------|----------------|
+| **Sonnet 4.6** | $3.00 | $15.00 | 200K |
+| Opus 4.6 (standard) | $5.00 | $25.00 | 200K |
+| Opus 4.6 (1M context beta) | $10.00 | $37.50 | 1M |
+| Haiku 4.5 | $0.80 | $4.00 | 200K |
+
+<Aside type="note">
+A typical 1-hour session costs approximately **$0.10 - $0.50** depending on usage patterns.
+</Aside>
+
+### Cost Optimization Strategies
+
+<Steps>
+1. **Be specific in queries** — Target specific line ranges instead of entire files: `"Check the login function in auth.ts:45-60"`
+2. **Use `/compact` proactively** — Compact at 70% context instead of waiting until 90%
+3. **Choose the right model** — Haiku for simple tasks, Sonnet for standard work, Opus only for critical/complex tasks
+4. **Limit MCP servers** — Only load the MCP servers needed for the current project
+5. **Batch operations** — Read multiple files in a single request rather than one at a time
+6. **Use prompt caching** — For API usage, cache repeated prefixes (up to 90% savings)
+</Steps>
+
+### 200K vs. 1M Context
+
+| Scenario | Recommendation |
+|----------|---------------|
+| Bug fix, PR review, daily coding | Sonnet 4.6 @ 200K — fast and cheap |
+| Full-repo audit, entire codebase load | Opus 4.6 @ 1M — worth the cost for precision |
+| Cross-module refactoring | Sonnet 4.6 @ 1M — but weigh cost vs. chunking + RAG |
+| Architecture analysis, Agent Teams | Opus 4.6 @ 1M — strongest retrieval at scale |
+
+<Aside type="caution">
+Above 200K input tokens, **all tokens** in the request are charged at premium rates — not just the excess. Community consensus: 200K + RAG is the default; 1M Opus is reserved for cases where loading everything at once is genuinely necessary.
+</Aside>
+
+### Cost Tracking
+
+- **Real-time tracking**: The statusline shows current session cost
+- **Detailed analytics**: Use the `ccusage` CLI tool
+
+```bash
+ccusage                    # Overview all periods
+ccusage --today            # Today's costs
+ccusage --month            # Current month
+ccusage --model-breakdown  # Cost by model
+```
+
+### Budget Reference
+
+| User Type | Monthly Budget Estimate |
+|-----------|------------------------|
+| Solo developer (budget-conscious) | $5-$15 (20-30 hours) |
+| Professional developer | $20-$50 (40-80 hours) |
+| Teams (5-10 developers) | $50-$200 |
+
+---
+
+## Sanity Check Technique
+
+Verify that Claude has loaded your configuration correctly:
+
+<Steps>
+1. Add at the top of CLAUDE.md:
+   ```markdown
+   # My name is [Your Name]
+   # Project: [Project Name]
+   # Stack: [Your tech stack]
+   ```
+2. Ask Claude: "What is my name? What project am I working on?"
+3. If correct, configuration loaded properly
+</Steps>
+
+| Failure Symptom | Probable Cause | Solution |
+|-----------------|----------------|----------|
+| Doesn't know your name | CLAUDE.md not loaded | Check file location |
+| Inconsistent answers | Typo in filename | Must be `CLAUDE.md` (not `clause.md`) |
+| Partial knowledge | Context exhausted | `/clear` or new session |
+
+---
+
+## Session Handoff Pattern
+
+When ending a session or switching contexts, create a **handoff document** to maintain continuity.
+
+### Handoff Document Template
+
+```markdown
+# Session Handoff - [Date] [Time]
+
+## What Was Accomplished
+- [Key task 1 completed]
+- [Key task 2 completed]
+- [Files modified: list]
+
+## Current State
+- [What's working]
+- [What's partially done]
+- [Known issues or blockers]
+
+## Decisions Made
+- [Architectural choice 1: why]
+- [Technology selection: rationale]
+- [Trade-offs accepted]
+
+## Next Steps
+1. [Immediate next task]
+2. [Dependent task]
+3. [Follow-up validation]
+
+## Context for Next Session
+- Branch: [branch-name]
+- Key files: [list 3-5 most relevant]
+- Dependencies: [external factors]
+```
+
+### When to Create Handoff Documents
+
+| Scenario | Why |
+|----------|-----|
+| End of work day | Resume seamlessly tomorrow |
+| Before context limit | Preserve state before `/clear` |
+| Switching focus areas | Different task requires fresh context |
+| Interruption expected | Emergency or meeting disrupts work |
+| Complex debugging | Document hypotheses and tests tried |
+
+<Aside type="tip">
+Ask Claude to generate the handoff automatically: `"Create a session handoff document for what we accomplished today"`. Claude will analyze git status and conversation history to generate a structured handoff.
+</Aside>

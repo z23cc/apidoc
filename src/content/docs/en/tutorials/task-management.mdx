@@ -1,0 +1,425 @@
+---
+title: "Task Management Workflow"
+description: "Multi-session task coordination using Tasks API and TodoWrite for complex projects"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Task management in Claude Code evolved significantly in v2.1.16 with the introduction of the **Tasks API**, complementing the original **TodoWrite** tool. This tutorial teaches you when to use each system and how to leverage multi-session task coordination for complex projects.
+
+---
+
+## When to Use
+
+<CardGrid>
+  <Card title="Multi-Session Projects" icon="puzzle">
+    Projects that span multiple coding sessions and require persistent task state.
+  </Card>
+  <Card title="Multi-Agent Coordination" icon="rocket">
+    Multiple Claude instances collaborating on the same project.
+  </Card>
+  <Card title="Complex Dependencies" icon="setting">
+    Tasks with blocking dependencies that require strict execution ordering.
+  </Card>
+  <Card title="Interruption Recovery" icon="forward-slash">
+    Seamlessly resume work after context compaction or session interruption.
+  </Card>
+</CardGrid>
+
+<Aside>
+**When NOT to use:** Single-session straightforward implementations, quick fixes, or tasks completable in under 10 minutes.
+</Aside>
+
+---
+
+## System Comparison
+
+| Feature | TodoWrite (Legacy) | Tasks API (v2.1.16+) |
+|---------|-------------------|----------------------|
+| **Persistence** | Session memory only | Disk storage (`~/.claude/tasks/`) |
+| **Multi-session** | Lost on session end | Survives across sessions |
+| **Dependencies** | Manual ordering | Task blocking (A blocks B) |
+| **Coordination** | Single agent | Multi-agent with broadcast |
+| **Status tracking** | pending / in_progress / completed | pending / in_progress / completed |
+| **When to use** | Simple single-session todos | Complex multi-session projects |
+
+<Tabs>
+  <TabItem label="Using Tasks API (default)">
+    ```bash
+    # v2.1.19+ defaults to Tasks API
+    claude
+    ```
+  </TabItem>
+  <TabItem label="Using TodoWrite (legacy)">
+    ```bash
+    # Switch back to the legacy system
+    CLAUDE_CODE_ENABLE_TASKS=false claude
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## Phase 1: Task Planning
+
+**Goal:** Decompose complex work into trackable, executable units.
+
+<Steps>
+1. **Analyze scope**
+
+   ```bash
+   claude
+   > "Analyze this codebase for implementing JWT authentication:
+     - Glob for existing auth patterns
+     - Grep for security-related code
+     - Identify integration points"
+   ```
+
+2. **Design task hierarchy**
+
+   Break work into logical phases with dependencies:
+
+   ```
+   Authentication System (parent)
+   ├── 1. Login endpoint (no dependencies)
+   ├── 2. Token refresh (depends on #1)
+   ├── 3. Logout endpoint (depends on #1)
+   └── 4. Integration tests (depends on #1, #2, #3)
+   ```
+
+3. **Create task structure**
+
+   ```bash
+   export CLAUDE_CODE_TASK_LIST_ID="auth-system-v2"
+   claude
+
+   > "Create a task hierarchy for JWT authentication:
+
+     Parent task: 'Implement JWT authentication system'
+     - Description: Add JWT-based auth with refresh tokens and secure storage
+
+     Child tasks:
+     1. 'Create login endpoint' (no dependencies)
+     2. 'Implement token refresh logic' (depends on task 1)
+     3. 'Create logout endpoint' (depends on task 1)
+     4. 'Write integration tests' (depends on tasks 1, 2, 3)
+
+     Use TaskCreate with proper metadata."
+   ```
+</Steps>
+
+---
+
+## Phase 2: Task Execution
+
+**Goal:** Execute tasks systematically with progress tracking.
+
+Execution pattern:
+
+```
+TaskList → TaskGet (next pending) → Execute → TaskUpdate → Validate → Repeat
+```
+
+<Steps>
+1. **Discover next task**
+
+   ```bash
+   export CLAUDE_CODE_TASK_LIST_ID="auth-system-v2"
+   claude
+
+   > "TaskList to show all pending tasks"
+   ```
+
+   Example output:
+
+   ```
+   Tasks for 'auth-system-v2':
+   ✅ task-login: Create login endpoint [completed]
+   ⏳ task-refresh: Implement token refresh logic [pending, blocked by: none]
+   ⏳ task-logout: Create logout endpoint [pending, blocked by: none]
+   ⏳ task-tests: Write integration tests [pending, blocked by: task-refresh, task-logout]
+   ```
+
+2. **Get task details**
+
+   ```bash
+   > "TaskGet task-refresh to see full requirements"
+   ```
+
+3. **Execute and update status**
+
+   ```bash
+   > "Mark task-refresh as in_progress, then implement the token refresh endpoint"
+
+   # On completion:
+   > "Mark task-refresh as completed"
+   ```
+
+4. **Validate**
+
+   ```bash
+   > "Run tests for token refresh functionality"
+
+   # If tests pass: task remains completed
+   # If tests fail: mark task back to in_progress and fix issues
+   ```
+</Steps>
+
+---
+
+## Phase 3: Session Management
+
+**Goal:** Seamlessly resume work across sessions and context boundaries.
+
+### Persistence Mechanism
+
+Tasks are stored at `~/.claude/tasks/<task-list-id>/` and survive:
+- Session termination
+- Context compaction (`/compact`)
+- System restarts
+- Multi-day interruptions
+
+### Resume Pattern
+
+```bash
+# Days later, different terminal session
+export CLAUDE_CODE_TASK_LIST_ID="auth-system-v2"
+claude
+
+> "TaskList to show current state"
+
+# Output shows exactly where you left off:
+# ✅ task-login [completed]
+# ✅ task-refresh [completed]
+# ⏳ task-logout [pending]
+# ⏳ task-tests [pending, blocked by: task-logout]
+
+> "Continue with next pending task that isn't blocked"
+```
+
+### Multi-Terminal Coordination
+
+```bash
+# Terminal 1: Frontend work
+export CLAUDE_CODE_TASK_LIST_ID="auth-system-v2"
+claude
+> "Work on task-logout endpoint"
+
+# Terminal 2: Test writing (simultaneous)
+export CLAUDE_CODE_TASK_LIST_ID="auth-system-v2"
+claude
+> "TaskList - check what's completed so I can write tests"
+
+# Both terminals see real-time state updates
+```
+
+<Aside type="caution">
+Use repository-specific task list IDs to avoid cross-project contamination:
+
+```bash
+# Bad: Generic ID used across repos
+export CLAUDE_CODE_TASK_LIST_ID="my-project"
+
+# Good: Repo-specific with context
+export CLAUDE_CODE_TASK_LIST_ID="mycompany-api-auth-refactor"
+```
+</Aside>
+
+---
+
+## TDD Integration
+
+Combine Test-Driven Development with task tracking for systematic test coverage.
+
+```bash
+export CLAUDE_CODE_TASK_LIST_ID="tdd-feature-x"
+claude
+
+> "Create task hierarchy for feature X:
+
+  For each feature component:
+  1. Task: 'Write failing tests for [component]'
+  2. Task: 'Implement [component] to pass tests' (depends on #1)
+  3. Task: 'Refactor [component]' (depends on #2)
+
+  Use TDD red-green-refactor cycle per task."
+```
+
+---
+
+## Plan-Driven Integration
+
+Convert strategic plans into executable task hierarchies.
+
+```bash
+# Step 1: Enter plan mode
+claude
+> [Press Shift+Tab to enter Plan Mode]
+
+# Step 2: Create architectural plan
+> "Design architecture for microservices migration:
+  - Identify service boundaries
+  - Plan data migration strategy
+  - Design API contracts"
+
+# Step 3: Exit plan mode with task creation
+> "Convert this plan into a task hierarchy using TaskCreate"
+```
+
+---
+
+## Best Practices and Anti-Patterns
+
+### Recommended Patterns
+
+| Pattern | Description |
+|---------|-------------|
+| **Hierarchical decomposition** | Project -> Feature -> Component -> Leaf task, mirroring natural project structure |
+| **Dependency-first ordering** | Always define dependencies when creating tasks to prevent premature execution |
+| **Granular status updates** | Regularly update progress percentage for visibility and context-aware resumption |
+| **Metadata-rich tasks** | Include priority, time estimates, related files, and issue links in metadata |
+
+### Anti-Patterns
+
+| Anti-Pattern | Problem | Fix |
+|-------------|---------|-----|
+| **Monolithic tasks** (>10 steps) | Hard to track progress | Break into phases with sub-tasks |
+| **Missing dependencies** | Tasks may execute out of order | Explicitly define dependency chains |
+| **Orphan tasks without context** | Future you won't remember the meaning | Include full description, error messages, and related links |
+| **Status mismatch** | Marked complete but tests fail | Validate before updating to completed |
+
+---
+
+## Migrating from TodoWrite
+
+### When to Migrate
+
+<Tabs>
+  <TabItem label="Stay with TodoWrite">
+    - All work completes in a single session
+    - No multi-agent coordination needed
+    - Simple linear task lists (no dependencies)
+    - Using Claude Code < v2.1.16
+  </TabItem>
+  <TabItem label="Migrate to Tasks API">
+    - Work spans multiple sessions
+    - Need task persistence across days/weeks
+    - Complex dependency graphs
+    - Multi-terminal collaboration
+    - Want to resume after context compaction
+  </TabItem>
+</Tabs>
+
+### Migration Steps
+
+<Steps>
+1. **Identify existing TodoWrite usage**
+
+   ```bash
+   grep -r "TodoWrite" .claude/
+   ```
+
+2. **Convert to Tasks API**
+
+   **Before (TodoWrite):**
+   ```markdown
+   - [ ] Implement user authentication
+   - [ ] Add password hashing
+   - [ ] Create session management
+   - [ ] Write tests
+   ```
+
+   **After (Tasks API):**
+   ```bash
+   export CLAUDE_CODE_TASK_LIST_ID="user-auth-2026"
+   claude
+
+   > "Create tasks:
+     1. 'Implement user authentication' (parent)
+        - Child: 'Add password hashing'
+        - Child: 'Create session management' (depends on hashing)
+        - Child: 'Write tests' (depends on auth, hashing, sessions)"
+   ```
+
+3. **Update CLAUDE.md instructions**
+
+   ```markdown
+   For complex tasks:
+   - Set CLAUDE_CODE_TASK_LIST_ID=<project-name>
+   - Use TaskCreate for hierarchical planning
+   - Execute with TaskUpdate status tracking
+   - Resume with TaskList in new sessions
+   ```
+
+4. **Test the migration**
+
+   ```bash
+   # Create test task list
+   export CLAUDE_CODE_TASK_LIST_ID="migration-test"
+   claude
+   > "Create 3 test tasks with dependencies, mark one completed, then exit"
+
+   # Relaunch in new session
+   export CLAUDE_CODE_TASK_LIST_ID="migration-test"
+   claude
+   > "TaskList - verify tasks persisted correctly"
+   ```
+</Steps>
+
+---
+
+## Troubleshooting
+
+| Problem | Cause | Solution |
+|---------|-------|---------|
+| Tasks don't persist across sessions | Environment variable not set | `export CLAUDE_CODE_TASK_LIST_ID="your-project"` before launching |
+| Seeing tasks from another project | Multiple projects sharing the same ID | Use repo-specific IDs like `api-v2-migration` |
+| Still using TodoWrite | Disable flag set in environment | `unset CLAUDE_CODE_ENABLE_TASKS` |
+| Dependencies not enforced | Used task title instead of ID | Ensure `dependencies` uses actual task IDs |
+
+---
+
+## Custom Task Metadata
+
+Extend tasks with domain-specific metadata for enhanced workflows.
+
+<Tabs>
+  <TabItem label="Performance">
+    ```json
+    {
+      "metadata": {
+        "type": "performance",
+        "baseline_metric": "2000ms",
+        "target_metric": "200ms",
+        "profiling_tool": "Chrome DevTools",
+        "measurement_location": "dashboard load time"
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Security">
+    ```json
+    {
+      "metadata": {
+        "type": "security",
+        "severity": "critical",
+        "cve_id": "CVE-2024-1234",
+        "affected_versions": "< 2.1.0",
+        "mitigation": "Update package X to v3.0+"
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Bug Fix">
+    ```json
+    {
+      "metadata": {
+        "type": "bugfix",
+        "issue_url": "https://github.com/org/repo/issues/456",
+        "reproduction_steps": "1. Login 2. Navigate to dashboard 3. Click export",
+        "error_message": "TypeError: Cannot read property 'map' of undefined"
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>

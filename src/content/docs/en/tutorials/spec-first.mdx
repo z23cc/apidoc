@@ -1,0 +1,460 @@
+---
+title: "Spec-First Development"
+description: "Define specifications in CLAUDE.md before implementation for structured development"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Before asking Claude to build anything, define what you want in CLAUDE.md. One well-structured iteration equals eight unstructured ones. **CLAUDE.md is your spec file** — treat it as a contract with Claude.
+
+---
+
+## The Core Pattern
+
+```
+Traditional:        Spec-First:
+───────────         ──────────
+Prompt → Code       Spec → Prompt → Code → Verify
+  │                   │               │       │
+  └─ Hope it's       └── Contract    └── Follows spec
+     what you want        defined          └── Check against spec
+```
+
+<Aside type="tip">
+The spec becomes the single source of truth: it constrains what Claude builds, documents decisions for the team, and enables verification of completeness.
+</Aside>
+
+---
+
+## The Workflow
+
+<Steps>
+1. Write the spec in CLAUDE.md
+2. Claude reads the spec automatically at session start
+3. Reference the spec to instruct Claude to implement
+4. Verify against acceptance criteria in the spec
+</Steps>
+
+### Step 1: Write the Spec
+
+Before any implementation request, add the spec to CLAUDE.md:
+
+```markdown
+## Feature: User Authentication
+
+### Capabilities
+- MUST: Email/password login
+- MUST: JWT token generation
+- MUST: Password hashing with bcrypt
+- SHOULD: Remember me functionality
+- MUST NOT: Store plain text passwords
+
+### Tech Stack
+- Required: bcrypt, jsonwebtoken
+- Forbidden: passport.js (too heavy for this use case)
+
+### Acceptance Criteria
+- [ ] User can login with valid credentials
+- [ ] Invalid credentials return 401
+- [ ] Token expires after 24h (or 7d with remember me)
+- [ ] Passwords hashed with cost factor 12
+```
+
+### Step 2: Reference the Spec
+
+```
+Implement the User Authentication feature as specified in CLAUDE.md.
+Follow the acceptance criteria exactly.
+```
+
+Claude automatically reads CLAUDE.md and follows the spec.
+
+### Step 3: Verify
+
+After implementation, verify against the spec:
+
+```
+Review the implementation against the User Authentication spec.
+Check off each acceptance criterion that's satisfied.
+List any gaps.
+```
+
+### Step 4: Update the Spec if Needed
+
+If requirements change during implementation:
+
+```
+Update the User Authentication spec to include:
+- MUST: Rate limiting (5 attempts per minute)
+Then implement the rate limiting.
+```
+
+---
+
+## Task Granularity: Sizing Work for Agents
+
+<Aside type="caution">
+Agents work best with **vertical slices** — thin, end-to-end units that cut through all layers but implement exactly one complete user behavior. For example, "password reset via email", not "authentication system".
+
+**Rule of thumb**: One agent session = one vertical slice. If the task description requires "and" between two user behaviors, split it.
+</Aside>
+
+### Spec Quality Checklist
+
+Run this before handing any task to an agent:
+
+| Dimension | Question to Ask | Red Flag |
+|-----------|----------------|----------|
+| **Problem Clarity** | Is the problem statement unambiguous? | "Improve performance" |
+| **Testable Criteria** | Can completion be verified automatically? | "Works well" |
+| **Scope Boundaries** | What is explicitly OUT of scope? | Nothing listed as excluded |
+| **Observable Done** | What does "done" look like to a user? | Internal-only description |
+| **Requirements Clarity** | No implementation details in the spec? | "Use Redis for caching" |
+| **Terminology** | Same terms used throughout? | "user" and "account" mixed |
+
+**A task that fails 2+ dimensions needs rework before an agent touches it.**
+
+```
+# Too big, ambiguous:
+"Add user authentication to the app"
+
+# One vertical slice:
+"Users can log in with email + password.
+- POST /auth/login returns JWT on success, 401 on failure
+- Invalid credentials show 'Email or password incorrect' (not which is wrong)
+- Session expires after 24h
+- Out of scope: OAuth, password reset, remember me"
+```
+
+---
+
+## Spec Templates
+
+### Feature Spec (Most Common)
+
+```markdown
+## Feature: [Name]
+
+### Description
+[2-3 sentences explaining the feature purpose]
+
+### Capabilities
+- MUST: [Required functionality]
+- MUST: [Another requirement]
+- SHOULD: [Nice to have]
+- MUST NOT: [Explicit exclusions]
+
+### Tech Stack
+- Required: [lib1, lib2, lib3]
+- Forbidden: [lib4, lib5]
+
+### Acceptance Criteria
+- [ ] Criterion 1: [Specific, testable condition]
+- [ ] Criterion 2: [Another condition]
+- [ ] Criterion 3: [Edge case handling]
+
+### API Contract (if applicable)
+- Endpoint: POST /api/[resource]
+- Request: { field1: string, field2: number }
+- Response: { id: string, created: timestamp }
+- Errors: 400 (validation), 404 (not found), 500 (server)
+```
+
+### Architecture Spec
+
+```markdown
+## Architecture: [Component Name]
+
+### Purpose
+[Why this component exists]
+
+### Boundaries
+- Owns: [What this component is responsible for]
+- Delegates to: [What other components handle]
+- Does NOT: [Explicit non-responsibilities]
+
+### Dependencies
+- Upstream: [Components that call this]
+- Downstream: [Components this calls]
+
+### Constraints
+- Performance: [Response time, throughput]
+- Security: [Auth requirements, data handling]
+- Scalability: [Expected load, limits]
+```
+
+### API Spec
+
+```markdown
+## API: [Endpoint Name]
+
+### Endpoint
+`POST /api/v1/[resource]`
+
+### Authentication
+Bearer token required. Scopes: `read:resource`, `write:resource`
+
+### Request
+{
+  "field1": "string (required, max 255 chars)",
+  "field2": "number (optional, default: 0)",
+  "nested": {
+    "subfield": "boolean"
+  }
+}
+
+### Error Codes
+| Code | Meaning | Response Body |
+|------|---------|---------------|
+| 400 | Validation failed | `{ "errors": [...] }` |
+| 401 | Not authenticated | `{ "message": "..." }` |
+| 403 | Not authorized | `{ "message": "..." }` |
+| 404 | Resource not found | `{ "message": "..." }` |
+```
+
+---
+
+## Integration with Tools
+
+### With Plan Mode
+
+```
+[Press Shift+Tab to enter Plan Mode]
+
+I need to implement the Payment Processing feature.
+Review the spec in CLAUDE.md and create an implementation plan.
+```
+
+### With Spec Kit (Greenfield Projects)
+
+```bash
+# Install Spec Kit
+npx @anthropic/spec-kit init
+
+# Use slash commands
+/speckit.constitution  # Define project guardrails
+/speckit.specify       # Write feature specs
+/speckit.plan          # Create implementation plan
+/speckit.implement     # Build from spec
+```
+
+### With OpenSpec (Brownfield Projects)
+
+```bash
+# Install OpenSpec
+npm install -g @fission-ai/openspec@latest
+openspec init
+
+# Use slash commands
+/openspec:proposal "Add dark mode"  # Create change proposal
+/openspec:apply add-dark-mode       # Implement changes
+/openspec:archive add-dark-mode     # Merge to specs
+```
+
+---
+
+## When to Use Spec-First
+
+<CardGrid>
+  <Card title="Use Spec-First" icon="approve-check">
+    - New feature development (define before building)
+    - API design (contract must be explicit)
+    - Architecture decisions (document constraints)
+    - Team collaboration (shared understanding)
+    - Complex requirements (reduce ambiguity)
+  </Card>
+  <Card title="Skip Spec-First" icon="close">
+    - Quick fixes (overhead not worth it)
+    - Exploration phase (don't know what you want yet)
+    - Prototyping (requirements will change)
+    - Single-line changes (obvious intent)
+  </Card>
+</CardGrid>
+
+---
+
+## Modular Spec Design
+
+When specs exceed ~200 lines, split them into multiple focused files.
+
+### When to Split
+
+| Threshold | Action |
+|-----------|--------|
+| **< 100 lines** | Single CLAUDE.md is fine |
+| **100-200 lines** | Consider splitting if distinct domains exist |
+| **> 200 lines** | **Split immediately** — past the cognitive load threshold |
+| **Multi-team projects** | Split by domain/ownership regardless of size |
+
+### Split Strategies
+
+<Tabs>
+  <TabItem label="Feature-Based">
+```
+CLAUDE.md              # Core project context
+CLAUDE-auth.md         # Authentication spec
+CLAUDE-api.md          # API endpoints spec
+CLAUDE-billing.md      # Payment processing spec
+```
+  </TabItem>
+  <TabItem label="Role-Based">
+```
+CLAUDE.md              # Shared conventions
+CLAUDE-frontend.md     # UI/UX specifications
+CLAUDE-backend.md      # API/database specs
+CLAUDE-infra.md        # DevOps/deployment specs
+```
+  </TabItem>
+  <TabItem label="Workflow-Based">
+```
+CLAUDE.md              # Daily development rules
+CLAUDE-testing.md      # Test specifications
+CLAUDE-release.md      # Release process spec
+CLAUDE-security.md     # Security requirements
+```
+  </TabItem>
+</Tabs>
+
+### Main CLAUDE.md (Keep It Concise)
+
+```markdown
+# Project: [NAME]
+
+## Tech Stack
+[Core technologies]
+
+## Commands
+[Daily commands]
+
+## Rules
+[Universal rules]
+
+## Detailed Specs
+- Authentication: See @CLAUDE-auth.md
+- API Design: See @CLAUDE-api.md
+- Testing: See @CLAUDE-testing.md
+```
+
+<Aside>
+Benefits: Claude can reference specific files with `@CLAUDE-auth.md`, loading only relevant specs; easier maintenance since editing one domain doesn't affect others; better team collaboration with clear ownership per spec file.
+</Aside>
+
+---
+
+## Operational Boundaries
+
+Define explicit boundaries for what AI agents should do automatically, ask about, or never touch.
+
+### The Three-Tier System
+
+| Tier | Meaning | Claude Code Mapping |
+|------|---------|---------------------|
+| **Always** | Execute automatically without asking | Auto-accept mode |
+| **Ask First** | Get user confirmation before proceeding | Default mode |
+| **Never** | Block or require Plan Mode | Plan mode / Hook blocking |
+
+### Operational Boundaries Template
+
+```markdown
+## Boundaries
+
+### Always (Auto-accept)
+- Run tests after code changes
+- Format code with Prettier
+- Update imports when moving files
+- Fix linting errors
+
+### Ask First (Confirm)
+- Modify database schemas
+- Add new dependencies
+- Change API contracts
+- Refactor >50 lines of code
+
+### Never (Block)
+- Push to production branch
+- Commit secrets or API keys
+- Delete data without backup
+- Modify CI/CD workflows without review
+```
+
+### Mapping to Claude Code Permissions
+
+**Always -> Permission Allowlist**:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test*)",
+      "Bash(npx prettier*)",
+      "Bash(npx tsc*)"
+    ]
+  }
+}
+```
+
+**Never -> Plan Mode + Hooks**:
+
+```bash
+#!/bin/bash
+# Configured via settings.json PreToolUse event
+if [[ "$TOOL_NAME" == "Bash" ]] && [[ "$INPUT" =~ "git push origin main" ]]; then
+  echo "BLOCKED: Direct push to main blocked. Use feature branches."
+  exit 2
+fi
+```
+
+---
+
+## Anti-Patterns
+
+### Vague Specs
+
+<Tabs>
+  <TabItem label="Wrong">
+```markdown
+## Feature: User Management
+- Handle users
+```
+  </TabItem>
+  <TabItem label="Right">
+```markdown
+## Feature: User Management
+### Capabilities
+- MUST: Create user with email, password, name
+- MUST: Update user profile (name, avatar)
+- MUST: Soft delete (mark as inactive, don't remove data)
+- MUST NOT: Allow duplicate emails
+```
+  </TabItem>
+</Tabs>
+
+### Spec After Code
+
+```
+# Wrong workflow
+1. Ask Claude to implement feature
+2. Write spec documenting what was built
+
+# Right workflow
+1. Write spec defining what should be built
+2. Ask Claude to implement from spec
+```
+
+### Ignoring Forbidden Items
+
+```markdown
+# Don't forget exclusions
+### Tech Stack
+- Required: React, TypeScript
+- Forbidden: jQuery, vanilla JS, class components
+             ↑ These constraints prevent drift
+```
+
+### Monolithic CLAUDE.md
+
+<Aside type="caution">
+When CLAUDE.md exceeds 300 lines, mixing feature specs, API contracts, testing requirements, deployment procedures, and team conventions, it leads to: context inefficiency (entire contents loaded for every request), slower responses, reduced accuracy (important details lost in noise).
+
+**Solution**: Keep CLAUDE.md under 100 lines (core context only), domain files under 150 lines each.
+</Aside>

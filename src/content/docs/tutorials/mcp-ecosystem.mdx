@@ -1,0 +1,353 @@
+---
+title: "MCP 服务器生态系统"
+description: "经过验证的社区 MCP 服务器评估和生产配置指南"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+MCP（Model Context Protocol）服务器生态系统正在快速发展。本指南涵盖经过验证的社区 MCP 服务器，所有列出的服务器均已从生产就绪性、维护活跃度和安全性角度进行评估。
+
+---
+
+## 官方与社区服务器
+
+| 类型 | 示例 | 特点 | 适用场景 |
+|------|------|------|----------|
+| **官方** | filesystem, memory, brave-search, github | Anthropic 维护，稳定性有保障 | 默认首选，核心功能 |
+| **社区** | Playwright, Semgrep, Kubernetes | 由组织或个人维护，可达到生产级 | 特定需求，生态集成 |
+
+<Aside type="tip">
+关键区别：官方服务器有 Anthropic SLA 支持，社区服务器需要逐个评估。
+</Aside>
+
+---
+
+## 评估框架
+
+所有社区服务器均根据以下标准进行评估：
+
+| 标准 | 阈值 | 说明 |
+|------|------|------|
+| **GitHub Stars** | ≥50 | 最低社区认可度 |
+| **最近发布** | &lt;3 个月 | 活跃维护 |
+| **文档** | README + 示例 + 配置 | 降低采用门槛 |
+| **测试/CI** | 有自动化测试 | 确保稳定性 |
+| **用途** | 官方服务器未覆盖 | 避免冗余 |
+| **许可证** | 必须开源 | 可持续性和可审计性 |
+
+**质量评分组成**：
+- 维护（10 分）：发布频率、Issue 响应时间
+- 文档（10 分）：README 完整性、示例、故障排除
+- 测试（10 分）：测试覆盖率、CI/CD 自动化
+- 性能（10 分）：响应时间、资源效率
+- 采用度（10 分）：社区使用量、生产部署
+
+**总分**：`/50` → 归一化为 `/10` 的最终评分。
+
+---
+
+## 生态系统演进
+
+<CardGrid>
+  <Card title="Linux 基金会标准化" icon="star">
+    MCP 通过 Linux 基金会旗下的 **Agentic AI Foundation** 成为官方标准，推动企业级采用和长期稳定性。
+  </Card>
+  <Card title="高级 MCP 工具使用" icon="rocket">
+    Anthropic 部署了 MCP 上下文管理优化：工具按需延迟加载、基于搜索的工具发现机制。
+  </Card>
+  <Card title="MCPB 捆绑格式" icon="seti:config">
+    标准化的捆绑格式实现一键安装 MCP 服务器，替代运行时依赖管理，实现确定性安装。
+  </Card>
+  <Card title="MCP Apps（交互式工具）" icon="puzzle">
+    Claude 现在通过 MCP Apps 规范支持交互式工具，例如 Slack 起草、Figma 图表、Asana 时间线等。
+  </Card>
+</CardGrid>
+
+---
+
+## 版本控制（官方服务器）
+
+### Git MCP（Anthropic 官方）
+
+Anthropic 官方 Git 仓库交互服务器，提供对 Git 操作的结构化访问。
+
+| 工具 | 描述 |
+|------|------|
+| `git_status` | 工作区状态（已暂存、未暂存、未跟踪） |
+| `git_log` | 提交历史，支持高级过滤 |
+| `git_diff` | 提交/分支间差异比较 |
+| `git_commit` | 创建提交 |
+| `git_add` | 暂存文件/模式 |
+| `git_branch` | 列出/过滤分支 |
+| `git_create_branch` | 创建新分支 |
+| `git_checkout` | 切换分支/提交 |
+| `git_show` | 显示提交详情 |
+
+**安装方式**：
+
+```bash
+# 方式 1：UV（推荐）
+uvx mcp-server-git --repository /path/to/repo
+
+# 方式 2：pip + Python 模块
+pip install mcp-server-git
+python -m mcp_server_git
+
+# 方式 3：Docker（沙盒）
+docker run -v /path/to/repo:/repo ghcr.io/modelcontextprotocol/mcp-server-git
+```
+
+**Claude Code 配置**（`~/.claude.json`）：
+
+```json
+{
+  "mcpServers": {
+    "git": {
+      "command": "uvx",
+      "args": ["mcp-server-git", "--repository", "/Users/you/projects/myrepo"]
+    }
+  }
+}
+```
+
+#### Git MCP vs GitHub MCP vs Bash 工具对比
+
+| 操作 | Git MCP | GitHub MCP | Bash 工具 |
+|------|---------|------------|-----------|
+| **本地提交** | 最佳 | 不支持 | 可用 |
+| **分支管理** | 最佳 | 不支持 | 可用 |
+| **差异/日志分析** | 最佳 | 不支持 | 可用 |
+| **PR 创建** | 不支持 | 最佳 | gh CLI |
+| **Issue 管理** | 不支持 | 最佳 | gh CLI |
+| **交互式变基** | 不支持 | 不支持 | 最佳 |
+| **Reflog 恢复** | 不支持 | 不支持 | 最佳 |
+
+---
+
+## 经过验证的社区服务器
+
+### 浏览器自动化
+
+#### Playwright MCP（Microsoft）
+
+Microsoft 官方浏览器自动化服务器，针对 LLM 优化。使用无障碍树代替截图，减少 Token 消耗。
+
+| 能力 | 详情 |
+|------|------|
+| 浏览器自动化 | 导航、点击、填写、悬停 |
+| 内容提取 | 通过无障碍树提取结构化数据 |
+| 截图 | 全页面 + 元素级别 |
+| JavaScript 执行 | 在页面上下文中运行代码 |
+| 支持浏览器 | Chromium, Firefox, WebKit |
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["--yes", "@microsoft/playwright-mcp"]
+    }
+  }
+}
+```
+
+**质量评分**：8.8/10
+
+#### Browserbase MCP
+
+Browserbase 官方云端浏览器自动化服务器，包含 Stagehand AI 代理，支持隐身模式和代理切换。
+
+**适用场景**：复杂网络交互，如网页抓取、表单填写、数据提取。
+
+**质量评分**：7.6/10 | **费用**：免费增值模式，约 $0.10/会话
+
+#### Chrome DevTools MCP
+
+Anthropic 官方 Chrome DevTools Protocol 集成服务器，用于调试和检查 Web 应用。
+
+| 场景 | Chrome DevTools MCP | Playwright MCP |
+|------|---------------------|----------------|
+| 调试运行时错误 | 最佳 | 受限 |
+| 检查网络请求 | 最佳 | 仅基本导航 |
+| 测试用户交互 | 不适合 | 最佳 |
+| 性能分析 | 最佳 | 不支持 |
+
+---
+
+### DevOps 与基础设施
+
+#### Kubernetes MCP（Red Hat）
+
+Red Hat 支持的 Kubernetes/OpenShift 管理服务器，支持自然语言操作集群。
+
+| 能力 | 详情 |
+|------|------|
+| 资源 CRUD | 创建、读取、更新、删除任何 K8s 资源 |
+| Pod 操作 | 日志、事件、exec、指标 |
+| 部署管理 | 扩缩容、滚动更新、状态 |
+| 多集群 | 切换 kubeconfig 上下文 |
+| OpenShift 支持 | 原生 OpenShift 资源 |
+
+**质量评分**：8.4/10
+
+#### Vercel MCP
+
+社区 Vercel 平台服务器，支持部署、项目、环境变量、团队管理。
+
+**适用场景**：AI 助手生成 Next.js 代码，创建 Vercel 项目，配置环境变量，触发部署。
+
+**质量评分**：7.6/10
+
+---
+
+### 安全与代码分析
+
+#### Semgrep MCP
+
+Semgrep 官方漏洞扫描服务器（SAST、密钥检测、供应链分析），包含自定义规则引擎。
+
+<Aside type="caution">
+Semgrep 支持 Python、JS/TS、Java、Go、C#、Rust、PHP 等多种语言，可直接在 Claude Code 工作流中集成安全扫描。
+</Aside>
+
+```bash
+# 安装
+claude mcp add semgrep -- uvx semgrep-mcp
+```
+
+**质量评分**：9.0/10
+
+---
+
+### 代码搜索与分析
+
+#### Grepai MCP
+
+基于本地 Ollama 嵌入的语义代码搜索和调用图分析工具。按意图搜索代码（如"支付流程"、"认证逻辑"），而非精确模式匹配。
+
+| 能力 | 详情 |
+|------|------|
+| `grepai_search` | 按自然语言查询语义搜索 |
+| `grepai_trace_callers` | 查找调用指定符号的所有函数 |
+| `grepai_trace_callees` | 查找指定符号调用的所有函数 |
+| `grepai_trace_graph` | 完整调用图，可配置深度 |
+
+**Token 效率对比**：
+
+| 工作流 | Token 消耗 | 评价 |
+|--------|-----------|------|
+| Grep + 读取文件（暴力搜索） | ~15K | 噪声多，大量无关上下文 |
+| grepai 搜索 + 追踪 | ~4K | 精准，仅相关结果 |
+
+**质量评分**：7.8/10
+
+---
+
+### 文档与知识
+
+#### Context7 MCP
+
+Upstash 官方实时库文档服务器，覆盖 500+ 库，消除 API 幻觉。
+
+**适用场景**：Claude Code 需要使用库 API 时，Context7 提供最新文档和示例。
+
+```bash
+claude mcp add context7 -- npx -y @upstash/context7-mcp --api-key YOUR_API_KEY
+```
+
+**质量评分**：8.2/10
+
+---
+
+### 项目管理
+
+#### Linear MCP
+
+Linear 项目管理 GraphQL API 服务器，支持 Issue 管理、项目、团队、评论。
+
+**适用场景**：Claude Code 自动创建工单、更新状态、关联 Issue，打通开发和项目管理闭环。
+
+**质量评分**：7.6/10
+
+---
+
+### 编排
+
+#### MCP-Compose
+
+Docker Compose 风格的多 MCP 服务器管理工具。声明式 YAML 配置，多传输协议支持（STDIO/HTTP/SSE）。
+
+```yaml
+version: "1.0"
+mcpServers:
+  filesystem:
+    command: npx
+    args:
+      - "@modelcontextprotocol/server-filesystem"
+      - "/tmp"
+    transport: stdio
+  memory:
+    command: npx
+    args:
+      - "@modelcontextprotocol/server-memory"
+    transport: stdio
+proxy:
+  port: 3000
+  listen: "127.0.0.1"
+```
+
+**质量评分**：7.4/10
+
+---
+
+## 生产部署
+
+### 安全检查清单
+
+<Steps>
+1. **API 密钥**存储在 `.env` 中，不写入配置文件
+2. 审查 **RBAC/权限**（特别是 Kubernetes、Semgrep）
+3. 了解 **速率限制**（Linear GraphQL 复杂度、Vercel API）
+4. 实现 API 宕机时的**降级机制**
+5. 为所有 MCP 服务器启用**监控和日志**
+</Steps>
+
+### 快速入门堆栈
+
+<Tabs>
+  <TabItem label="MVP 必备">
+    1. **Playwright MCP** -- E2E 测试、Web 验证
+    2. **Semgrep MCP** -- 安全优先编码
+  </TabItem>
+  <TabItem label="重要补充">
+    3. **Context7 MCP** -- API 参考准确性
+    4. **Linear MCP** -- Issue 追踪集成（可选）
+  </TabItem>
+  <TabItem label="DevOps/SRE">
+    5. **Kubernetes MCP** -- 集群管理
+    6. **Vercel MCP** -- Next.js 部署自动化
+  </TabItem>
+  <TabItem label="复杂场景">
+    7. **MCP-Compose** -- 多服务器编排
+    8. **Browserbase MCP** -- 重度 Web 自动化
+  </TabItem>
+</Tabs>
+
+### 性能指标
+
+| 指标 | 中位数 | 范围 | 说明 |
+|------|--------|------|------|
+| **响应时间** | ~200ms | 100-500ms | 取决于是否云端（Browserbase ~500ms） |
+| **Token 开销** | ~200-500 | 最小化 | 无障碍树 vs 截图 |
+| **安装时间** | ~5 分钟 | 2-10 分钟 | Cargo 构建（MCP-Compose）= 10 分钟 |
+
+---
+
+## 排除的服务器
+
+| 服务器 | 原因 | 评估日期 |
+|--------|------|----------|
+| **X/Twitter MCP** | API 不稳定，认证问题频发 | 2026.01 |
+| **Vector Search MCP** | &lt;50 Stars，文档不完整 | 2026.01 |
+| **GitHub MCP** | 已归档，迁移至官方 Go SDK | 2026.01 |
+| **Jira MCP** | 无近期发布，不如 Linear 稳定 | 2026.01 |

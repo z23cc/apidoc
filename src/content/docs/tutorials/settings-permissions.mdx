@@ -1,0 +1,441 @@
+---
+title: "设置与权限"
+description: "全面了解 Claude Code 的设置文件、权限系统和优先级规则"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Claude Code 提供了灵活的配置系统，涵盖团队共享设置、个人权限覆盖、终端个性化和优先级规则。本教程将全面介绍如何配置和管理这些设置。
+
+<CardGrid>
+  <Card title="团队配置" icon="setting">
+    使用 settings.json 共享团队级别的 hooks、权限和环境变量。
+  </Card>
+  <Card title="个人权限" icon="approve-check-circle">
+    使用 settings.local.json 设置个人权限覆盖。
+  </Card>
+  <Card title="优先级规则" icon="list-format">
+    理解设置和 CLAUDE.md 的优先级层次。
+  </Card>
+  <Card title="渐进式权限" icon="rocket">
+    根据经验水平逐步开放工具权限。
+  </Card>
+</CardGrid>
+
+---
+
+## settings.json — 团队配置
+
+`.claude/settings.json` 文件用于配置 hooks、权限、环境变量等，提交到版本库与团队共享。
+
+支持的键包括：`hooks`、`env`、`allowedTools`、`autoApproveTools`、`dangerouslyAllowedPatterns`、`teammates`、`teammateMode`、`apiKeyHelper`、`spinnerVerbs`、`spinnerTipsOverride`、`plansDirectory`、`enableAllProjectMcpServers`。
+
+### Hooks 示例
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/security-check.sh",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/auto-format.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/git-context.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+---
+
+## settings.local.json — 个人权限
+
+个人权限覆盖文件（已加入 gitignore）：
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(pnpm *)",
+      "Bash(npm test)",
+      "Edit",
+      "Write",
+      "WebSearch"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(sudo *)"
+    ],
+    "ask": [
+      "Bash(npm publish)",
+      "Bash(git push --force)"
+    ]
+  }
+}
+```
+
+### 权限行为
+
+| 类别 | 行为 |
+|------|------|
+| `allow` | 自动批准，无需询问 |
+| `deny` | 完全阻止 |
+| `ask` | 提示确认 |
+| （默认） | 使用默认权限模式 |
+
+---
+
+## 终端个性化设置
+
+两个设置可以自定义 Claude 工作时终端中旋转显示的文本。
+
+### spinnerVerbs
+
+替换或扩展旋转器中显示的动作词：
+
+```json
+{
+  "spinnerVerbs": {
+    "mode": "replace",
+    "verbs": ["正在编码…", "思考中…", "分析中…", "优化中…"]
+  }
+}
+```
+
+使用 `"mode": "add"` 扩展默认列表而非替换。
+
+### spinnerTipsOverride
+
+自定义旋转器中显示的提示。使用 `excludeDefault: true` 移除所有内置提示：
+
+```json
+{
+  "spinnerTipsOverride": {
+    "tips": ["上下文满了试试 /compact", "用 --print 做 CI 管道"],
+    "excludeDefault": true
+  }
+}
+```
+
+<Aside type="note">
+这些设置放在 `~/.claude/settings.json`（个人，不提交）或 `.claude/settings.json`（团队共享）中。纯 UX 个性化，没有功能影响。
+</Aside>
+
+---
+
+## 权限模式详解
+
+### 匹配模式
+
+| 模式 | 匹配范围 |
+|------|---------|
+| `Bash(git *)` | 任何 git 命令 |
+| `Bash(pnpm *)` | 任何 pnpm 命令 |
+| `Edit` | 所有文件编辑 |
+| `Write` | 所有文件写入 |
+| `WebSearch` | 网页搜索能力 |
+| `mcp__serena__*` | 所有 Serena MCP 工具 |
+| `mcp__github__create_issue` | 特定 MCP 工具（格式：`mcp__<server>__<tool>`） |
+| `Read(file_path:*.env*)` | 读取匹配的文件路径 |
+| `Edit(file_path:*.pem)` | 编辑匹配的文件路径 |
+| `Write(file_path:*.key)` | 写入匹配的文件路径 |
+
+### 基于路径的拒绝规则
+
+使用工具限定格式可以按路径模式锁定文件访问：
+
+```json
+{
+  "permissions": {
+    "deny": [
+      "Bash(command:*rm -rf*)",
+      "Bash(command:*terraform destroy*)",
+      "Read(file_path:*.env*)",
+      "Read(file_path:*.pem)",
+      "Read(file_path:*credentials*)",
+      "Edit(file_path:*.env*)",
+      "Edit(file_path:*.key)",
+      "Write(file_path:*.env*)",
+      "Write(file_path:*.key)"
+    ]
+  }
+}
+```
+
+<Aside type="caution">
+`file_path:` 前缀匹配传递给 Read/Edit/Write 的完整路径参数。使用 glob 模式（`*`、`**`）。这比简单字符串形式（如 `".env"`，只匹配精确文件名）更细粒度。
+</Aside>
+
+<Aside type="caution">
+**纵深防御**：`permissions.deny` 有一个已知限制——后台索引可能在权限检查前通过系统提示暴露文件内容。为确保绝对保护，请将机密信息存储在项目目录之外。
+</Aside>
+
+---
+
+## allowedTools / autoApproveTools 配置
+
+### autoApproveTools（数组格式）
+
+更简单的格式，自动批准列出的工具：
+
+```json
+{
+  "allowedTools": [
+    "Read",
+    "Grep",
+    "Glob",
+    "WebFetch",
+    "TodoRead",
+    "TodoWrite",
+    "Task",
+    "Bash(git status *)",
+    "Bash(git diff *)",
+    "Bash(git log *)",
+    "Bash(pnpm typecheck *)",
+    "Bash(pnpm lint *)",
+    "Bash(pnpm test *)"
+  ]
+}
+```
+
+### 渐进式权限级别
+
+<Tabs>
+  <TabItem label="Level 1 - 初学者">
+    非常严格，只允许读取操作：
+    ```json
+    {
+      "autoApproveTools": ["Read", "Grep", "Glob"]
+    }
+    ```
+  </TabItem>
+  <TabItem label="Level 2 - 中级">
+    添加 git 和包管理器命令：
+    ```json
+    {
+      "autoApproveTools": [
+        "Read", "Grep", "Glob",
+        "Bash(git *)", "Bash(pnpm *)"
+      ]
+    }
+    ```
+  </TabItem>
+  <TabItem label="Level 3 - 高级">
+    包括文件编辑和更多工具：
+    ```json
+    {
+      "autoApproveTools": [
+        "Read", "Grep", "Glob", "WebFetch",
+        "Edit", "Write",
+        "Bash(git *)", "Bash(pnpm *)", "Bash(npm *)"
+      ]
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+<Aside type="danger">
+**永远不要使用 `--dangerously-skip-permissions`**
+
+社区中的血泪教训包括：
+- `rm -rf node_modules` 后跟 `rm -rf .`（路径错误）
+- 意外执行 `git push --force` 到 main
+- 在错误生成的迁移中执行 `DROP TABLE users`
+- 删除包含凭证的 `.env` 文件
+
+**始终优先使用细粒度的 `allowedTools` 而非完全禁用权限。**
+</Aside>
+
+<Aside type="tip">
+**安全替代方案**：如需自主执行，可在 Docker 沙箱或类似的隔离环境中运行 Claude Code。沙箱成为安全边界，使 `--dangerously-skip-permissions` 可以安全使用。
+</Aside>
+
+---
+
+## 动态记忆（配置文件切换）
+
+<Tabs>
+  <TabItem label="Git Stash 方式">
+    临时修改 CLAUDE.md，任务完成后恢复：
+    ```bash
+    # 修改前
+    git stash push -m "CLAUDE.md original" CLAUDE.md
+
+    # Claude 为特定任务修改 CLAUDE.md
+    # ... 工作 ...
+
+    # 任务完成后
+    git stash pop
+    ```
+  </TabItem>
+  <TabItem label="配置文件库">
+    维护多个配置文件：
+    ```
+    ~/.claude/profiles/
+    ├── default.md          # 通用配置
+    ├── security-audit.md   # 安全审计
+    ├── refactoring.md      # 大型重构
+    ├── documentation.md    # 文档编写
+    └── debugging.md        # 调试会话
+    ```
+
+    **配置切换脚本**：
+    ```bash
+    #!/bin/bash
+    # ~/.local/bin/claude-profile
+    PROFILE=$1
+    cp ~/.claude/profiles/${PROFILE}.md ./CLAUDE.md
+    echo "已切换到配置文件: $PROFILE"
+    ```
+
+    **使用方式**：
+    ```bash
+    claude-profile security-audit
+    claude  # 以安全审计配置启动
+    ```
+  </TabItem>
+  <TabItem label="并行实例">
+    在不同终端运行不同配置：
+    ```bash
+    # 终端 1：主项目
+    cd ~/projects/myapp
+    claude  # 加载 myapp 的 CLAUDE.md
+
+    # 终端 2：隔离的功能分支 worktree
+    cd ~/projects/myapp-feature-x
+    # 不同的 CLAUDE.md，隔离的上下文
+    claude
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## 优先级规则
+
+当配置文件或设置冲突时，Claude Code 使用以下优先级。
+
+### 设置优先级
+
+```
+最高优先级
+    |
+    v
+settings.local.json          个人覆盖
+    |
+    v
+.claude/settings.json        项目设置
+    |
+    v
+~/.claude/settings.json      全局默认
+    |
+    v
+最低优先级
+```
+
+### CLAUDE.md 优先级
+
+```
+最高优先级
+    |
+    v
+.claude/CLAUDE.md             本地（个人）
+    |
+    v
+/project/CLAUDE.md            项目（团队）
+    |
+    v
+~/.claude/CLAUDE.md           全局（个人）
+    |
+    v
+最低优先级
+```
+
+---
+
+## Rules 自动加载
+
+`.claude/rules/` 中的文件在会话开始时自动加载并合并：
+
+```
+.claude/rules/
+├── code-conventions.md    ──┐
+├── git-workflow.md        ──┼──→  会话开始时全部加载
+└── architecture.md        ──┘
+```
+
+### 记忆加载方式对比
+
+了解每种记忆方式的加载时机对 token 优化至关重要：
+
+| 方式 | 加载时机 | Token 消耗 | 适用场景 |
+|------|---------|-----------|---------|
+| `CLAUDE.md` | 会话开始 | 始终消耗 | 核心项目上下文 |
+| `.claude/rules/*.md` | 会话开始（所有文件） | 始终消耗 | 始终适用的约定 |
+| `@path/to/file.md` | 按需（引用时） | 仅在使用时 | 可选/条件性上下文 |
+| `.claude/commands/*.md` | 仅调用时 | 仅在调用时 | 工作流模板 |
+| `.claude/skills/*.md` | 仅调用时 | 仅在调用时 | 领域知识模块 |
+
+<Aside type="caution">
+`.claude/rules/` **不是**按需加载的。该目录中的每个 `.md` 文件都在会话开始时加载并消耗 token。将其保留给始终相关的约定，而非很少使用的指南。
+</Aside>
+
+---
+
+## 路径特定规则
+
+规则可以使用 YAML frontmatter 定向到特定文件路径：
+
+```markdown
+---
+paths:
+  - "src/api/**/*.ts"
+  - "lib/handlers/**/*.ts"
+---
+
+# API 端点约定
+
+这些规则仅在处理 API 文件时适用：
+
+- 所有端点必须有 OpenAPI 文档
+- 使用 zod 进行请求/响应验证
+- 包含速率限制中间件
+```
+
+<Aside type="tip">
+这实现了渐进式上下文加载——规则仅在 Claude 处理匹配文件时出现。实际案例：Avo 将一个 600 行的 CLAUDE.md 迁移到约 15 个路径范围文件，报告显示响应更精准、跨领域维护更容易。
+</Aside>
+
+### 匹配工作原理
+
+- 模式使用 glob 语法（与 `.gitignore` 相同）
+- 多个规则可以匹配同一文件（全部加载）
+- 没有 `paths:` frontmatter 的规则始终加载

@@ -1,0 +1,296 @@
+---
+title: "TTS Setup"
+description: "Add text-to-speech narration to Claude Code on macOS with Agent Vibes"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## Overview
+
+**Goal**: Add text-to-speech narration to Claude Code
+**Time**: 18 minutes
+**Difficulty**: Intermediate
+**System**: macOS (Homebrew required)
+
+---
+
+## Should You Install TTS?
+
+Use this quick assessment to decide:
+
+| Question | Answer | Score |
+|----------|--------|-------|
+| Do you work on long code reviews? | Yes | +2 |
+| Do you multitask during debugging? | Yes | +2 |
+| Do you prefer audio notifications? | Yes | +1 |
+| Do you need offline TTS (no cloud)? | Yes | +2 |
+| Is latency critical (&lt;100ms required)? | Yes | -2 |
+| Do you work in public spaces (no audio)? | Yes | -3 |
+| Do you prefer silent work environment? | Yes | -2 |
+
+**Score interpretation**:
+- **&ge;3**: Install TTS (good fit)
+- **0-2**: Optional (try it, can uninstall)
+- **&lt;0**: Skip TTS (not a good fit)
+
+---
+
+## Workflow Overview
+
+```
+Phase 1: Prerequisites (5 min)
+    |
+    v
+Phase 2: Agent Vibes Install (5 min)
+    |
+    v
+Phase 3: Piper TTS + Voices (5 min)
+    |
+    v
+Phase 4: Test & Configure (3 min)
+    |
+    v
+Phase 5: Verify (1 min)
+```
+
+---
+
+## Phase 1: Prerequisites (5 minutes)
+
+<Steps>
+
+1. **System Requirements Check**
+
+   ```bash
+   # Verify macOS version
+   sw_vers
+   # Required: macOS 10.15+
+
+   # Verify Homebrew
+   brew --version
+
+   # Verify Node.js
+   node --version
+   # Required: 16.0.0+
+   ```
+
+2. **Install Bash 5.x**
+
+   ```bash
+   brew install bash
+   /opt/homebrew/bin/bash --version
+   # Expected: GNU bash, version 5.x
+   ```
+
+3. **Install Dependencies**
+
+   ```bash
+   brew install sox ffmpeg util-linux espeak-ng
+
+   # Verify all installed
+   command -v sox && command -v ffmpeg && command -v espeak-ng && echo "Dependencies OK"
+   ```
+
+</Steps>
+
+---
+
+## Phase 2: Agent Vibes Installation (5 minutes)
+
+<Steps>
+
+1. **Launch Installer**
+
+   ```bash
+   cd /path/to/your/claude-project
+   npx agentvibes install
+   ```
+
+   Expected: ASCII banner + 4-page interactive installer
+
+2. **Navigate Pages**
+
+   **Page 1/4 - Dependencies**: Review green checkmarks, click "Next"
+
+   **Page 2/4 - Provider**: Select `Piper TTS` (best quality, offline)
+
+   **Page 3/4 - Voice**:
+   - English: Select `en_US-ryan-high` (best quality)
+   - French: Select `fr_FR-tom-medium` (male, professional)
+
+   **Page 4/4 - Settings**:
+   - Reverb: `Light` (recommended)
+   - Background Music: `Disabled`
+   - Verbosity: `Low`
+
+3. **Verify Installation**
+
+   ```bash
+   ls .claude/hooks/play-tts.sh
+   ls .claude/commands/agent-vibes/
+   cat .claude/tts-provider.txt
+   # Expected: Files exist, provider shows "macos" or "piper"
+   ```
+
+</Steps>
+
+---
+
+## Phase 3: Piper TTS + Voices (5 minutes)
+
+<Steps>
+
+1. **Install Piper via pipx**
+
+   ```bash
+   pipx install piper-tts
+   piper --help
+   # Expected: Piper usage instructions
+   ```
+
+2. **Download Voices**
+
+   ```bash
+   mkdir -p ~/.claude/piper-voices
+   cd ~/.claude/piper-voices
+
+   # Download English male voice (recommended)
+   curl -L -o en_US-ryan-high.onnx \
+     "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/high/en_US-ryan-high.onnx"
+   curl -L -o en_US-ryan-high.onnx.json \
+     "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/high/en_US-ryan-high.onnx.json"
+   ```
+
+   <Aside type="tip">
+   You can also download French voices (`fr_FR-tom-medium`) or other language packs. Voice files are approximately 120MB.
+   </Aside>
+
+</Steps>
+
+---
+
+## Phase 4: Configuration & Testing (3 minutes)
+
+<Steps>
+
+1. **Configure Provider & Voice**
+
+   ```bash
+   echo "piper" > .claude/tts-provider.txt
+   echo "en_US-ryan-high" > .claude/tts-voice.txt
+
+   # Verify configuration
+   cat .claude/tts-provider.txt  # Expected: piper
+   cat .claude/tts-voice.txt     # Expected: en_US-ryan-high
+   ```
+
+2. **Test Audio Pipeline**
+
+   ```bash
+   # Test Piper directly
+   echo "Hello, I am Claude and I can speak" | \
+     piper -m ~/.claude/piper-voices/en_US-ryan-high.onnx \
+     --output-file /tmp/test.wav && afplay /tmp/test.wav
+
+   # Test TTS hook
+   ~/.claude/hooks/play-tts.sh "This is an audio test"
+   ```
+
+   Expected: You should hear the voice output.
+
+</Steps>
+
+---
+
+## Phase 5: Verification in Claude Code (1 minute)
+
+```bash
+# Start Claude Code
+claude
+
+# In Claude, run:
+/agent-vibes:whoami
+# Expected: Shows "piper" provider and selected voice
+
+# Test simple request
+> "Say hello"
+# Expected: Audio response
+```
+
+### Configure Preferences
+
+```bash
+# Reduce verbosity (recommended)
+/agent-vibes:verbosity low
+
+# Hide commands if cluttered
+/agent-vibes:hide
+```
+
+---
+
+## Total Time: ~18 Minutes
+
+---
+
+## Post-Setup Recommendations
+
+<Tabs>
+  <TabItem label="Code Reviews">
+    ```bash
+    /agent-vibes:verbosity low
+    /agent-vibes:effects off
+    ```
+  </TabItem>
+  <TabItem label="Focus Work">
+    ```bash
+    /agent-vibes:mute    # Mute temporarily
+    # Work without audio
+    /agent-vibes:unmute  # Re-enable when done
+    ```
+  </TabItem>
+  <TabItem label="Battery Optimization">
+    ```bash
+    # Switch to macOS Say (instant, no CPU burst)
+    /agent-vibes:provider switch macos
+    ```
+  </TabItem>
+</Tabs>
+
+### Add to .gitignore
+
+```bash
+echo ".claude/audio/" >> .gitignore
+echo ".claude/piper-voices/" >> .gitignore
+echo "*.wav" >> .gitignore
+echo "*.onnx" >> .gitignore
+```
+
+---
+
+## Troubleshooting
+
+| Issue | Quick Fix |
+|-------|-----------|
+| No audio | Check `cat .claude/tts-provider.txt` |
+| Wrong voice | Run `/agent-vibes:switch en_US-ryan-high` |
+| Too verbose | Run `/agent-vibes:verbosity low` |
+| Commands clutter | Run `/agent-vibes:hide` |
+
+---
+
+## Uninstall
+
+To remove Agent Vibes completely:
+
+```bash
+# Automated uninstall
+npx agentvibes uninstall --yes
+
+# Manual cleanup (if needed)
+rm -rf .claude/hooks/*vibes*
+rm -rf .claude/commands/agent-vibes/
+rm -rf .claude/audio/
+rm -rf ~/.claude/piper-voices/
+pipx uninstall piper-tts
+```

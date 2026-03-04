@@ -1,0 +1,639 @@
+---
+title: "DevOps & SRE Practices"
+description: "FIRE framework for infrastructure diagnosis and DevOps workflows with Claude Code"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Claude Code is a powerful ally for DevOps and SRE workflows -- from diagnosing infrastructure issues to generating postmortems and managing IaC. This guide introduces the **FIRE framework**, a systematic approach to infrastructure diagnosis, along with practical patterns for incident response, Kubernetes troubleshooting, and Infrastructure as Code.
+
+---
+
+## The FIRE Framework
+
+Every infrastructure diagnosis with Claude Code follows four phases:
+
+```
+F - First Response   → Give Claude the symptom + context
+I - Investigate      → Claude analyzes logs, metrics, config
+R - Remediate        → Claude proposes fix (with human approval)
+E - Evaluate         → Postmortem, documentation, prevention
+```
+
+<CardGrid>
+  <Card title="First Response" icon="rocket">
+    Describe the symptom, provide environment context. Claude triages and prioritizes checks.
+  </Card>
+  <Card title="Investigate" icon="magnifying-glass">
+    Run commands, paste output. Claude analyzes, correlates, and forms hypotheses.
+  </Card>
+  <Card title="Remediate" icon="pencil">
+    Claude proposes fixes with impact explanations. **You approve or reject.**
+  </Card>
+  <Card title="Evaluate" icon="open-book">
+    Claude generates postmortems, documentation, and prevention recommendations.
+  </Card>
+</CardGrid>
+
+<Aside type="caution">
+**Critical rule**: Claude proposes, you approve. This is especially important for destructive operations (delete, scale down, restart), production environments, and security-sensitive changes.
+</Aside>
+
+### Quick Self-Check
+
+| Situation | Jump To |
+|-----------|---------|
+| Active incident NOW | [Kubernetes Troubleshooting](#kubernetes-troubleshooting) |
+| First time using Claude for DevOps | [Your First Diagnosis](#your-first-infrastructure-diagnosis) |
+| Want to automate runbooks | [Incident Response](#pattern-incident-response) |
+| Need ready-to-use prompts | [Quick Reference](#quick-reference-prompts) |
+
+---
+
+## Your First Infrastructure Diagnosis
+
+Here's the FIRE framework in action with a pod CrashLoopBackOff scenario:
+
+<Steps>
+1. **First Response** -- Give context
+
+   ```bash
+   claude "I have a pod in CrashLoopBackOff in the payment-service namespace.
+   Environment: production
+   Cluster: gke-prod-us-east1
+   Started: 10 minutes ago
+   What are the first 3 things I should check?"
+   ```
+
+2. **Investigate** -- Run suggested commands and share output
+
+   ```bash
+   kubectl describe pod payment-api-7d4b8c6f5-x2j9k -n payment-service
+   # Copy output and paste to Claude
+   ```
+
+3. **Remediate** -- Claude proposes, you approve
+
+   ```bash
+   claude "Based on this describe output, what's the fix?
+   CONSTRAINT: Show me the exact command but don't execute anything."
+   ```
+
+4. **Evaluate** -- Document the incident
+
+   ```bash
+   claude "Create a brief incident note for our wiki:
+   - What happened
+   - Root cause
+   - Fix applied
+   - Prevention recommendation"
+   ```
+</Steps>
+
+### What Claude Returns (First Response)
+
+```markdown
+## CrashLoopBackOff Triage (Priority Order)
+
+1. **Check exit code and last logs**
+   kubectl logs payment-api-7d4b8c6f5-x2j9k -n payment-service --previous
+   Most common: OOM (exit 137), config errors (exit 1), dependency failures
+
+2. **Check pod events and resource limits**
+   kubectl describe pod payment-api-7d4b8c6f5-x2j9k -n payment-service
+   Look for: OOMKilled, ImagePullBackOff, liveness probe failures
+
+3. **Check recent deployment changes**
+   kubectl rollout history deployment/payment-api -n payment-service
+   If recent: consider rollback while investigating
+```
+
+---
+
+## Kubernetes Troubleshooting
+
+### K8s MCP Server Setup
+
+For persistent K8s context, install the K8s MCP server:
+
+```json
+// ~/.claude.json (or .mcp.json)
+{
+  "mcpServers": {
+    "kubernetes": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-kubernetes"]
+    }
+  }
+}
+```
+
+<Aside type="tip">
+With the MCP server, Claude can query cluster state directly, reducing copy-paste cycles. Without it, you pipe kubectl output to Claude manually -- still effective.
+</Aside>
+
+### Prompts by Symptom
+
+Replace `<bracketed>` values with your own.
+
+#### CrashLoopBackOff
+
+```bash
+kubectl describe pod <pod> -n <ns> | claude "Analyze this CrashLoopBackOff:
+1. What's the exit code and what does it mean?
+2. Check the last 5 restarts pattern (timing, consistent or escalating?)
+3. Suggest 3 most likely root causes based on the events
+4. Give me the exact commands to investigate each hypothesis"
+```
+
+**Common causes Claude will identify**:
+
+| Exit Code | Meaning |
+|-----------|---------|
+| 137 | OOMKilled (memory limit hit) |
+| 1 | Application error (bad config, missing dependency) |
+| 143 | SIGTERM (graceful shutdown timeout) |
+
+#### OOMKilled
+
+```bash
+kubectl top pods -n <ns> && kubectl describe pod <pod> -n <ns> | claude "This pod was OOMKilled:
+1. Compare requests vs limits vs actual usage
+2. Is this a memory leak or under-provisioning?
+3. If leak: what patterns in the container suggest investigation paths?
+4. If under-provisioned: suggest optimal resource settings based on this data"
+```
+
+**Follow-up for memory leaks**:
+```bash
+claude "The pod has been restarting every 2 hours with OOMKilled.
+Memory grows linearly from 200Mi to 512Mi limit before crash.
+Language: Node.js 18
+What are the top 3 things to check for memory leaks in this stack?"
+```
+
+#### ImagePullBackOff
+
+```bash
+kubectl describe pod <pod> -n <ns> | claude "ImagePullBackOff diagnosis:
+1. Is this an auth issue, network issue, or wrong image name?
+2. What's the exact error message telling us?
+3. Give me commands to verify the image exists and credentials work"
+```
+
+#### Pending Pod (Not Scheduling)
+
+```bash
+kubectl describe pod <pod> -n <ns> && kubectl describe nodes | claude "Pod stuck in Pending:
+1. Is this resource constraints, node selectors, or affinity rules?
+2. Which nodes were considered and why rejected?
+3. What's the quickest fix vs proper solution?"
+```
+
+#### Service Not Reachable
+
+```bash
+kubectl get svc,endpoints -n <ns> && kubectl describe svc <svc> -n <ns> | claude "Service not reachable:
+1. Are there healthy endpoints?
+2. Is the selector matching pods correctly?
+3. Is it a network policy blocking traffic?
+Give me diagnostic commands for each possibility"
+```
+
+---
+
+## Case Study: Production Outage
+
+**Situation**: E-commerce platform, 3 AM page, checkout service returning 503s.
+
+<Steps>
+1. **First Response**
+
+   ```bash
+   claude "INCIDENT: checkout-service returning 503s, started 10 min ago.
+   Impact: 100% of checkout attempts failing.
+   Environment: AWS EKS production, us-east-1.
+   Recent changes: deployment 2 hours ago (new feature flag logic).
+   What's the fastest diagnostic path?"
+   ```
+
+2. **Investigate** (Claude suggested checking pods first)
+
+   ```bash
+   kubectl get pods -n checkout -l app=checkout-service
+   # Output: 3/5 pods in CrashLoopBackOff
+
+   kubectl logs checkout-service-xxx --previous | tail -50 | claude "Analyze crash logs"
+   # Claude identifies: panic: nil pointer dereference in feature flag code
+   ```
+
+3. **Remediate**
+
+   ```bash
+   claude "Root cause identified: nil pointer in feature flag logic from recent deploy.
+   Options:
+   A) Rollback to previous version
+   B) Hotfix the nil check
+   Which is faster and safer at 3 AM?"
+   # Claude recommends: Rollback (faster, proven state, fix properly tomorrow)
+
+   kubectl rollout undo deployment/checkout-service -n checkout
+   # Service restored in 2 minutes
+   ```
+
+4. **Evaluate** (next day)
+
+   ```bash
+   claude "Create postmortem from this incident:
+   Timeline: 3:02 AM alert, 3:15 AM root cause found, 3:17 AM rollback, 3:19 AM resolved
+   Root cause: Feature flag nil pointer from commit abc123
+   Impact: 15 minutes checkout downtime
+   Format: Blameless, focused on prevention"
+   ```
+</Steps>
+
+**Outcome**: 15-minute MTTR, clear postmortem, prevention action items identified.
+
+---
+
+## Log Analysis & Correlation
+
+### Multi-Service Log Correlation
+
+```bash
+# Collect logs from related services
+kubectl logs -l app=api-gateway -n ingress --since=10m > gateway.log
+kubectl logs -l app=auth-service -n auth --since=10m > auth.log
+kubectl logs -l app=payment-service -n payment --since=10m > payment.log
+
+# Analyze correlation
+cat gateway.log auth.log payment.log | claude "Correlate these logs:
+1. Find the request flow for failed transactions
+2. Identify where the failure originates
+3. Are there patterns in timing or specific endpoints?
+4. Create a timeline of events"
+```
+
+### Log Pattern Detection
+
+```bash
+grep -E "ERROR|WARN|Exception" app.log | claude "Analyze error patterns:
+1. Cluster similar errors (group by type, not timestamp)
+2. What's the most frequent vs most severe?
+3. Which errors are correlated (same root cause)?
+4. Prioritize investigation order"
+```
+
+### PromQL Queries
+
+```bash
+claude "I need a PromQL query to:
+- Show p99 latency for the payment-service
+- Group by endpoint
+- Alert if > 500ms for 5 minutes
+Include the alert rule YAML too"
+```
+
+---
+
+## Pattern: Incident Response
+
+### Solo Incident Workflow (FIRE in Action)
+
+<Aside>
+At 3 AM, you're alone. This workflow is designed for one person.
+</Aside>
+
+<Steps>
+1. **First Response** (30 seconds)
+
+   ```bash
+   claude "INCIDENT: [symptom - be specific]
+   Context: [service], [environment], [time started]
+   Recent changes: [deploys, infra changes, traffic spikes]
+   Current impact: [% users affected, revenue impact if known]
+   What are the 3 most critical things to check first?"
+   ```
+
+2. **Investigate** (2-5 minutes)
+
+   ```bash
+   # Claude suggested checking pod health first
+   kubectl get pods -n checkout | claude "Quick assessment of this pod list"
+
+   # Then checking recent logs
+   kubectl logs -l app=checkout --since=5m | head -100 | claude "Analyze for error patterns"
+   ```
+
+3. **Remediate** (with approval)
+
+   ```bash
+   claude "Based on investigation:
+   - Root cause: [your understanding]
+   - Evidence: [key findings]
+
+   Propose remediation options:
+   1. Quick mitigation (restore service)
+   2. Proper fix (address root cause)
+
+   CONSTRAINT: I need to approve before any action. Show exact commands."
+   ```
+
+4. **Evaluate** (post-incident, not during)
+
+   ```bash
+   claude "Create incident postmortem:
+   Timeline: [events with timestamps]
+   Format: Blameless, focus on systems not people
+   Include: Action items with owners"
+   ```
+</Steps>
+
+### Communication During Incidents
+
+#### Stakeholder Update Generator
+
+```bash
+claude "Generate incident update for stakeholders:
+
+Incident: Checkout service degradation
+Current status: Mitigated, monitoring
+Impact: 15 minutes of 30% checkout failures
+ETA to full resolution: 2 hours (proper fix in next deploy)
+
+Audience: Non-technical executives
+Tone: Professional, reassuring, factual
+Length: 3 sentences max"
+```
+
+**Example output**:
+> We experienced a 15-minute disruption to our checkout service affecting approximately 30% of transactions, which has now been resolved. The issue was caused by a software bug in a recent update and was quickly rolled back. We'll deploy a permanent fix during our next scheduled maintenance window with no expected customer impact.
+
+### Multi-Agent Pattern: Post-Incident Analysis
+
+<Aside type="tip">
+Use multi-agent for comprehensive analysis **after** incidents, not during active ones.
+</Aside>
+
+```bash
+# Agent 1: Timeline Reconstruction
+claude "You are an incident timeline analyst.
+From these logs and Slack messages, reconstruct a precise timeline:
+[paste logs and comms]"
+
+# Agent 2: Root Cause Analysis
+claude "You are a root cause analyst.
+Given this timeline, perform 5-whys analysis:
+[paste timeline from Agent 1]"
+
+# Agent 3: Prevention Recommendations
+claude "You are an SRE process improvement specialist.
+Given this root cause analysis:
+[paste RCA from Agent 2]
+Output: Prioritized prevention measures, effort estimates"
+```
+
+### Case Study: MTTR Reduction
+
+| Metric | Before Claude | After 3 Months |
+|--------|--------------|----------------|
+| Average MTTR | 45 minutes | 18 minutes (60% reduction) |
+| Postmortem completion | Often delayed/skipped | 95% within 24 hours |
+| Knowledge sharing | Engineer silos | Claude-generated runbooks for all |
+
+**Key insight**: Biggest gains were not speed -- they were consistency and documentation.
+
+---
+
+## Pattern: Infrastructure as Code
+
+### Terraform with Claude
+
+#### Terraform Plan Review
+
+```bash
+terraform plan -out=plan.txt && cat plan.txt | claude "Review this Terraform plan:
+1. Any dangerous changes? (data loss, downtime)
+2. Are the changes what we expect?
+3. Any missing changes we should add?
+4. Cost implications if visible"
+```
+
+#### Module Generation
+
+```bash
+claude "Generate a Terraform module for:
+- AWS ECS Fargate service
+- With ALB and target group
+- Auto-scaling based on CPU
+- Secrets from SSM Parameter Store
+
+Follow these conventions:
+- Use for_each over count
+- All resources tagged with var.tags
+- Output the service URL and ARN"
+```
+
+#### State Surgery Helper
+
+```bash
+claude "I need to move a resource to a different state file:
+Current state: terraform-prod/terraform.tfstate
+Resource: aws_s3_bucket.logs
+Target state: terraform-shared/terraform.tfstate
+
+What's the safest procedure? Include rollback steps."
+```
+
+#### Drift Detection
+
+```bash
+terraform plan -detailed-exitcode 2>&1 | tee drift.txt
+
+cat drift.txt | claude "Analyze this Terraform drift:
+1. What changed outside of Terraform?
+2. Is this drift expected (manual change) or concerning?
+3. Should we import the changes or revert to Terraform state?
+4. What's the safest remediation path?"
+```
+
+### Ansible with Claude
+
+#### Playbook Review
+
+```bash
+cat playbook.yml | claude "Review this Ansible playbook:
+1. Idempotency issues?
+2. Security concerns?
+3. Error handling gaps?
+4. Performance optimizations?"
+```
+
+#### Role Generation
+
+```bash
+claude "Generate an Ansible role for:
+- Installing and configuring Nginx
+- SSL certificates via Let's Encrypt (certbot)
+- Hardened configuration (disable server tokens, etc.)
+- Log rotation
+
+Follow best practices:
+- Use handlers for service restarts
+- Variables in defaults/main.yml
+- Include molecule tests structure"
+```
+
+### GitOps with Claude
+
+#### ArgoCD Application Review
+
+```bash
+cat application.yaml | claude "Review this ArgoCD Application:
+1. Sync policy appropriate for the environment?
+2. Resource health checks defined?
+3. Any sync wave ordering issues?
+4. Namespace and project permissions correct?"
+```
+
+#### Helm Values Generation
+
+```bash
+claude "Generate Helm values for deploying [application] to:
+- Environment: staging
+- Resources: Limited (cost-conscious)
+- Replicas: 2
+- Ingress: Internal only
+- Secrets: From external-secrets operator
+
+Base chart: [chart name]
+Include comments explaining each value"
+```
+
+---
+
+## Security Review Automation
+
+### Infrastructure Security Scan
+
+```bash
+tfsec . --format=json | claude "Analyze these security findings:
+1. Prioritize by severity and exploitability
+2. Which are false positives in our context?
+3. For real issues: what's the fix?
+4. Which can we ignore with a documented reason?"
+```
+
+### IAM Policy Review
+
+```bash
+cat iam-policy.json | claude "Review this IAM policy:
+1. Does it follow least privilege?
+2. Any overly permissive actions? (*, admin, etc.)
+3. Resource constraints appropriate?
+4. Suggest a more restrictive version that still works"
+```
+
+---
+
+## Guardrails & Adoption
+
+### Cost Awareness
+
+| Model | Input (1M tokens) | Output (1M tokens) |
+|-------|-------------------|---------------------|
+| Sonnet 4 | $3 | $15 |
+| Opus 4 | $15 | $75 |
+
+**Typical DevOps session**: 20K-50K tokens = $0.10-$0.50
+
+**Cost control strategies**:
+
+<Steps>
+1. Use Sonnet for routine tasks (default)
+2. Reserve Opus for complex multi-system analysis
+3. Use `/compact` to reduce context when conversation gets long
+4. Avoid pasting entire log files -- grep relevant sections first
+</Steps>
+
+<Aside type="caution">
+Claude does not see your cloud bill. Always ask about infrastructure cost impact before applying changes.
+</Aside>
+
+### Security Boundaries
+
+| Data Type | Why Not | Alternative |
+|-----------|---------|-------------|
+| API keys, tokens | Could be cached/logged | Use placeholders: `<API_KEY>` |
+| Production secrets | Security risk | Describe the secret type, not value |
+| Customer PII | Privacy/compliance | Use anonymized examples |
+| Incident details with PII | Legal liability | Sanitize before sharing |
+
+### When Claude Excels vs. Limitations
+
+<Tabs>
+  <TabItem label="Claude Excels">
+    - Complex root cause analysis across multiple interacting systems
+    - Documentation generation (postmortems, runbooks, procedures)
+    - Learning new tools (unfamiliar cloud services, new k8s features)
+    - Second opinion on your hypothesis
+    - Bulk operations (generating configs for multiple environments)
+  </TabItem>
+  <TabItem label="Limitations">
+    | Limitation | Workaround |
+    |------------|------------|
+    | No real-time cluster state | Use K8s MCP or paste kubectl output |
+    | No direct API access | Use MCP servers or share CLI output |
+    | Context window limits (~100K) | Focus on relevant logs, not full dumps |
+    | No persistent memory | Use CLAUDE.md for project context |
+    | Hallucination risk | Always verify commands before running |
+  </TabItem>
+  <TabItem label="When NOT to Use">
+    - Time-critical decisions under 30 seconds (your muscle memory is faster)
+    - Highly confidential incidents (data breach investigation)
+    - Simple, obvious fixes (if you know the answer, just do it)
+    - Compliance-restricted environments (check if AI tools are allowed)
+  </TabItem>
+</Tabs>
+
+---
+
+## Quick Reference Prompts
+
+### Kubernetes Symptoms
+
+| Symptom | Prompt |
+|---------|--------|
+| CrashLoopBackOff | `kubectl describe pod <pod> -n <ns> \| claude "Exit code meaning? 3 likely causes?"` |
+| OOMKilled | `kubectl top pods && describe pod \| claude "Leak or under-provisioned?"` |
+| ImagePullBackOff | `kubectl describe pod \| claude "Auth, network, or wrong image?"` |
+| Pending | `kubectl describe pod && describe nodes \| claude "Resource, selector, or affinity?"` |
+| Service unreachable | `kubectl get svc,endpoints \| claude "Healthy endpoints? Selector matching?"` |
+
+### Cloud / Infrastructure
+
+| Symptom | Prompt |
+|---------|--------|
+| High latency | `[metrics] \| claude "Bottleneck location? Compute, network, or dependency?"` |
+| Disk full | `df -h && du -sh /* \| claude "What's consuming space? Safe to delete?"` |
+| Connection refused | `netstat -tlnp \| claude "Service listening? Port correct? Firewall?"` |
+| SSL cert expiry | `openssl s_client -connect host:443 \| claude "Days until expiry? Renewal steps?"` |
+| DNS issues | `dig +trace domain \| claude "Where does resolution fail?"` |
+
+### Terraform
+
+| Task | Prompt |
+|------|--------|
+| Plan review | `terraform plan \| claude "Dangerous changes? Missing? Cost impact?"` |
+| Drift analysis | `terraform plan -detailed-exitcode \| claude "What drifted? Expected? Fix?"` |
+| Module request | `claude "Generate Terraform module for [resource] with [requirements]"` |
+
+### MCP Servers for DevOps
+
+| Server | Purpose | Install |
+|--------|---------|---------|
+| Kubernetes | Direct cluster access | `npx -y @anthropic/mcp-kubernetes` |
+| AWS | AWS API access | `npx -y @anthropic/mcp-aws` |
+| GCP | GCP API access | `npx -y @anthropic/mcp-gcp` |
+
+Config location: `~/.claude.json` (field `"mcpServers"`)

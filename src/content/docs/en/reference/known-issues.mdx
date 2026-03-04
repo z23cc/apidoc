@@ -1,0 +1,224 @@
+---
+title: "Known Issues"
+description: "Verified critical issues affecting Claude Code users from community reports"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+This document tracks **verified, critical issues** affecting Claude Code users based on community reports and official communications. Only high-impact issues with multiple confirmations or official Anthropic acknowledgment are included.
+
+<Aside type="danger">
+The following issues may affect security, privacy, or cost. Read the workarounds carefully and take action if affected.
+</Aside>
+
+---
+
+## Active Critical Issues
+
+### 1. GitHub Issue Auto-Creation in Wrong Repository
+
+| Attribute | Details |
+|-----------|---------|
+| **Severity** | Critical -- Security/Privacy Risk |
+| **Status** | Active (as of Jan 28, 2026) |
+| **Issue** | [#13797](https://github.com/anthropics/claude-code/issues/13797) |
+| **First Reported** | December 12, 2025 |
+| **Affected Versions** | v2.0.65+ |
+
+#### Problem
+
+Claude Code **systematically creates GitHub issues in the public `anthropics/claude-code` repository** instead of the user's private repository, even when working within a local git repo directory.
+
+#### Impact
+
+At least **17+ confirmed cases** of users accidentally exposing sensitive information:
+
+- Database schemas
+- API credentials and configuration details
+- Infrastructure architecture
+- Private project roadmaps
+- Security configurations
+
+#### Symptoms
+
+- Issue created with unexpected `--repo anthropics/claude-code` flag
+- Private project details appear in public anthropics/claude-code issues
+- No confirmation prompt before creating issue in public repository
+
+#### Workarounds
+
+<Steps>
+1. **Always verify the target repository**:
+   ```bash
+   git remote -v
+   ```
+2. **Explicitly specify the repository**:
+   ```bash
+   gh issue create --repo YOUR_USERNAME/YOUR_REPO --title "..." --body "..."
+   ```
+3. **Review the command** before execution: look for `--repo anthropics/claude-code` flag
+4. **Use manual approval** for all `gh` commands in Claude settings
+5. **Never include sensitive information** in issue creation prompts until the bug is fixed
+</Steps>
+
+#### If You Are Affected
+
+<Aside type="danger">
+If you accidentally created an issue exposing sensitive information:
+1. **Immediately contact GitHub Support** to request issue deletion (not just closing)
+2. **Rotate any exposed credentials** (API keys, passwords, tokens)
+3. **Report to Anthropic** via security@anthropic.com if security-sensitive
+4. **Monitor exposed information** for unauthorized usage
+</Aside>
+
+---
+
+### 2. Excessive Token Consumption
+
+| Attribute | Details |
+|-----------|---------|
+| **Severity** | High -- Cost Impact |
+| **Status** | Reported (Anthropic investigating) |
+| **Issue** | [#16856](https://github.com/anthropics/claude-code/issues/16856) |
+| **First Reported** | January 8, 2026 |
+| **Affected Versions** | v2.1.1+ (reported) |
+
+#### Problem
+
+Multiple users report **4x+ faster token consumption** compared to previous versions:
+- Rate limits hit much faster than normal
+- Same workflows consuming significantly more tokens
+- Unexpected cost increases
+
+#### Context
+
+**Holiday Usage Bonus Expiration**: December 25-31, 2025, Anthropic doubled usage limits as a holiday gift. When limits returned to normal on January 1, 2026, users experienced perception of "reduced capacity."
+
+However, **reports persist beyond this timing**, suggesting a potential underlying issue.
+
+#### Anthropic Response
+
+> "Anthropic stated it 'takes all such reports seriously but hasn't identified any flaw related to token usage' and indicated it had ruled out bugs in its inference stack."
+
+**Status**: **Not officially confirmed as a bug** by Anthropic as of Jan 28, 2026.
+
+#### Workarounds
+
+<Steps>
+1. **Monitor token usage actively**:
+   ```
+   /context
+   ```
+2. **Use shorter sessions**: Restart sessions when approaching 50-60% context
+3. **Disable auto-compact** (may help):
+   ```bash
+   claude config set autoCompaction false
+   ```
+4. **Reduce MCP tools**: Review `~/.claude.json` `"mcpServers"` and disable unused servers
+5. **Use subagents** for isolated tasks: Subagents have separate context windows
+6. **Track your usage patterns**: Compare before/after version upgrades and document unusual spikes
+</Steps>
+
+#### Investigation Tips
+
+If experiencing excessive consumption:
+
+| Step | Action |
+|------|--------|
+| Note your version | `claude --version` |
+| Compare versions | Test with an earlier stable version if available |
+| Document patterns | Which operations trigger high usage? |
+| Report with data | Include version, operation type, token counts in issue reports |
+
+---
+
+## Resolved Historical Issues
+
+### Model Quality Degradation (Aug-Sep 2025)
+
+| Attribute | Details |
+|-----------|---------|
+| **Severity** | Critical |
+| **Status** | Resolved (mid-September 2025) |
+| **Timeline** | August 25 - early September 2025 |
+
+#### Problem
+
+Users reported Claude Code producing worse outputs: syntax errors, unexpected character insertions (Thai/Chinese text in English responses), failed basic tasks.
+
+#### Root Cause
+
+Anthropic identified **three infrastructure bugs** (not model degradation):
+
+<CardGrid>
+  <Card title="Traffic Misrouting" icon="warning">
+    Approximately 30% of Claude Code requests were routed to the wrong server type, producing degraded responses.
+  </Card>
+  <Card title="Output Corruption" icon="warning">
+    A misconfiguration deployed August 25 caused token generation errors.
+  </Card>
+  <Card title="XLA:TPU Miscompilation" icon="warning">
+    A performance optimization triggered a latent compiler bug affecting token selection.
+  </Card>
+</CardGrid>
+
+#### Anthropic Response
+
+**Official Postmortem**: [A postmortem of three recent issues](https://www.anthropic.com/engineering/a-postmortem-of-three-recent-issues)
+
+> "We never reduce model quality due to demand, time of day, or server load. The problems our users reported were due to infrastructure bugs alone."
+
+All bugs were fixed by mid-September 2025.
+
+---
+
+## Issue Statistics (as of Jan 28, 2026)
+
+| Metric | Count | Source |
+|--------|-------|--------|
+| **Open issues** | 5,702 | GitHub API |
+| **Issues labeled "invalid"** | 527 | GitHub Issues search |
+| **"Wrong repo" issues (confirmed)** | 17+ | Manual search Jan 2026 |
+| **Token consumption reports (Dec-Jan)** | 20+ | Issue search |
+
+---
+
+## How to Track Issues
+
+### Check Open Critical Issues
+
+```bash
+# Most reacted-to issues (community priority)
+gh issue list --repo anthropics/claude-code --state open --sort reactions-+1 --limit 20
+
+# Recent critical bugs
+gh search issues --repo anthropics/claude-code "bug" "critical" --sort created --order desc --limit 10
+```
+
+### Monitor Specific Topics
+
+- **Token consumption**: [Search](https://github.com/anthropics/claude-code/issues?q=is%3Aissue+excessive+token)
+- **Wrong repo creations**: [Search](https://github.com/anthropics/claude-code/issues?q=is%3Aissue+%22wrong+repo%22)
+- **Model quality**: [Search](https://github.com/anthropics/claude-code/issues?q=is%3Aissue+quality+degradation)
+
+### Official Channels
+
+| Channel | Link |
+|---------|------|
+| **GitHub Issues** | https://github.com/anthropics/claude-code/issues |
+| **Anthropic Status** | https://status.anthropic.com/ |
+| **Engineering Blog** | https://www.anthropic.com/engineering |
+
+---
+
+## Inclusion Criteria
+
+This document tracks **verified, high-impact issues only**:
+
+- **Verified**: Issue exists in GitHub with multiple reports or official Anthropic acknowledgment
+- **High-impact**: Affects security, privacy, cost, or core functionality
+- **Actionable**: Workarounds or official response available
+
+<Aside>
+Disclaimer: This document is community-maintained and not affiliated with Anthropic. Information is provided as-is. Always verify current status via official channels before making decisions.
+</Aside>

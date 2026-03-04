@@ -1,0 +1,585 @@
+---
+title: "安全加固指南"
+description: "活跃威胁防御、注入攻击防护和基于 CVE 的安全加固"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+保护 Claude Code 不仅仅是设置基本权限。本指南涵盖**活跃威胁防御**、**注入攻击防护**和**基于 CVE 的安全加固**，帮助你的开发工作流抵御真实世界中的攻击。
+
+---
+
+## 快速决策矩阵
+
+| 你的情况 | 立即行动 | 耗时 |
+|---------|---------|------|
+| **个人开发者，公开仓库** | 安装输出扫描钩子 | 5 分钟 |
+| **团队，敏感代码库** | + MCP 审查 + 注入检测钩子 | 30 分钟 |
+| **企业级，生产环境** | + ZDR + 完整性验证 | 2 小时 |
+
+<Aside type="danger">
+**绝对不要**在没有版本锁定的情况下批准来自未知来源的 MCP。**绝对不要**使用生产数据库凭据运行数据库 MCP。
+</Aside>
+
+---
+
+## 第一部分：预防（开始之前）
+
+### MCP 审查流程
+
+模型上下文协议（MCP）服务器扩展了 Claude Code 的能力，但也引入了重大的攻击面。了解威胁模型至关重要。
+
+#### 攻击：MCP Rug Pull（信任劫持）
+
+```
+1. 攻击者发布一个看似安全的 MCP "code-formatter"
+          |
+2. 用户添加到 ~/.claude.json，批准一次
+          |
+3. MCP 正常工作两周（建立信任）
+          |
+4. 攻击者推送恶意更新（无需重新批准！）
+          |
+5. MCP 窃取 ~/.ssh/*、.env、凭据
+
+缓解措施：版本锁定 + 哈希验证 + 监控
+```
+
+这种攻击利用了一次性批准模型：一旦你批准了某个 MCP，更新会自动执行而无需重新同意。
+
+#### CVE 汇总（2025-2026）
+
+| CVE | 严重程度 | 影响 | 缓解措施 |
+|-----|---------|------|---------|
+| **CVE-2025-53109/53110** | 高 | 文件系统 MCP 沙盒逃逸（前缀绕过 + 符号链接） | 更新到 >= 0.6.3 / 2025.7.1 |
+| **CVE-2025-54135** | 高 (8.6) | Cursor 中通过提示注入重写 mcp.json 实现 RCE | 文件完整性监控钩子 |
+| **CVE-2025-54136** | 高 | 通过批准后配置篡改实现持久化团队后门 | Git 钩子 + 哈希验证 |
+| **CVE-2025-49596** | 严重 (9.4) | MCP Inspector 工具中的 RCE | 更新到已修补版本 |
+| **CVE-2026-24052** | 高 | WebFetch 域名验证绕过导致 SSRF | 更新到 v1.0.111+ |
+| **CVE-2025-66032** | 高 | 8 种命令执行绕过（阻止列表缺陷） | 更新到 v1.0.93+ |
+| **ADVISORY-CC-2026-001** | 高 | 沙盒绕过——排除沙盒的命令绕过 Bash 权限 | 更新到 v2.1.34+ |
+| **CVE-2026-0755** | 严重 (9.8) | gemini-mcp-tool 中的 RCE——尚无修复 | 避免在生产环境使用 |
+
+<Aside type="caution">
+**v2.1.34 安全修复（2026年2月）**：Claude Code v2.1.34 修复了一个沙盒绕过漏洞。如果运行 v2.1.33 或更早版本，请立即升级。
+</Aside>
+
+<Aside type="danger">
+**CVE-2026-0755（2026年2月——无补丁）**：`gemini-mcp-tool` 中的严重 RCE（CVSS 9.8）。攻击者可以发送精心构造的 JSON-RPC 请求，在主机上执行任意代码。不要将 gemini-mcp-tool 暴露在不可信网络中。
+</Aside>
+
+#### 攻击模式
+
+| 模式 | 描述 | 检测方法 |
+|------|------|---------|
+| **工具投毒** | 工具元数据中的恶意指令在执行前影响 LLM | Schema diff 监控 |
+| **信任劫持** | 良性服务器在获得信任后变为恶意 | 版本锁定 + 哈希验证 |
+| **混淆代理** | 攻击者在不受信任的服务器上注册可信名称的工具 | 命名空间验证 |
+
+#### 5 分钟 MCP 审计
+
+添加任何 MCP 服务器之前，完成以下检查清单：
+
+<Steps>
+1. **来源**：运行 `gh repo view <mcp-repo>` — Star 数 >50，最近 30 天有提交
+2. **权限**：检查 `mcp.json` 配置 — 没有 `--dangerous-*` 标志
+3. **版本**：检查版本字符串 — 已锁定（不是 "latest" 或 "main"）
+4. **哈希**：运行 `sha256sum <mcp-binary>` — 与发布校验和匹配
+5. **审计**：审查最近的提交 — 没有可疑变更
+</Steps>
+
+#### MCP 安全列表（社区审查）
+
+| MCP 服务器 | 状态 | 备注 |
+|-----------|------|------|
+| `@anthropic/mcp-server-*` | 安全 | Anthropic 官方服务器 |
+| `context7` | 安全 | 只读文档查找 |
+| `sequential-thinking` | 安全 | 无外部访问，本地推理 |
+| `memory` | 安全 | 基于本地文件的持久化 |
+| `filesystem`（不受限制） | 风险 | CVE-2025-53109/53110 — 谨慎使用 |
+| `database`（生产凭据） | 不安全 | 数据泄露风险 — 使用只读账号 |
+| `browser`（完全访问） | 风险 | 可导航到恶意站点 |
+| `mcp-scan` (Snyk) | 工具 | 技能/MCP 的供应链扫描 |
+
+#### 安全 MCP 配置示例
+
+```json
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@context7/mcp-server@1.2.3"],
+      "env": {}
+    },
+    "database": {
+      "command": "npx",
+      "args": ["-y", "@company/db-mcp@2.0.1"],
+      "env": {
+        "DB_HOST": "readonly-replica.internal",
+        "DB_USER": "readonly_user"
+      }
+    }
+  }
+}
+```
+
+**关键实践**：
+- 锁定精确版本（`@1.2.3`，而非 `@latest`）
+- 使用只读数据库凭据
+- 尽量减少暴露的环境变量
+
+### Agent Skills 供应链风险
+
+第三方 Agent Skills 引入了类似 npm 包的供应链风险。
+
+**Snyk ToxicSkills**（2026年2月）扫描了 ClawHub 和 skills.sh 上的 **3,984 个技能**：
+
+| 发现 | 数据 | 影响 |
+|------|------|------|
+| 存在安全缺陷的技能 | **36.82%**（1,467/3,984） | 超过三分之一的技能受到影响 |
+| 严重风险技能 | **534**（13.4%） | 恶意软件、提示注入、暴露的密钥 |
+| 已识别恶意载荷 | **76** | 凭据窃取、后门、数据泄露 |
+| 硬编码密钥 (ClawHub) | **10.9%** | API 密钥、令牌暴露在技能代码中 |
+| 远程提示执行 | **2.9%** | 技能动态获取并执行远程内容 |
+
+<Aside type="tip">
+**缓解措施**：安装前使用 `mcp-scan`（Snyk）扫描，检查 `SKILL.md` 中是否有意外的访问权限（特别是 `Bash`），将技能版本锁定到特定的 commit 哈希。
+</Aside>
+
+```bash
+# 使用 mcp-scan (Snyk) 扫描技能目录
+npx mcp-scan ./skill-directory
+
+# 使用 skills-ref 验证规范合规性
+skills-ref validate ./skill-directory
+```
+
+### permissions.deny 的已知局限
+
+`.claude/settings.json` 中的 `permissions.deny` 是阻止 Claude 访问敏感文件的官方方法，但安全研究人员记录了其架构层面的局限性。
+
+#### permissions.deny 阻止的操作
+
+| 操作 | 是否阻止？ | 备注 |
+|------|-----------|------|
+| `Read()` 工具调用 | 是 | 主要阻止机制 |
+| `Edit()` 工具调用 | 是 | 需要显式拒绝规则 |
+| `Write()` 工具调用 | 是 | 需要显式拒绝规则 |
+| `Bash(cat .env)` | 是 | 需要显式拒绝规则 |
+| `Glob()` 模式 | 是 | 由 Read 规则处理 |
+| `ls .env*`（文件名） | 部分 | 暴露文件存在性，不暴露内容 |
+
+#### 已知安全空白
+
+| 空白 | 描述 |
+|------|------|
+| **系统提示** | 后台索引可能在工具权限检查之前通过内部机制暴露文件内容 |
+| **Bash 通配符** | 没有显式拒绝规则的通用 bash 命令可能访问文件 |
+| **索引时序** | 文件监视在工具权限之下的层级运行 |
+
+#### 推荐配置
+
+阻止**所有**访问途径，不只是 `Read`：
+
+```json
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env*)",
+      "Edit(./.env*)",
+      "Write(./.env*)",
+      "Bash(cat .env*)",
+      "Bash(head .env*)",
+      "Bash(tail .env*)",
+      "Bash(grep .env*)",
+      "Read(./secrets/**)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.key)"
+    ]
+  }
+}
+```
+
+#### 纵深防御策略
+
+<Steps>
+1. **将密钥存储在项目目录之外** — 使用 `~/.secrets/` 或外部保险库
+2. **使用外部密钥管理** — AWS Secrets Manager、1Password、HashiCorp Vault
+3. **添加 PreToolUse 钩子** — 第二层阻止
+4. **永远不要提交密钥** — 即使是"被阻止"的文件也可能通过其他途径泄露
+5. **审查 bash 命令** — 在批准执行前手动检查
+</Steps>
+
+<Aside>
+`permissions.deny` 是必要的但不充分的。把它视为纵深防御策略中的一层，而非完整解决方案。
+</Aside>
+
+#### 内置权限保护
+
+| 保护措施 | 行为 |
+|---------|------|
+| **命令阻止列表** | `curl` 和 `wget` 默认在沙盒中被阻止 |
+| **失败关闭匹配** | 任何未匹配的权限规则默认需要手动批准 |
+| **命令注入检测** | 可疑的 bash 命令即使之前被允许也需要手动批准 |
+
+### 仓库预扫描
+
+在打开不受信任的仓库之前，扫描注入向量。
+
+**高风险文件**：
+- `README.md`、`SECURITY.md` — 带有指令的隐藏 HTML 注释
+- `package.json`、`pyproject.toml` — 钩子中的恶意脚本
+- `.cursor/`、`.claude/` — 被篡改的配置文件
+- `CONTRIBUTING.md` — 社会工程指令
+
+**快速扫描命令**：
+```bash
+# 检查 markdown 中的隐藏指令
+grep -r "<!--" . --include="*.md" | head -20
+
+# 检查可疑的 npm 脚本
+jq '.scripts' package.json 2>/dev/null
+
+# 检查注释中的 base64
+grep -rE "#.*[A-Za-z0-9+/]{20,}={0,2}" . --include="*.py" --include="*.js"
+```
+
+### 恶意扩展（.claude/ 攻击面）
+
+仓库可以内嵌 `.claude/` 文件夹，其中包含预配置的代理、命令和钩子。在 Claude Code 中打开这类仓库会自动加载此配置——这是一个绕过技能市场的供应链攻击向量。
+
+#### 攻击向量
+
+| 向量 | 机制 | 风险 |
+|------|------|------|
+| **恶意代理** | `allowed-tools: ["Bash"]` + 数据窃取指令 | 代理执行任意命令 |
+| **恶意命令** | 提示模板中的隐藏指令 | 命令以完整权限运行 |
+| **恶意钩子** | `.claude/hooks/` 中的 Bash 脚本 | 每次工具调用都泄露数据 |
+| **投毒 CLAUDE.md** | 覆盖安全设置的指令 | LLM 遵循仓库指令 |
+| **木马 settings.json** | 过于宽松的 `permissions.allow` 规则 | 悄悄削弱安全态势 |
+
+#### 5 分钟 .claude/ 审计清单
+
+<Steps>
+1. **存在性**：运行 `ls -la .claude/` — 非 Claude 项目中出现意外的 `.claude/`？
+2. **钩子**：运行 `cat .claude/hooks/*.sh` — 查找 `curl`、`wget`、网络调用、base64 编码
+3. **代理**：运行 `cat .claude/agents/*.md` — 检查带有模糊描述的 `allowed-tools: ["Bash"]`
+4. **命令**：运行 `cat .claude/commands/*.md` — 查找可见内容之后的隐藏指令
+5. **设置**：运行 `cat .claude/settings.json` — 检查过于宽松的 `permissions.allow` 规则
+6. **CLAUDE.md**：运行 `cat .claude/CLAUDE.md` — 关注禁用安全的指令
+</Steps>
+
+```bash
+# 快速扫描 .claude/ 中的可疑模式
+grep -r "curl\|wget\|nc \|base64\|eval\|exec" .claude/ 2>/dev/null
+grep -r "allowed-tools.*Bash" .claude/agents/ 2>/dev/null
+grep -r "permissions.allow" .claude/ 2>/dev/null
+```
+
+---
+
+## 第二部分：检测（工作过程中）
+
+### 提示注入检测
+
+编码助手容易受到通过代码上下文的间接提示注入攻击。攻击者在 Claude 自动读取的文件中嵌入指令。
+
+#### 逃逸技术
+
+| 技术 | 示例 | 风险 | 检测 |
+|------|------|------|------|
+| **零宽字符** | `U+200B`、`U+200C`、`U+200D` | 人眼不可见的指令 | Unicode 正则 |
+| **RTL 覆盖** | `U+202E` 反转文本显示 | 隐藏的命令看起来正常 | 双向扫描 |
+| **ANSI 转义** | `\x1b[` 终端序列 | 终端操纵 | 转义过滤 |
+| **空字节** | `\x00` 截断攻击 | 绕过字符串检查 | 空值检测 |
+| **Base64 注释** | `# SGlkZGVuOiBpZ25vcmU=` | LLM 自动解码 | 熵值检查 |
+| **嵌套命令** | `$(evil_command)` | 通过替换绕过拒绝列表 | 模式阻止 |
+| **同形字** | 西里尔字母 vs 拉丁字母 | 关键词过滤绕过 | 规范化 |
+
+#### 检测模式
+
+```bash
+# 零宽 + RTL + 双向
+[\x{200B}-\x{200D}\x{FEFF}\x{202A}-\x{202E}\x{2066}-\x{2069}]
+
+# ANSI 转义序列（终端注入）
+\x1b\[|\x1b\]|\x1b\(
+
+# 空字节（截断攻击）
+\x00
+
+# 注释中的 Base64（高熵）
+[#;].*[A-Za-z0-9+/]{20,}={0,2}
+
+# 嵌套命令执行
+\$\([^)]+\)|\`[^\`]+\`
+```
+
+### 密钥与输出监控
+
+#### 工具对比
+
+| 工具 | 召回率 | 精确率 | 速度 | 最适合 |
+|------|--------|--------|------|--------|
+| **Gitleaks** | 88% | 46% | 快（~2 分钟/10万提交） | 预提交钩子 |
+| **TruffleHog** | 52% | 85% | 慢（~15 分钟） | CI 验证 |
+| **GitGuardian** | 80% | 95% | 云端 | 企业监控 |
+| **detect-secrets** | 60% | 98% | 快 | 基线方案 |
+
+**推荐组合**：
+```
+预提交    ->  Gitleaks（早期捕获，接受一些误报）
+CI/CD     ->  TruffleHog（通过 API 验证确认）
+持续监控  ->  GitGuardian（如果预算允许）
+```
+
+#### 环境变量泄露
+
+| 向量 | 示例 | 缓解措施 |
+|------|------|---------|
+| `env` / `printenv` 输出 | 导出所有环境变量 | 在输出扫描器中阻止 |
+| `/proc/self/environ` 访问 | Linux 环境变量读取 | 阻止文件访问模式 |
+| 包含凭据的错误消息 | 带有数据库密码的堆栈跟踪 | 显示前进行脱敏 |
+| Bash 历史暴露 | 包含内联密钥的命令 | 历史记录清理 |
+
+### 钩子堆栈配置
+
+推荐的安全钩子配置（`~/.claude/settings.json`）：
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          "~/.claude/hooks/dangerous-actions-blocker.sh"
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          "~/.claude/hooks/prompt-injection-detector.sh",
+          "~/.claude/hooks/unicode-injection-scanner.sh"
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          "~/.claude/hooks/output-secrets-scanner.sh"
+        ]
+      }
+    ],
+    "SessionStart": [
+      "~/.claude/hooks/mcp-config-integrity.sh"
+    ]
+  }
+}
+```
+
+**钩子安装**：
+```bash
+# 将钩子复制到 Claude 目录
+cp examples/hooks/bash/*.sh ~/.claude/hooks/
+chmod +x ~/.claude/hooks/*.sh
+```
+
+---
+
+## 第三部分：响应（出问题时）
+
+### 密钥泄露
+
+**前 15 分钟**（止血）：
+
+<Steps>
+1. **立即撤销**
+   ```bash
+   # AWS
+   aws iam delete-access-key --access-key-id AKIA... --user-name <user>
+   # GitHub: 设置 -> 开发者设置 -> 撤销
+   # Stripe: 控制台 -> 开发者 -> 滚动密钥
+   ```
+2. **确认暴露范围**
+   ```bash
+   git log --oneline origin/main..HEAD
+   git log -p | grep -E "(AKIA|sk_live_|ghp_|xoxb-)"
+   gitleaks detect --source . --report-format json > exposure-report.json
+   ```
+3. **审计 git 历史**（如果已推送，可能需要重写历史）
+   ```bash
+   git filter-repo --invert-paths --path <file-with-secret>
+   ```
+4. **扫描依赖项**中日志或配置中泄露的密钥
+5. **检查 CI/CD 日志**中构建输出的密钥暴露
+</Steps>
+
+**前 24 小时**（修复）：
+- 轮换所有相关凭据（假设存在横向移动）
+- 如需要，通知团队/合规部门（GDPR、SOC2、HIPAA）
+- 记录事件时间线以便复盘
+
+### MCP 被入侵
+
+如果你怀疑某个 MCP 服务器已被入侵：
+
+<Steps>
+1. **立即禁用**
+   ```bash
+   jq 'del(.mcpServers.<suspect>)' ~/.claude.json > tmp && mv tmp ~/.claude.json
+   ```
+2. **验证配置完整性**
+   ```bash
+   sha256sum ~/.claude.json
+   diff ~/.claude.json ~/.claude.json.backup
+   cat .mcp.json 2>/dev/null
+   ```
+3. **审计最近的操作** — 查看 `~/.claude/logs/` 中的会话日志，检查是否有意外的文件修改
+4. **从已知良好的备份恢复**
+   ```bash
+   cp ~/.claude.json.backup ~/.claude.json
+   ```
+</Steps>
+
+### AI 紧急停止与遏制
+
+<CardGrid>
+  <Card title="级别 1：范围撤销" icon="setting">
+    通过钩子和 `permissions.deny` 禁用特定功能。
+  </Card>
+  <Card title="级别 2：速率控制" icon="warning">
+    使用自定义钩子和 `--allowedTools` 标志限制命令频率。
+  </Card>
+  <Card title="级别 3：全局硬停止" icon="error">
+    终止一切：`Ctrl+C` / `Esc`，`claude config set --disable`，卸载。
+  </Card>
+</CardGrid>
+
+**速率控制钩子示例**：
+
+```bash
+#!/bin/bash
+# .claude/hooks/velocity-governor.sh
+# 5 分钟内超过 20 条 Bash 命令则阻止
+
+COUNTER_FILE="/tmp/claude-cmd-counter-$$"
+WINDOW=300  # 5 分钟
+THRESHOLD=20
+
+NOW=$(date +%s)
+echo "$NOW" >> "$COUNTER_FILE"
+
+if [[ -f "$COUNTER_FILE" ]]; then
+  CUTOFF=$((NOW - WINDOW))
+  awk -v cutoff="$CUTOFF" '$1 >= cutoff' "$COUNTER_FILE" > "${COUNTER_FILE}.tmp"
+  mv "${COUNTER_FILE}.tmp" "$COUNTER_FILE"
+  COUNT=$(wc -l < "$COUNTER_FILE")
+
+  if (( COUNT > THRESHOLD )); then
+    echo '{"decision": "block", "reason": "速率限制已超出。可能是失控代理。"}'
+    exit 0
+  fi
+fi
+
+exit 0
+```
+
+---
+
+## 第四部分：融入日常工作流
+
+### PR 安全审查流程
+
+Claude Code 在安全方面投资回报最高的用法：在合并前系统性地审查每个 PR。
+
+#### 配置
+
+```bash
+# 在合并任何 PR 前从仓库根目录运行
+git diff main...HEAD > /tmp/pr-diff.txt
+```
+
+然后在 Claude Code 中：
+
+```
+审查此 PR diff 的安全影响。
+重点：注入、认证绕过、密钥暴露、不安全的反序列化。
+文件：/tmp/pr-diff.txt
+```
+
+#### 安全 PR 审查必查项
+
+| 变更类型 | 风险 | 检查要点 |
+|---------|------|---------|
+| 新 API 端点 | 高 | 认证检查、输入验证、速率限制 |
+| 数据库查询变更 | 高 | 参数化查询、索引暴露 |
+| 认证逻辑 | 严重 | 令牌验证、会话管理、权限提升 |
+| 文件上传 | 高 | MIME 类型、大小限制、路径遍历 |
+| 添加第三方库 | 中 | CVE 检查（`npm audit`、`cargo audit`） |
+| 添加环境变量 | 中 | 未硬编码、在 `.gitignore` 中、在 `.env.example` 中 |
+
+---
+
+## 远程控制安全
+
+<Aside>
+**功能背景**：远程控制（研究预览版，2026年2月）允许从手机、平板或浏览器控制本地 Claude Code 会话。仅限 Pro 和 Max 计划。
+</Aside>
+
+### 架构
+
+```
+本地终端 --HTTPS 出站--> Anthropic 中继 --> 移动端/浏览器
+（执行）                   （仅中继）        （控制界面）
+```
+
+**安全属性**：零入站端口、仅 HTTPS、多个短期凭据、执行完全在本地。
+
+### 威胁模型
+
+| 威胁 | 风险 | 缓解措施 |
+|------|------|---------|
+| **会话 URL 泄露** | URL 持有者获得完整终端访问 | 将 URL 视为密码 |
+| **通过远程命令实现 RCE** | 持有 URL 的攻击者可运行命令 | 逐命令批准提示 |
+| **违反企业策略** | 个人账户在公司机器上 | 启用前验证策略 |
+| **持久会话暴露** | 长时间运行的会话增加暴露窗口 | 用完即关；断开连接 ~10 分钟自动超时 |
+
+### 最佳实践
+
+```bash
+# 1. 不要自动启用 - 仅在需要时激活
+# 2. 在专用的加固工作站上使用
+# 3. 用完后关闭会话（本地终端 Ctrl+C）
+# 4. 永远不要在团队聊天、工单或日志中分享会话 URL
+# 5. 优先在个人开发机器上使用（非拥有高权限的公司机器）
+```
+
+---
+
+## 快速参考
+
+### 安全态势级别
+
+| 级别 | 措施 | 耗时 | 适用 |
+|------|------|------|------|
+| **基础** | 输出扫描器 + 危险操作阻止器 | 5 分钟 | 个人开发、实验 |
+| **标准** | + 注入钩子 + MCP 审查 | 30 分钟 | 团队、敏感代码 |
+| **加固** | + 完整性验证 + ZDR | 2 小时 | 企业、生产环境 |
+
+### 常用命令参考
+
+```bash
+# 扫描密钥
+gitleaks detect --source . --verbose
+
+# 检查 MCP 配置
+cat ~/.claude.json | jq '.mcpServers | keys'
+
+# 验证钩子安装
+ls -la ~/.claude/hooks/
+
+# 测试 Unicode 检测
+echo -e "test\u200Bhidden" | grep -P '[\x{200B}-\x{200D}]'
+```

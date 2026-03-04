@@ -1,0 +1,181 @@
+---
+title: "Configuration Decision Guide"
+description: "Understand Claude Code's seven configuration mechanisms and quickly determine which one to use for your needs"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Seven configuration mechanisms power Claude Code — knowing **which one to reach for** saves hours of trial and error. This guide gives you the mental shortcuts to make the right choice quickly.
+
+---
+
+## Semantic Roles
+
+<CardGrid>
+  <Card title="CLAUDE.md + rules/*.md" icon="document">
+    **What Claude always knows**
+
+    Permanent context, loaded every session.
+  </Card>
+  <Card title="Commands" icon="rocket">
+    **How Claude executes workflows**
+
+    Step-by-step SOPs invoked on demand.
+  </Card>
+  <Card title="Hooks" icon="setting">
+    **What Claude cannot bypass**
+
+    Automatic guardrails, zero token cost.
+  </Card>
+  <Card title="Agents" icon="star">
+    **What Claude delegates**
+
+    Isolated parallel workers with scoped context.
+  </Card>
+  <Card title="Skills" icon="puzzle">
+    **Shared domain knowledge**
+
+    Reusable modules inherited by agents.
+  </Card>
+  <Card title="MCP Servers" icon="external">
+    **External system access**
+
+    APIs, databases, and tools via protocol.
+  </Card>
+</CardGrid>
+
+---
+
+## Mechanism Comparison
+
+| Mechanism | When Loaded | Best For | Token Cost | Reliability |
+|-----------|-------------|----------|------------|-------------|
+| **CLAUDE.md** | Every session | Core conventions, identity | Always paid | 100% |
+| **rules/*.md** | Every session | Supplementary standing rules | Always paid | 100% |
+| **Commands** | On invocation | Repeatable multi-step workflows | Low (template) | 100% when invoked |
+| **Hooks** | On events | Guardrails, automation, enforcement | Zero | 100% (shell scripts) |
+| **Agents** | On spawn | Isolated / parallel analysis | High (full context) | 100% when spawned |
+| **Skills** | On invocation | Domain knowledge for agents | Medium | ~56% auto-invocation |
+| **MCP Servers** | Session start | External APIs and tools | Connection overhead | 100% when connected |
+
+---
+
+## Decision Tree: Which Mechanism?
+
+<Steps>
+
+1. **Is this needed every session, for every task?**
+
+   - **Yes** → Use **CLAUDE.md** (core) or **rules/*.md** (supplementary)
+   - **No** → Continue to the next step
+
+2. **Should it trigger automatically without user action?**
+
+   - **Yes** → Use a **Hook** (event-driven, shell script)
+   - **No** → Continue to the next step
+
+3. **Does it need external system access (API, DB, tool)?**
+
+   - **Yes** → Use an **MCP Server**
+   - **No** → Continue to the next step
+
+4. **Is it a repeatable workflow with defined steps?**
+
+   - **Yes** → Use a **Command** (`.claude/commands/`)
+   - **No** → Continue to the next step
+
+5. **Does it need isolated context or parallel work?**
+
+   - **Yes** → Use an **Agent** (`.claude/agents/`)
+   - **No** → Continue to the next step
+
+6. **Is it shared knowledge for multiple agents?**
+
+   - **Yes** → Use a **Skill** (`.claude/skills/`)
+   - **No** → Add it to **CLAUDE.md**
+
+</Steps>
+
+**Text representation of the decision tree:**
+
+```
+Needed every session?
+├─ Yes → CLAUDE.md or rules/*.md
+│
+└─ No → Should it trigger automatically?
+         ├─ Yes → HOOK (event-driven)
+         │
+         └─ No → Needs external system access?
+                  ├─ Yes → MCP SERVER
+                  │
+                  └─ No → Repeatable workflow?
+                           ├─ Yes → COMMAND
+                           │
+                           └─ No → Needs isolated context?
+                                    ├─ Yes → AGENT
+                                    │
+                                    └─ No → Shared across agents?
+                                             ├─ Yes → SKILL
+                                             │
+                                             └─ No → CLAUDE.md
+```
+
+---
+
+## The 56% Reliability Warning
+
+<Aside type="caution">
+Skills are invoked **on demand** — and agents do not always invoke them. One evaluation found agents triggered skills in only 56% of cases.
+</Aside>
+
+**Practical implications:**
+
+- **Never** put critical instructions only in skills — they may be silently skipped
+- **Safe pattern:** CLAUDE.md states **what** (always loaded), while the skill provides **how in detail** (on demand)
+- For agent workflows, prefer explicit skill invocation in the agent frontmatter's `skills:` field
+
+---
+
+## Common Mistakes
+
+| Mistake | Why It Fails | Fix |
+|---------|-------------|-----|
+| Critical rules only in skills | 44% chance of being skipped | Move to CLAUDE.md or rules/*.md |
+| Everything in CLAUDE.md | Context window bloat every session | Split: permanent items → CLAUDE.md, workflows → Commands |
+| Hooks for complex logic | Hooks are shell scripts, not Claude | Use Hooks for enforcement, Commands for multi-step workflows |
+| MCP for simple file ops | Unnecessary overhead | Use built-in file tools; reserve MCP for external systems |
+
+<Aside type="tip">
+**Rule of thumb**: Start with CLAUDE.md. Only introduce other mechanisms when you have a clear reason (automation, isolation, external access, etc.).
+</Aside>
+
+---
+
+## Quick Reference
+
+<Tabs>
+  <TabItem label="By Frequency">
+    | Frequency | Mechanism |
+    |-----------|-----------|
+    | Daily use | CLAUDE.md, Commands |
+    | Frequent use | Hooks, MCP Servers |
+    | On demand | Agents, Skills |
+  </TabItem>
+  <TabItem label="By Complexity">
+    | Complexity | Mechanism |
+    |------------|-----------|
+    | Simple (one-line text) | CLAUDE.md rules |
+    | Medium (template + steps) | Commands |
+    | Advanced (scripts + logic) | Hooks, Agents |
+    | Integration (external systems) | MCP Servers |
+  </TabItem>
+  <TabItem label="By Token Cost">
+    | Cost | Mechanism |
+    |------|-----------|
+    | Zero | Hooks (shell scripts, no tokens consumed) |
+    | Low | Commands (template text only) |
+    | Always paid | CLAUDE.md, rules/*.md |
+    | Medium | Skills (loaded on demand) |
+    | High | Agents (full context copy) |
+  </TabItem>
+</Tabs>

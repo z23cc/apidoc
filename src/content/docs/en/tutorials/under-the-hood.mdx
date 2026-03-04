@@ -1,0 +1,257 @@
+---
+title: "Under the Hood"
+description: "Understand Claude Code's core architecture: the master loop, tool system, task management, and internal workings"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+This tutorial reveals the internal workings of Claude Code. Understanding these mechanisms helps you use it more effectively and diagnose issues when they arise.
+
+---
+
+## The Master Loop
+
+At its core, Claude Code is a simple `while` loop:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    MASTER LOOP (simplified)                  │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   Your Prompt                                               │
+│       │                                                     │
+│       ▼                                                     │
+│   ┌────────────────────────────────────────────────────┐    │
+│   │   Claude Reasons (no classifier, no router)        │    │
+│   └───────────────────────┬────────────────────────────┘    │
+│                           │                                 │
+│              Tool needed? │                                 │
+│                     ┌─────┴─────┐                           │
+│                    YES         NO                           │
+│                     │           │                           │
+│                     ▼           ▼                           │
+│              Execute Tool    Text Response (done)           │
+│                     │                                       │
+│                     └──────── Feed result back to Claude    │
+│                                        │                    │
+│                               (loop continues)              │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+<Aside type="note" title="No Complex Orchestration">
+There is **no**: intent classifier or task router, RAG/embedding pipeline, DAG orchestrator, or planner/executor split. The model itself decides when to call tools, which tools to call, and when it's done.
+</Aside>
+
+---
+
+## The Tool Arsenal
+
+Claude Code has 8 core tools:
+
+| Tool | Purpose |
+|------|---------|
+| `Bash` | Execute shell commands (universal adapter) |
+| `Read` | Read file contents (max 2000 lines) |
+| `Edit` | Modify existing files (diff-based) |
+| `Write` | Create/overwrite files |
+| `Grep` | Search file contents (ripgrep-based) |
+| `Glob` | Find files by pattern |
+| `Task` | Spawn sub-agents (isolated context) |
+| `TodoWrite` | Track progress (legacy, see below) |
+
+<Aside type="tip">
+`Bash` is the most versatile tool — anything you can do in a terminal, Claude can do through it. This includes installing packages, running tests, git operations, and more.
+</Aside>
+
+---
+
+## Task Management System
+
+Claude Code provides two task management approaches:
+
+<Tabs>
+  <TabItem label="Tasks API (v2.1.16+)">
+    **Recommended** — persistent, cross-session, supports dependencies
+
+    | Feature | Description |
+    |---------|-------------|
+    | **Persistence** | Disk storage (`~/.claude/tasks/`) |
+    | **Multi-session** | Survives across sessions |
+    | **Dependencies** | Task A blocks Task B |
+    | **Coordination** | Multi-agent broadcast |
+    | **Status** | `pending` / `in_progress` / `completed` / `failed` |
+
+    **Available tools**:
+    - `TaskCreate` — Initialize new tasks with hierarchy and dependencies
+    - `TaskUpdate` — Modify task status, metadata, and dependencies
+    - `TaskGet` — Retrieve individual task details
+    - `TaskList` — List all tasks in the current task list
+  </TabItem>
+  <TabItem label="TodoWrite (Legacy)">
+    **Simple** — session-only, no persistence
+
+    | Feature | Description |
+    |---------|-------------|
+    | **Persistence** | Session memory only |
+    | **Multi-session** | Lost on session end |
+    | **Dependencies** | Manual ordering |
+    | **Status** | `pending` / `in_progress` / `completed` |
+
+    **When to use**:
+    - Single-session, straightforward implementations
+    - Quick fixes or exploratory coding
+    - Claude Code &lt; v2.1.16
+  </TabItem>
+</Tabs>
+
+### Configuring Task Persistence
+
+```bash
+# Enable multi-session task persistence
+export CLAUDE_CODE_TASK_LIST_ID="project-name"
+claude
+
+# Example: Project-specific task list
+export CLAUDE_CODE_TASK_LIST_ID="api-v2-auth-refactor"
+claude
+```
+
+<Aside type="caution">
+Use repository-specific task list IDs to avoid cross-project contamination. Tasks with the same ID are shared across all sessions using that ID.
+</Aside>
+
+### Task Schema Example
+
+```json
+{
+  "id": "task-auth-login",
+  "title": "Implement login endpoint",
+  "description": "POST /auth/login with JWT token generation",
+  "status": "in_progress",
+  "dependencies": [],
+  "metadata": {
+    "priority": "high",
+    "estimated_duration": "2h",
+    "related_files": ["src/auth/login.ts", "src/middleware/auth.ts"]
+  }
+}
+```
+
+### When to Use the Tasks API
+
+<CardGrid>
+  <Card title="Multi-Session Projects">
+    Task state is automatically preserved across sessions
+  </Card>
+  <Card title="Complex Task Hierarchies">
+    Task A must complete before Task B can start
+  </Card>
+  <Card title="Multi-Agent Coordination">
+    Multiple Claude instances sharing task state
+  </Card>
+  <Card title="Post-Compaction Recovery">
+    Task state is unaffected by `/compact` or `/clear`
+  </Card>
+</CardGrid>
+
+---
+
+## Tasks API Limitations
+
+<Aside type="caution" title="Critical Limitation: Field Visibility">
+`TaskList` only returns `id`, `subject`, `status`, `owner`, and `blockedBy` fields. The `description`, `activeForm`, and `metadata` are only visible via `TaskGet`. This means reviewing 10 task descriptions requires 1 `TaskList` + 10 `TaskGet` calls = 11 API calls.
+</Aside>
+
+### Workaround Patterns
+
+<Tabs>
+  <TabItem label="Hybrid Approach (Recommended)">
+    - Use Tasks API for **status tracking** and **dependency coordination**
+    - Maintain markdown files in the repo for **detailed implementation plans**
+    - Example: `docs/plans/auth-refactor.md` + Tasks for status
+  </TabItem>
+  <TabItem label="Subject-as-Summary">
+    - Store critical info in the `subject` field (always visible in TaskList)
+    - Keep `description` for deep context (fetch on-demand with TaskGet)
+    - Example subjects: `"[P0] Fix login bug (src/auth.ts:45)"` vs. `"Fix bug"`
+  </TabItem>
+  <TabItem label="Selective Fetching">
+    - Use TaskList to identify tasks needing attention (status, blockedBy)
+    - Only call TaskGet for tasks you're actively working on
+  </TabItem>
+</Tabs>
+
+---
+
+## Task Hierarchy Design
+
+```
+Project (parent)
+└── Feature A (child)
+    ├── Component A1 (leaf task)
+    │   ├── Implementation
+    │   └── Tests (depends on Implementation)
+    └── Component A2
+```
+
+### Best Practices
+
+<Steps>
+1. **Always define dependencies** when creating tasks
+2. Use **task IDs** (not titles) for dependency references
+3. **Verify dependencies** with `TaskGet` before execution
+4. Mark `in_progress` when starting work (prevents parallel execution)
+5. Update status frequently for visibility
+6. Only mark `completed` when fully accomplished (tests passing, validated)
+7. Use `failed` status with error metadata for debugging
+</Steps>
+
+### Metadata Conventions
+
+```json
+{
+  "priority": "high|medium|low",
+  "estimated_duration": "2h",
+  "related_files": ["path/to/file.ts"],
+  "related_issue": "https://github.com/org/repo/issues/123",
+  "type": "feature|bugfix|refactor|test"
+}
+```
+
+---
+
+## Task Lists as a Diagnostic Tool
+
+When Claude's task list doesn't match your intent, the problem isn't Claude — it's your instructions.
+
+Task lists act as a **mirror** for instruction clarity:
+
+```
+Your instruction: "Refactor the auth system"
+
+Claude's task list:
+- [ ] Read all auth-related files
+- [ ] Identify code duplication
+- [ ] Extract shared utilities
+- [ ] Update imports
+- [ ] Run tests
+
+Your reaction: "That's not what I meant — I wanted to switch from session to JWT"
+
+Diagnosis: Your instruction was ambiguous. "Refactor" ≠ "replace".
+```
+
+### Divergence Patterns and What They Reveal
+
+| Divergence Type | What It Means | Fix |
+|-----------------|---------------|-----|
+| Tasks too broad | Instructions lack specificity | Add WHAT, WHERE, HOW, VERIFY |
+| Tasks too narrow | Instructions too detailed, missing big picture | State the goal, not just the steps |
+| Wrong priorities | Context missing about what matters | Add constraints and priorities |
+| Missing tasks | Implicit knowledge not shared | Make assumptions explicit in prompt |
+| Extra tasks | Claude inferred requirements you didn't intend | Add explicit scope boundaries |
+
+<Aside type="tip">
+Run `TaskList` after initial planning as a **sanity check** before execution. If more than 30% of tasks surprise you, your prompt needs work. Iterate on the prompt, not the tasks.
+</Aside>

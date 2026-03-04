@@ -1,0 +1,585 @@
+---
+title: "Production Safety Rules"
+description: "Non-negotiable safety rules for teams deploying Claude Code in production"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+This guide defines **6 non-negotiable rules** for teams deploying Claude Code in production environments. These rules prevent the most common and costly failures: broken deployments, data loss, half-implemented features, and inconsistent codebases.
+
+<Aside>
+**For solo learners**: These rules are designed for production teams. If you're just getting started, focus on learning first -- you can adopt these rules as your project grows.
+</Aside>
+
+---
+
+## When to Use These Rules
+
+| Project Type | Use These Rules? | Why |
+|--------------|------------------|-----|
+| Learning / Tutorials | No | Too restrictive for exploration |
+| Solo prototypes | No | Overhead not worth it |
+| Small teams (2-3), staging env | Partial | Rules 1, 3, 6 only |
+| Production apps, multi-dev teams | Yes | All 6 rules |
+| Regulated industries (HIPAA, SOC2) | Yes + compliance rules | Critical safety |
+
+---
+
+## The 6 Rules at a Glance
+
+<CardGrid>
+  <Card title="1. Port Stability" icon="setting">
+    Never change backend/frontend ports without explicit team permission.
+  </Card>
+  <Card title="2. Database Safety" icon="warning">
+    Always backup before destructive operations (DELETE, DROP, TRUNCATE).
+  </Card>
+  <Card title="3. Feature Completeness" icon="approve-check">
+    Never ship half-implemented features. If you start, you finish to working state.
+  </Card>
+  <Card title="4. Infrastructure Lock" icon="close">
+    Docker/env/CI changes require explicit team permission.
+  </Card>
+  <Card title="5. Dependency Safety" icon="random">
+    No new dependencies without approval.
+  </Card>
+  <Card title="6. Pattern Following" icon="open-book">
+    Conform to existing codebase conventions.
+  </Card>
+</CardGrid>
+
+---
+
+## Rule 1: Port Stability
+
+### The Problem
+
+Changing ports breaks local development environments, Docker Compose configurations, deployed service configs, and team member setups.
+
+**Real incident**: Backend port changed from 3000 to 8080 during refactor. All developers lost a day re-configuring local envs. Staging deployment failed silently because nginx proxy still pointed to 3000.
+
+### Implementation
+
+<Tabs>
+  <TabItem label="Permission Deny">
+    ```json
+    {
+      "permissions": {
+        "deny": [
+          "Edit(docker-compose.yml:*ports*)",
+          "Edit(package.json:*PORT*)",
+          "Edit(.env.example:*PORT*)",
+          "Edit(vite.config.ts:*port*)"
+        ]
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Pre-tool Hook">
+    ```bash
+    # .claude/hooks/PreToolUse.sh
+    if [[ "$TOOL" == "Edit" ]]; then
+        FILE=$(echo "$INPUT" | jq -r '.tool.input.file_path')
+        CONTENT=$(echo "$INPUT" | jq -r '.tool.input.new_string')
+
+        if [[ "$FILE" =~ (docker-compose|vite.config|package.json) ]] && \
+           [[ "$CONTENT" =~ (port|PORT):[[:space:]]*[0-9] ]]; then
+            echo "BLOCKED: Port modification detected in $FILE"
+            echo "Ports must remain stable across team."
+            exit 2
+        fi
+    fi
+    ```
+  </TabItem>
+  <TabItem label="CLAUDE.md">
+    ```markdown
+    ## Port Configuration
+
+    **CRITICAL**: Ports are locked for team coordination.
+
+    Current ports:
+    - Frontend (Vite): 5173
+    - Backend (Express): 3000
+    - Database: 5432
+
+    To change ports:
+    1. Create RFC document in /docs/rfcs/
+    2. Get team approval (3+ reviewers)
+    3. Update all environments simultaneously
+    4. Notify team 48h in advance
+    ```
+  </TabItem>
+</Tabs>
+
+| Scenario | Behavior |
+|----------|----------|
+| Adding NEW service | OK (doesn't break existing) |
+| Changing test env port | OK (isolated from dev/prod) |
+| Port conflict on machine | Ask user to resolve locally (.env.local) |
+
+---
+
+## Rule 2: Database Safety
+
+### The Problem
+
+Accidental deletions in production equals data loss.
+
+**Real incidents**:
+- `DELETE FROM users WHERE id = 123` -- Forgot `WHERE` clause -- All users deleted
+- `DROP TABLE sessions` during cleanup -- Production table dropped
+- Migration rollback -- Data loss because no backup
+
+### Implementation
+
+<Tabs>
+  <TabItem label="Pre-tool Hook">
+    ```bash
+    # .claude/hooks/PreToolUse.sh
+    #!/bin/bash
+    INPUT=$(cat)
+    TOOL=$(echo "$INPUT" | jq -r '.tool.name')
+
+    if [[ "$TOOL" == "Bash" ]]; then
+        COMMAND=$(echo "$INPUT" | jq -r '.tool.input.command')
+
+        if [[ "$COMMAND" =~ (DROP TABLE|DELETE FROM|TRUNCATE|ALTER.*DROP) ]]; then
+            echo "BLOCKED: Destructive database operation detected"
+            echo ""
+            echo "Required steps:"
+            echo "1. Create backup: pg_dump -U user dbname > backup_$(date +%Y%m%d).sql"
+            echo "2. Verify backup size is reasonable"
+            echo "3. Re-run after backup confirmation"
+            exit 2
+        fi
+    fi
+
+    exit 0
+    ```
+  </TabItem>
+  <TabItem label="Migration Wrapper">
+    ```bash
+    # scripts/safe-migrate.sh
+    #!/bin/bash
+    set -e
+
+    echo "Pre-migration checks..."
+
+    # 1. Check environment
+    if [[ "$NODE_ENV" == "production" ]]; then
+        echo "BLOCKED: Use migration service for production"
+        exit 1
+    fi
+
+    # 2. Create backup
+    BACKUP_FILE="backups/pre-migration-$(date +%Y%m%d_%H%M%S).sql"
+    mkdir -p backups
+    pg_dump $DATABASE_URL > "$BACKUP_FILE"
+    echo "Backup created: $BACKUP_FILE"
+
+    # 3. Run migration
+    npm run prisma:migrate:dev
+
+    # 4. Verify
+    npm run prisma:validate
+    echo "Migration complete. Backup: $BACKUP_FILE"
+    ```
+  </TabItem>
+</Tabs>
+
+### MCP Database Safety
+
+If using MCP database servers:
+
+```json
+{
+  "mcpServers": {
+    "database": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-postgres"],
+      "env": {
+        "POSTGRES_URL": "postgres://readonly:***@dev-db.example.com:5432/appdb"
+      }
+    }
+  }
+}
+```
+
+<Aside type="danger">
+Use read-only database users for MCP. All query results are sent to Anthropic servers.
+</Aside>
+
+---
+
+## Rule 3: Feature Completeness
+
+### The Problem
+
+Claude Code sometimes "half-asses" features when context runs low:
+- Deletes existing functionality instead of fixing bugs
+- Adds `TODO` comments for core features
+- Leaves error states unhandled
+- Creates mock implementations
+
+**Real incidents**:
+- Payment validation "fixed" by removing validation entirely
+- Error handling "added" with `throw new Error("Not implemented")`
+- Feature "completed" with `// TODO: Add actual logic here`
+
+### Implementation
+
+Add to your CLAUDE.md:
+
+```markdown
+## Feature Implementation Standards
+
+### NON-NEGOTIABLE
+
+1. **No TODOs for core functionality**
+   - TODOs allowed ONLY for future enhancements
+   - Core features must be complete and working
+
+2. **No mock implementations**
+   - No `throw new Error("Not implemented")`
+   - No fake data generators in production code paths
+
+3. **Complete error handling**
+   - Every async call has try/catch
+   - Every user input is validated
+   - Every API call has timeout and retry logic
+
+4. **Downgrade = Delete the feature entirely**
+   - If you can't fix properly, remove the feature
+   - Document why in commit message
+```
+
+**Pre-commit git hook**:
+
+```bash
+# .git/hooks/pre-commit
+#!/bin/bash
+STAGED=$(git diff --cached --name-only --diff-filter=ACM)
+
+for FILE in $STAGED; do
+    if [[ "$FILE" =~ \.(ts|tsx|js|jsx|py)$ ]]; then
+        if ! [[ "$FILE" =~ test|spec ]]; then
+            if git diff --cached "$FILE" | grep -E "^\+.*TODO.*implement|^\+.*Not implemented"; then
+                echo "COMMIT BLOCKED: TODO/Not implemented in $FILE"
+                exit 1
+            fi
+        fi
+    fi
+done
+exit 0
+```
+
+---
+
+## Rule 4: Infrastructure Lock
+
+### The Problem
+
+Claude might modify infrastructure configs without understanding production implications -- changing Docker Compose volumes (data loss), modifying `.env.example` (breaks onboarding), or updating Terraform (unintended resource changes).
+
+### Implementation
+
+```json
+{
+  "permissions": {
+    "deny": [
+      "Edit(docker-compose.yml)",
+      "Edit(Dockerfile)",
+      "Edit(.env.example)",
+      "Edit(terraform/**)",
+      "Edit(kubernetes/**)",
+      "Edit(.github/workflows/**)",
+      "Edit(prisma/schema.prisma)"
+    ]
+  }
+}
+```
+
+**Files to protect**:
+- `docker-compose.yml`, `Dockerfile`
+- `.env.example` (templates, NOT personal .env.local)
+- `kubernetes/`, `k8s/`, `terraform/`, `helm/`
+- CI/CD configs (`.github/workflows/`, `.gitlab-ci.yml`)
+- Database schemas (requires migration review)
+
+<Aside type="tip">
+Personal `.env.local` files are OK to modify -- they are gitignored and local to each developer.
+</Aside>
+
+---
+
+## Rule 5: Dependency Safety
+
+### The Problem
+
+Adding dependencies without team approval increases bundle size, introduces security vulnerabilities, creates license compliance issues, and adds maintenance burden.
+
+**Real incidents**:
+- Added `moment.js` (200KB) when `date-fns` (tiny) already in project
+- Installed `lodash` when project uses `ramda`
+- Added GPL library -- license violation for proprietary codebase
+
+### Implementation
+
+<Tabs>
+  <TabItem label="Permission Deny">
+    ```json
+    {
+      "permissions": {
+        "deny": [
+          "Bash(npm install *)",
+          "Bash(npm i *)",
+          "Bash(pnpm add *)",
+          "Bash(yarn add *)",
+          "Bash(pip install *)",
+          "Bash(poetry add *)"
+        ],
+        "allow": [
+          "Bash(npm install)",
+          "Bash(pnpm install)",
+          "Bash(pip install -r requirements.txt)"
+        ]
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="CLAUDE.md Protocol">
+    ```markdown
+    ## Dependency Management
+
+    ### Immutable Stack Rule
+
+    **You are FORBIDDEN from adding new dependencies**.
+
+    If new dependency is needed:
+    1. Check if existing dependency solves it
+    2. If genuinely needed, ASK before adding
+    3. Wait for explicit approval
+    4. User will run install manually
+
+    Allowed without asking:
+    - `npm install` (installs existing package.json deps)
+    - Dev dependencies for testing (-D flag after approval)
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## Rule 6: Pattern Following
+
+### The Problem
+
+Claude introduces new patterns inconsistent with codebase -- using `class` components when project is functional React, importing `lodash` when project uses `ramda`, writing REST endpoints when project is GraphQL.
+
+### Implementation
+
+Add to your CLAUDE.md:
+
+```markdown
+## Code Conventions
+
+### Tech Stack (DO NOT DEVIATE)
+
+**Frontend**:
+- React 18 with function components + hooks (NO class components)
+- State: Zustand (NOT Redux, Context)
+- HTTP: axios (NOT fetch)
+- Styling: Tailwind CSS (NOT styled-components)
+
+**Backend**:
+- Node.js + Express
+- Database: Prisma ORM (NOT raw SQL, TypeORM)
+- Auth: JWT via jose library
+- Validation: Zod schemas
+
+**Testing**:
+- Unit: Vitest (NOT Jest)
+- E2E: Playwright (NOT Cypress)
+```
+
+**Automated validation hook**:
+
+```bash
+# .claude/hooks/PostToolUse.sh
+#!/bin/bash
+if [[ "$TOOL" == "Write" ]] || [[ "$TOOL" == "Edit" ]]; then
+    FILE=$(echo "$INPUT" | jq -r '.tool.input.file_path')
+
+    if [[ "$FILE" =~ \.(tsx?)$ ]]; then
+        CONTENT=$(cat "$FILE")
+
+        if echo "$CONTENT" | grep -q "class.*extends.*Component"; then
+            echo "WARNING: Class component detected in $FILE"
+            echo "Project uses function components."
+        fi
+
+        if echo "$CONTENT" | grep -q "import.*fetch\|window.fetch"; then
+            echo "WARNING: fetch() detected in $FILE"
+            echo "Project uses axios."
+        fi
+    fi
+fi
+```
+
+---
+
+## Rule 7: The Verification Paradox
+
+### The Problem
+
+When AI succeeds 99% of the time, traditional human verification becomes fragile.
+
+**The paradox**: As AI reliability increases, human review quality decreases.
+
+| Anti-Pattern | Better Approach |
+|--------------|-----------------|
+| Manual review for every AI output | Automated test suites + selective review |
+| Trust because "it worked last time" | Verification contracts (tests, types, lints) |
+| Human as sole error detector | Guardrails that fail fast (CI/CD gates) |
+| "Spot-check" strategy for high-frequency AI ops | Comprehensive automated validation |
+| Reviewer fatigue = lower standards over time | Consistent automated quality bars |
+
+### Implementation
+
+```yaml
+# .github/workflows/ai-safety.yml
+name: AI Output Validation
+on: [pull_request]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Type safety
+        run: npm run typecheck
+
+      - name: Lint rules
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: E2E tests
+        run: npm run test:e2e
+
+      - name: Security audit
+        run: npm audit
+
+      - name: Bundle analysis
+        run: npm run analyze
+      # Human review ONLY after all automation passes
+```
+
+<Aside type="tip">
+**Solution**: Automate the boring verification (syntax, types, tests), reserve human attention for creative/strategic review -- architecture decisions, UX/design choices, business logic validation.
+</Aside>
+
+| Scenario | Behavior |
+|----------|----------|
+| AI writes perfect code 99.9% | STILL run automation (paradox applies even at 99.9%) |
+| Time pressure, "just ship it" | Automation is non-negotiable |
+| Trivial changes (typo fix) | Run automation (typos can break prod) |
+| Emergency hotfix | Automation REQUIRED (stress = higher error rate) |
+
+---
+
+## Integration with Existing Workflows
+
+### With Plan Mode
+
+```bash
+# Before multi-file changes
+/plan
+
+# Claude enters read-only mode, explores codebase
+# Identifies patterns, conventions, existing implementations
+# Proposes plan following project conventions
+# You review before execution
+```
+
+### With CI/CD
+
+```yaml
+# .github/workflows/pr-validation.yml
+name: PR Validation
+on: [pull_request]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Check for incomplete features
+        run: |
+          if git diff origin/main...HEAD | grep -E "TODO.*implement|Not implemented"; then
+            echo "PR contains incomplete features"
+            exit 1
+          fi
+
+      - name: Check for unauthorized deps
+        run: |
+          git diff origin/main...HEAD -- package.json | grep -E '^\+.*"[^"]+": "[^"]+"' || exit 0
+          echo "New dependencies detected. Review required."
+```
+
+---
+
+## Troubleshooting
+
+### "These rules are too restrictive"
+
+| Team Size | Recommended Rules |
+|-----------|-------------------|
+| 1-2 devs | Rules 1, 3, 6 only |
+| 3-10 devs | Rules 1, 3, 5, 6 |
+| 10+ devs or production | All 6 rules |
+
+### "Claude keeps getting blocked"
+
+The rules are working! Options:
+
+1. **Grant temporary permission** in CLAUDE.md with expiry date
+2. **Create exception** in permissions (allow specific, deny general)
+3. **Review if rule is appropriate** -- Solo dev blocking themselves? Remove rule
+
+### "How do I enforce rules across team?"
+
+```bash
+# Shared team rules (committed to repo)
+/project/.claude/settings.json
+/project/CLAUDE.md
+
+# Personal overrides (gitignored)
+/project/.claude/settings.local.json
+```
+
+---
+
+## Quick Reference
+
+### Rule Severity
+
+| Rule | Severity | Breaking this causes |
+|------|----------|----------------------|
+| 1. Port Stability | Critical | Team downtime, deployment failures |
+| 2. Database Safety | Critical | Data loss, customer impact |
+| 3. Feature Completeness | High | Production bugs, tech debt |
+| 4. Infrastructure Lock | High | Downtime, security issues |
+| 5. Dependency Safety | Medium | Bundle bloat, license issues |
+| 6. Pattern Following | Low | Code inconsistency, maintenance burden |
+
+### Enforcement Methods
+
+| Method | Strictness | Setup Time | Best For |
+|--------|------------|------------|----------|
+| **Permission deny** | 100% (blocks) | 2 min | Critical rules (1, 2, 4) |
+| **Pre-tool hooks** | 100% (blocks) | 10 min | Custom logic, team-specific |
+| **CLAUDE.md rules** | ~70% (respected) | 5 min | Conventions, guidelines |
+| **Post-tool warnings** | ~30% (warns only) | 5 min | Best practices, suggestions |
+| **Git hooks** | 100% (blocks commits) | 15 min | Final safety net before push |

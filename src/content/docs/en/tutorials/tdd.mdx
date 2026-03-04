@@ -1,0 +1,258 @@
+---
+title: "TDD with Claude Code"
+description: "Test-Driven Development with red-green-refactor cycles using Claude Code"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Test-Driven Development (TDD) requires writing tests before implementation. But Claude's natural tendency is to write implementation first, then tests. To use TDD effectively, you must **explicitly instruct** Claude to write failing tests first.
+
+---
+
+## Core Principle
+
+```
+Red → Green → Refactor
+
+Key: You MUST prompt Claude explicitly:
+"Write a FAILING test for [feature]. Do NOT write implementation yet."
+```
+
+<Aside type="caution">
+Without explicit instruction, Claude will: 1) Write implementation code, 2) Then write tests that validate that implementation. This defeats TDD's core purpose — tests should drive design, not validate existing code.
+</Aside>
+
+---
+
+## Configure CLAUDE.md
+
+Add TDD rules to your project's CLAUDE.md so Claude defaults to test-first behavior:
+
+```markdown
+## Testing Conventions
+
+### TDD Workflow
+- Always write failing tests BEFORE implementation
+- Use AAA pattern: Arrange-Act-Assert
+- One assertion per test when possible
+- Test names describe behavior: "should_return_empty_when_no_items"
+
+### Test-First Rules
+- When I ask for a feature, write tests first
+- Tests should FAIL initially (no implementation exists)
+- Only after tests are written, implement minimal code to pass
+```
+
+---
+
+## The Red-Green-Refactor Cycle
+
+### Phase 1: Red (Write Failing Tests)
+
+<Steps>
+1. Describe the feature you want to test to Claude
+2. Emphasize **do NOT write implementation code**
+3. Claude creates test files referencing functions that don't exist yet
+4. Run tests to confirm they fail
+</Steps>
+
+**Prompt template**:
+
+```
+Write a failing test for:
+A function that calculates cart total price, applying a 10% discount
+if total exceeds $100.
+Do NOT implement the function yet.
+```
+
+**Verification**:
+
+```bash
+npm test  # Should fail: "calculateCartTotal is not defined"
+```
+
+### Phase 2: Green (Minimal Implementation)
+
+**Prompt template**:
+
+```
+Now implement the minimum code to make these tests pass.
+Only write enough code to pass the current tests, nothing more.
+```
+
+Claude should:
+- Create the implementation file
+- Write minimal code to satisfy tests
+- Avoid over-engineering
+
+**Verification**:
+
+```bash
+npm test  # Should all pass
+```
+
+### Phase 3: Refactor (Clean Up)
+
+**Prompt template**:
+
+```
+Refactor the implementation to improve code quality.
+Tests must stay green after refactoring.
+Focus on: readability / performance / removing duplication
+```
+
+Claude should:
+- Improve code without changing behavior
+- Run tests to verify they still pass
+- Document any significant changes
+
+---
+
+## Full Example: URL Shortener Service
+
+### Step 1: Red — Write Failing Tests
+
+```
+Let's use TDD to implement a URL shortener service.
+First, write failing tests for:
+1. Shortening a URL returns a short code
+2. Retrieving a short code returns original URL
+3. Invalid URLs are rejected
+4. Expired links return error
+
+Do NOT implement anything yet.
+```
+
+### Step 2: Green — Minimal Implementation
+
+```
+Tests are written and failing. Now implement the minimum
+code to make them pass. Use an in-memory store for now.
+```
+
+### Step 3: Refactor — Clean Up
+
+```
+Tests pass. Now refactor:
+- Extract URL validation to separate function
+- Add proper error types
+- Improve variable names
+
+Run tests after each change to ensure they stay green.
+```
+
+---
+
+## Integration with Claude Code Features
+
+### With Plan Mode
+
+Use planning for test strategy:
+
+```
+[Press Shift+Tab to enter Plan Mode]
+
+I need to implement a shopping cart with TDD.
+Plan the test cases before we start writing any code.
+```
+
+Claude explores the codebase in read-only mode, then proposes a test plan before any implementation.
+
+### With Hooks for Auto-Running Tests
+
+Configure a PostToolUse hook in `.claude/settings.json` to auto-run tests after edits:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "command": "npm test --watchAll=false 2>&1 | head -20"
+      }
+    ]
+  }
+}
+```
+
+### With Sub-Agents
+
+Delegate test writing to a scope-focused agent:
+
+```
+Use the test-writer agent to create comprehensive tests for
+the UserService class, covering all edge cases.
+Then I'll implement to pass those tests.
+```
+
+---
+
+## Anti-Patterns: Pitfalls to Avoid
+
+| Anti-Pattern | Why It's Wrong | Correct Approach |
+|--------------|----------------|------------------|
+| "Write tests for this feature" | Claude implements first | "Write FAILING tests that don't exist yet" |
+| "Add tests and implementation" | Loses test-first benefit | Separate into two prompts |
+| "Make sure tests pass" | Encourages implementation-first | "Write tests, then implement minimally" |
+| Skipping refactor phase | Accumulates technical debt | Always refactor after green |
+| Multiple features at once | Loses focus | One feature per TDD cycle |
+
+### Common Mistakes
+
+<Tabs>
+  <TabItem label="Wrong Way">
+```
+# Testing existing code
+"Write tests for the existing calculateTotal function"
+
+# Combining red and green phases
+"Implement calculateTotal with tests"
+```
+  </TabItem>
+  <TabItem label="Right Way">
+```
+# Assume function doesn't exist
+"Write tests for calculateTotal behavior, assuming function
+doesn't exist. Then we'll verify the existing implementation passes."
+
+# Separate steps
+"Write failing tests for calculateTotal. Stop there."
+[After tests written]
+"Now implement to pass those tests."
+```
+  </TabItem>
+</Tabs>
+
+---
+
+## Advanced Patterns
+
+### Property-Based Testing
+
+```
+Write property-based tests for the sort function.
+Properties to test:
+- Output length equals input length
+- All input elements exist in output
+- Output is ordered
+Use fast-check or similar library.
+```
+
+### Mutation Testing
+
+```
+After tests pass, run mutation testing to find weak spots.
+Identify tests that don't catch mutations.
+```
+
+### TDD with Legacy Code
+
+```
+I need to refactor legacyFunction.
+First, write characterization tests that capture current behavior.
+Then we'll refactor with confidence.
+```
+
+<Aside type="tip">
+Characterization tests record what the system currently does, regardless of whether that behavior is correct. They provide a safety net for refactoring.
+</Aside>

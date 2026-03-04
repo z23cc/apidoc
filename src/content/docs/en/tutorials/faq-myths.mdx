@@ -1,0 +1,191 @@
+---
+title: "FAQ & Myths"
+description: "Frequently asked questions about Claude Code and debunking common misconceptions"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## Frequently Asked Questions
+
+### Claude Code vs ClawdBot: What's the Difference?
+
+They serve completely different use cases. Not competitors -- complementary tools for different audiences.
+
+| Aspect | Claude Code | ClawdBot |
+|--------|-------------|----------|
+| **Interface** | Terminal/CLI + IDE integration | Messaging apps (WhatsApp, Telegram, Discord) |
+| **Primary audience** | Software developers, DevOps, tech leads | Everyone (personal assistants, smart home, knowledge workers) |
+| **Core use case** | Software development (code gen, refactoring, debugging, architecture) | Personal automation, task management, smart home control |
+| **Access model** | Local terminal session | Remote access via messaging apps from any device |
+| **Installation** | `npm install -g claude-code` | Self-hosted (Docker/VPS ~$5/month + LLM API costs) |
+| **Pricing** | Anthropic API usage (pay-as-you-go, ~$3-15/project typical) | Open-source (free) + infrastructure costs |
+
+<Tabs>
+  <TabItem label="Choose Claude Code">
+    - You're a developer working in terminal/IDE
+    - You need pair programming, code reviews, refactoring help
+    - Your workflow is codebase analysis and software architecture
+    - You want deep IDE integration and git workflow automation
+  </TabItem>
+  <TabItem label="Choose ClawdBot">
+    - You want a 24/7 personal assistant accessible from your phone
+    - You need smart home automation (Home Assistant, IoT devices)
+    - Your use cases are: task management, reminders, email/calendar, monitoring
+    - You want messaging app interface (WhatsApp, Telegram, etc.)
+  </TabItem>
+  <TabItem label="Use Both">
+    They complement each other well:
+    - **ClawdBot**: Handles daily personal automation, monitoring, reminders
+    - **Claude Code**: Handles software development work when at your computer
+
+    Example workflow:
+    ```
+    ClawdBot (on phone): "Remind me to review the PR when I'm at my desk"
+      -> Get notification
+    Claude Code (at desk): "Review the authentication PR, check for security issues"
+      -> Deep code analysis with full codebase context
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+### Can Product Managers Use Claude Code?
+
+**Short answer**: Yes, but consider your primary workflow first.
+
+<CardGrid>
+  <Card title="Code-Adjacent PMs" icon="approve-check-circle">
+    Reviewing technical specs, PRDs, architecture feasibility -- Claude Code CLI is appropriate for technical validation workflows. Example: meeting notes -> PRD generation -> Claude Code refinement.
+  </Card>
+  <Card title="Non-Coding PMs" icon="information">
+    Strategy, research, stakeholder management -- Claude Code CLI overhead not justified. Better fit: Claude Desktop. Use cases: research synthesis, stakeholder communication, roadmap planning.
+  </Card>
+</CardGrid>
+
+<Aside>
+PM workflows with Claude Code are an **emerging area** with limited community validation. If you're a PM using Claude Code successfully, contribute your workflow to help the community.
+</Aside>
+
+---
+
+### Can I Continue a Session from a Different Project Folder?
+
+**Short answer**: Not with native `--resume`, but manual filesystem operations work reliably.
+
+**The limitation**: Claude Code's `--resume` is scoped to the current working directory by design. Sessions are stored at `~/.claude/projects/<encoded-path>/` where the path is derived from your project's absolute location.
+
+**Workaround -- Manual migration** (recommended):
+
+```bash
+# When moving a project folder
+cd ~/.claude/projects/
+mv -- -old-location-myapp- -new-location-myapp-
+
+# When forking sessions to a new project
+cp -n ./-source-project-/*.jsonl ./-target-project-/
+cp -r ./-source-project-/subagents ./-target-project-/ 2>/dev/null || true
+
+cd /path/to/target/project && claude --continue
+```
+
+<Aside type="caution" title="Migration Risks">
+- Hardcoded secrets/credentials may not transfer correctly
+- Absolute paths in session context may break
+- MCP server configurations may differ between projects
+- `.claudeignore` rules are project-specific
+</Aside>
+
+---
+
+## Myths vs Reality
+
+### Myth: "Claude Code Has Hidden Features You Can Unlock with Secret Flags"
+
+**Reality**: All public features are documented in the [official CHANGELOG](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md).
+
+**What people confuse**:
+- **Progressive rollout != Hidden features** -- Anthropic uses feature flags for staged deployment (standard industry practice)
+- **Experimental features != Secrets** -- Features like TeammateTool exist but are clearly marked as experimental/unstable
+- **Community discovery != Hacking** -- Discovering unreleased features in compiled code is exploration, not "unlocking secrets"
+
+<Aside type="caution">
+Using undocumented experimental features via workarounds can cause data loss, crashes, incompatibility with future versions, and loss of official support.
+</Aside>
+
+---
+
+### Myth: "Tasks API Allows Fully Autonomous Parallel Agents"
+
+**Reality**: The Tasks API (v2.1.16+) enables **coordination** of parallel work, but agents are **not autonomous**.
+
+**What Tasks API actually does**:
+- Creates a shared task list with dependency tracking
+- Allows main session + sub-agents to coordinate work
+- Persists tasks across sessions for resumption
+
+**What it does NOT do**:
+- Does not automatically spawn agents for each task
+- Does not create self-organizing "swarms" of independent agents
+- Does not enable agents to make decisions without human approval
+- Does not replace your need to manage and direct the work
+
+---
+
+### Myth: "Claude Code Is 100x Faster Than Other AI Coding Tools"
+
+**Reality**: Performance depends on task complexity, model choice, and how you use the tool. No tool is universally "100x faster."
+
+| Task | Claude Code | Other Tools | Winner |
+|------|-------------|-------------|--------|
+| Simple edits (typos, formatting) | ~5-10s | ~5-10s | Roughly tied |
+| Multi-file refactoring | 30-60s | 60-120s | Claude Code (2x) |
+| Complex architecture analysis | 2-5min | 5-15min | Claude Code (3x) |
+| Learning curve (first week) | Moderate | Varies | Depends on tool |
+
+Claude Code is **powerful and efficient**, but "100x faster" claims are marketing hyperbole. The real advantage comes from: 200K token deep context window, smart sub-agent system, MCP ecosystem, strong system prompts.
+
+---
+
+### Reality: What Makes Claude Code Actually Special
+
+<CardGrid>
+  <Card title="200K Context Window" icon="open-book">
+    ~150K words -- one of the largest in the industry. Full codebase understanding.
+  </Card>
+  <Card title="Sub-Agent System" icon="rocket">
+    Isolated context windows prevent pollution during exploration.
+  </Card>
+  <Card title="MCP Ecosystem" icon="puzzle">
+    100+ community servers for specialized tasks with strong extensibility.
+  </Card>
+  <Card title="Permission System" icon="approve-check-circle">
+    Granular control over tool access and dangerous operations.
+  </Card>
+  <Card title="CLI-First Design" icon="laptop">
+    Terminal integration, git workflows, IDE compatibility.
+  </Card>
+  <Card title="Transparent Pricing" icon="document">
+    Pay-as-you-go, no subscriptions, predictable costs.
+  </Card>
+</CardGrid>
+
+---
+
+## How to Spot Reliable Information
+
+<Tabs>
+  <TabItem label="Trust These Sources">
+    - Official [Claude Code documentation](https://code.claude.com/docs)
+    - [GitHub CHANGELOG](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md)
+    - [GitHub Issues](https://github.com/anthropics/claude-code/issues) with Anthropic staff responses
+    - Community resources citing official sources (like [Claudelog.com](https://claudelog.com/))
+  </TabItem>
+  <TabItem label="Be Skeptical Of">
+    - Social media posts with no sources
+    - "Secret tricks" without CHANGELOG references
+    - Percentage claims without benchmarks ("50% faster", "10x productivity")
+    - Dramatic language designed to create FOMO
+    - Content that discourages reading official docs
+  </TabItem>
+</Tabs>

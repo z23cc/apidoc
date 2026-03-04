@@ -1,0 +1,571 @@
+---
+title: "会话可观测性与监控"
+description: "追踪 Claude Code 使用情况、估算成本和识别开发模式"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Claude Code 的使用量在活跃开发期间会快速累积。本指南涵盖如何搜索和恢复会话、设置日志记录、分析使用数据、估算成本、监控活动，以及集成外部可观测性工具。
+
+---
+
+## 为什么要监控会话
+
+<CardGrid>
+  <Card title="了解成本" icon="seti:dollar">
+    在账单到来之前估算 API 支出。
+  </Card>
+  <Card title="识别模式" icon="magnifying-glass">
+    查看最常使用的工具、哪些文件被反复编辑。
+  </Card>
+  <Card title="优化工作流" icon="rocket">
+    发现低效操作，比如反复读取同一个大文件。
+  </Card>
+  <Card title="团队可见性" icon="group">
+    汇总使用日志，用于团队预算规划。
+  </Card>
+</CardGrid>
+
+---
+
+## 会话搜索与恢复
+
+### 原生命令
+
+| 命令 | 用途 |
+|------|------|
+| `claude -c` / `claude --continue` | 恢复最近的会话 |
+| `claude -r <id>` / `claude --resume <id>` | 通过 ID 恢复指定会话 |
+| `claude --resume` | 交互式会话选择器 |
+
+会话以 JSONL 文件格式存储在 `~/.claude/projects/<project>/`。
+
+### 社区工具对比
+
+| 工具 | 安装方式 | 速度 | 依赖 | 恢复支持 |
+|------|---------|------|------|---------|
+| **session-search.sh** | 复制脚本 | 列表 10ms / 搜索 400ms | 无（纯 bash） | 显示恢复命令 |
+| claude-conversation-extractor | `pip install` | 230ms / 1.7s | Python | 否 |
+| claude-code-transcripts | `uvx` | N/A | Python | 否 |
+| ran CLI | `npm -g` | 快 | Node.js | 否 |
+
+### 推荐：session-search.sh
+
+零依赖的 bash 脚本，为速度优化，提供可直接使用的恢复命令。
+
+**安装：**
+```bash
+cp examples/scripts/session-search.sh ~/.claude/scripts/cs
+chmod +x ~/.claude/scripts/cs
+echo "alias cs='~/.claude/scripts/cs'" >> ~/.zshrc
+source ~/.zshrc
+```
+
+**使用：**
+```bash
+cs                          # 列出最近 10 个会话（约 15ms）
+cs "authentication"         # 单关键词搜索（约 400ms）
+cs "Prisma migration"       # 多词 AND 搜索
+cs -n 20                    # 显示 20 个结果
+cs -p myproject "bug"       # 按项目名过滤
+cs --since 7d               # 最近 7 天的会话
+cs --since today            # 仅今天的会话
+cs --json "api" | jq .      # JSON 输出用于脚本
+```
+
+**输出示例：**
+```
+2026-01-15 08:32 | my-project       | Implement OAuth flow for...
+  claude --resume 84287c0d-8778-4a8d-abf1-eb2807e327a8
+
+2026-01-14 21:13 | other-project    | Fix database migration...
+  claude --resume 1340c42e-eac5-4181-8407-cc76e1a76219
+```
+
+复制粘贴 `claude --resume` 命令即可继续任意会话。
+
+### 会话恢复的限制
+
+<Aside type="caution">
+原生 `--resume` 仅在当前目录范围内生效。Claude Code 将会话存储在 `~/.claude/projects/<encoded-path>/`，其中 `<encoded-path>` 由项目的绝对路径派生。移动项目文件夹会导致恢复失败。
+</Aside>
+
+**移动项目时的手动迁移：**
+
+```bash
+# 移动项目前
+cd ~/.claude/projects/
+ls -la  # 记录当前的编码路径
+
+# 移动项目
+mv /old/location/myapp /new/location/myapp
+
+# 重命名会话目录以匹配新路径
+cd ~/.claude/projects/
+mv -- -old-location-myapp- -new-location-myapp-
+
+# 验证
+cd /new/location/myapp
+claude --continue  # 应该能成功恢复
+```
+
+---
+
+## 设置会话日志
+
+<Steps>
+1. **安装 Logger Hook**
+
+   ```bash
+   mkdir -p ~/.claude/hooks
+   cp examples/hooks/bash/session-logger.sh ~/.claude/hooks/
+   chmod +x ~/.claude/hooks/session-logger.sh
+   ```
+
+2. **注册到配置文件**
+
+   添加到 `~/.claude/settings.json`：
+
+   ```json
+   {
+     "hooks": {
+       "PostToolUse": [
+         {
+           "type": "command",
+           "command": "~/.claude/hooks/session-logger.sh"
+         }
+       ]
+     }
+   }
+   ```
+
+3. **验证安装**
+
+   ```bash
+   ls ~/.claude/logs/
+   # 应该看到：activity-2026-01-14.jsonl
+
+   tail -5 ~/.claude/logs/activity-$(date +%Y-%m-%d).jsonl | jq .
+   ```
+</Steps>
+
+### 配置选项
+
+| 环境变量 | 默认值 | 说明 |
+|---------|--------|------|
+| `CLAUDE_LOG_DIR` | `~/.claude/logs` | 日志存储位置 |
+| `CLAUDE_LOG_TOKENS` | `true` | 启用 token 估算 |
+| `CLAUDE_SESSION_ID` | 自动生成 | 自定义会话标识符 |
+
+---
+
+## 分析会话数据
+
+### 使用 session-stats.sh
+
+```bash
+session-stats.sh                    # 今日汇总
+session-stats.sh --range week       # 最近 7 天
+session-stats.sh --date 2026-01-14  # 指定日期
+session-stats.sh --project my-app   # 按项目过滤
+session-stats.sh --json             # 机器可读输出
+```
+
+### 输出示例
+
+```
+═══════════════════════════════════════════════════════════
+        Claude Code Session Statistics - today
+═══════════════════════════════════════════════════════════
+
+Summary
+  Total operations:  127
+  Sessions:          3
+
+Token Usage
+  Input tokens:      45,230
+  Output tokens:     12,450
+  Total tokens:      57,680
+
+Estimated Cost (Sonnet rates)
+  Input:   $0.1357
+  Output:  $0.1868
+  Total:   $0.3225
+
+Tools Used
+  Edit: 45
+  Read: 38
+  Bash: 24
+  Grep: 12
+  Write: 8
+
+Projects
+  my-app: 89
+  other-project: 38
+```
+
+### 从日志中评估配置质量
+
+Token 统计告诉你使用了多少 Claude Code。JSONL 日志还能揭示**你的配置效果如何**。
+
+以下三种模式通常表明技能、规则或 CLAUDE.md 需要更新：
+
+<Tabs>
+  <TabItem label="重复读取同一文件">
+    如果 Claude 在一个会话中读取同一文件 3 次以上，说明它需要的内容可能不在预期位置。
+
+    ```bash
+    # 最近会话中被读取 3 次以上的文件
+    jq -r 'select(.tool == "Read") | .file' ~/.claude/logs/activity-*.jsonl \
+      | sort | uniq -c | sort -rn | awk '$1 > 3'
+    ```
+
+    **解决方案**：将相关上下文移到技能或 CLAUDE.md 中。
+  </TabItem>
+  <TabItem label="工具重复失败">
+    某个 Bash 命令在多个会话中反复失败，通常意味着技能中有过时的路径或已重命名的二进制文件。
+
+    ```bash
+    # 失败的命令
+    jq -r 'select(.tool == "Bash" and (.exit_code // 0) != 0) | .command' \
+      ~/.claude/logs/activity-*.jsonl | sort | uniq -c | sort -rn | head -10
+    ```
+
+    **解决方案**：更新技能或 CLAUDE.md 中的失败命令。
+  </TabItem>
+  <TabItem label="高频编辑同一文件">
+    跨会话被大量编辑的文件通常表明缺少关于该文件用途或约定的上下文。
+
+    ```bash
+    # 被编辑最多的文件
+    jq -r 'select(.tool == "Edit") | .file' ~/.claude/logs/activity-*.jsonl \
+      | sort | uniq -c | sort -rn | head -10
+    ```
+
+    **解决方案**：在 CLAUDE.md 中记录该文件的相关约定。
+  </TabItem>
+</Tabs>
+
+### 日志格式
+
+每条日志是一个 JSON 对象：
+
+```json
+{
+  "timestamp": "2026-01-14T15:30:00Z",
+  "session_id": "1705234567-12345",
+  "tool": "Edit",
+  "file": "src/components/Button.tsx",
+  "project": "my-app",
+  "tokens": {
+    "input": 350,
+    "output": 120,
+    "total": 470
+  }
+}
+```
+
+---
+
+## 成本追踪
+
+### Token 估算方法
+
+Logger 使用简单的启发式方法估算 token：**约每 4 个字符为 1 个 token**。这是近似值，通常会略微高估。
+
+### 费率设置
+
+默认费率为 Claude Sonnet。通过环境变量调整：
+
+```bash
+# Sonnet 费率（默认）
+export CLAUDE_RATE_INPUT=0.003   # $3/1M tokens
+export CLAUDE_RATE_OUTPUT=0.015  # $15/1M tokens
+
+# Opus 费率
+export CLAUDE_RATE_INPUT=0.015   # $15/1M tokens
+export CLAUDE_RATE_OUTPUT=0.075  # $75/1M tokens
+
+# Haiku 费率
+export CLAUDE_RATE_INPUT=0.00025 # $0.25/1M tokens
+export CLAUDE_RATE_OUTPUT=0.00125 # $1.25/1M tokens
+```
+
+### 预算告警
+
+在 shell 配置文件中添加每日预算提醒：
+
+```bash
+# ~/.zshrc 或 ~/.bashrc
+claude_budget_check() {
+  local cost=$(session-stats.sh --json 2>/dev/null | jq -r '.summary.estimated_cost.total // 0')
+  local threshold=5.00  # 每日 $5 预算
+
+  if (( $(echo "$cost > $threshold" | bc -l) )); then
+    echo "警告：Claude Code 今日支出 \$$cost（阈值：\$$threshold）"
+  fi
+}
+
+# Shell 启动时运行
+claude_budget_check
+```
+
+---
+
+## 活动监控
+
+### 会话 JSONL：事实来源
+
+Claude Code 执行的每个工具调用都记录在 `~/.claude/projects/<project>/` 下的会话 JSONL 文件中。每个 `type: "assistant"` 条目包含一个 `content` 数组，其中 `type: "tool_use"` 记录了每个操作。
+
+```bash
+# 检查会话中的工具调用
+cat ~/.claude/projects/-your-project-/SESSION_ID.jsonl | \
+  jq 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | {tool: .name, input: .input}'
+```
+
+### 工具调用揭示的信息
+
+| 工具 | 暴露的信息 |
+|------|-----------|
+| `Read` | 被访问的文件（路径、行范围） |
+| `Write` / `Edit` | 被修改的文件（路径、内容变更） |
+| `Bash` | 执行的命令（完整命令字符串） |
+| `WebFetch` | 获取的 URL（可能包含 POST 数据） |
+| `Task` | 子 Agent 启动（传递的提示词） |
+| `Glob` / `Grep` | 搜索模式和范围 |
+
+### 实用审计查询
+
+```bash
+SESSION=~/.claude/projects/-your-project-/SESSION_ID.jsonl
+
+# 会话中读取的所有文件
+jq 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use" and .name == "Read") | .input.file_path' "$SESSION"
+
+# 执行的所有 bash 命令
+jq 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use" and .name == "Bash") | .input.command' "$SESSION"
+
+# 获取的所有 URL
+jq 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use" and .name == "WebFetch") | .input.url' "$SESSION"
+
+# 按类型统计工具使用量
+jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | .name' "$SESSION" | sort | uniq -c | sort -rn
+```
+
+### 需要关注的敏感模式
+
+| 模式 | 风险 | 检测方法 |
+|------|------|---------|
+| `Read` 访问 `.env`、`*.pem`、`id_rsa` | 凭据被访问 | 过滤文件路径中的 `\.(env\|pem\|key)$` |
+| `Bash` 执行 `rm -rf`、`git push --force` | 破坏性操作 | 过滤危险命令模式 |
+| `WebFetch` 外部 URL | 数据泄露风险 | 审计所有获取的 URL |
+| `Write` 项目根目录外的文件 | 作用域溢出 | 检查路径是否在工作目录内 |
+
+<Aside>
+Claude Code 以你的用户权限对文件系统进行读写操作。JSONL 审计日志是你了解发生了什么的记录。对于团队，建议将日志同步到不可变存储。
+</Aside>
+
+---
+
+## 外部监控工具
+
+| 工具 | 类型 | 功能 | 安装 |
+|------|------|------|------|
+| **ccusage** | CLI / TUI | 从 JSONL 追踪成本，约 10K GitHub 星标 | `npm i -g ccusage` |
+| **claude-code-otel** | OpenTelemetry | 向任意 OTEL 收集器发送 Span | `npm i -g claude-code-otel` |
+| **Akto** | SaaS / 自托管 | API 安全防护 + 审计追踪 | [akto.io](https://akto.io) |
+| **MLflow Tracing** | CLI + SDK | 精确 token 计数、工具 Span、LLM 评判 | `pip install mlflow` |
+| **ccboard** | TUI + Web | 统一的会话、成本和统计仪表板 | `cargo install ccboard` |
+
+### 选择指南
+
+```
+需要快速了解成本？             → ccusage（CLI，零配置）
+需要企业级审计追踪？           → claude-code-otel + Grafana 或 Akto
+已在使用 MLflow 做 ML？        → MLflow tracing 集成
+需要 Agent 回归检测？          → MLflow tracing + LLM-as-judge
+需要持久化 TUI/Web UI？        → ccboard
+```
+
+### ccusage
+
+```bash
+npm i -g ccusage
+ccusage          # 今日用量
+ccusage --days 7 # 最近 7 天
+```
+
+直接从 `~/.claude/projects/**/*.jsonl` 读取，无需 API 密钥，不发送外部数据。
+
+### claude-code-otel
+
+```bash
+npm i -g claude-code-otel
+claude-code-otel --collector http://localhost:4318
+```
+
+Span 包含工具名称、持续时间和 token 计数。可接入任何兼容 OTEL 的后端（Jaeger、Tempo、Datadog）。
+
+### MLflow Tracing
+
+<Aside type="tip">
+MLflow 在 API 层拦截，而非从 JSONL 事后分析。它捕获**精确的** token 计数（对比基于 Hook 估算的 15-25% 偏差），并支持 **LLM-as-judge** 回归检测。
+</Aside>
+
+#### CLI 模式（无需 Python）
+
+```bash
+pip install "mlflow[genai]>=3.4"
+
+# 启用追踪
+mlflow autolog claude
+
+# 使用自定义后端
+mlflow autolog claude -u sqlite:///mlflow.db
+
+# 查看状态 / 禁用
+mlflow autolog claude --status
+mlflow autolog claude --disable
+```
+
+启动 UI：
+```bash
+mlflow server  # http://localhost:5000
+```
+
+**自动捕获的内容**：用户提示词、助手响应、工具调用（名称 + 输入 + 输出）、精确 token 计数、每次调用延迟和会话元数据。
+
+#### MCP 服务器：双向集成
+
+Claude Code 可以直接查询自己的追踪数据：
+
+```json
+{
+  "mcpServers": {
+    "mlflow-mcp": {
+      "command": "uv",
+      "args": ["run", "--with", "mlflow[mcp]>=3.5.1", "mlflow", "mcp", "run"],
+      "env": { "MLFLOW_TRACKING_URI": "<your-tracking-uri>" }
+    }
+  }
+}
+```
+
+配置完成后，你可以直接问 Claude Code：「找出所有 backend-architect agent 使用超过 20 次工具调用的会话」——它会直接查询 MLflow。
+
+---
+
+## 代理 Claude Code 流量
+
+<Aside>
+常见问题：「能用 Proxyman/Charles 看到 Claude Code 发送给 Anthropic 的内容吗？」简短回答：不能直接看到。Claude Code 是 Node.js 进程，会忽略系统级代理设置。
+</Aside>
+
+### 可用方案
+
+<Tabs>
+  <TabItem label="MITM 证书">
+    让 Node.js 信任你的代理 CA 证书：
+
+    ```bash
+    export NODE_EXTRA_CA_CERTS="/path/to/proxyman-ca.pem"
+    claude
+    ```
+
+    **注意**：某些 Claude Code 版本使用证书锁定，这种方法可能仍然失败。
+  </TabItem>
+  <TabItem label="API URL 重定向">
+    将 Claude Code 指向本地拦截器：
+
+    ```bash
+    export ANTHROPIC_API_URL="http://localhost:8080"
+    claude
+    ```
+
+    在端口 8080 运行任何 HTTP 代理，转发到 `https://api.anthropic.com`。
+  </TabItem>
+  <TabItem label="mitmproxy（推荐）">
+    ```bash
+    brew install mitmproxy
+    mitmproxy --listen-port 8080
+
+    # 新终端中
+    export NODE_EXTRA_CA_CERTS="$(python3 -c 'import mitmproxy.certs; print(mitmproxy.certs.Cert.default_ca_path())')"
+    export HTTPS_PROXY="http://localhost:8080"
+    claude
+    ```
+
+    mitmproxy 的 Web UI（`http://localhost:8081`）可以显示完整的请求/响应内容。
+  </TabItem>
+</Tabs>
+
+<Aside type="caution">
+代理流量包含对话上下文中的所有内容——文件内容、你的代码、Claude 遇到的任何密钥。请妥善处理代理日志。
+</Aside>
+
+---
+
+## 最佳实践
+
+### 每周回顾
+
+```bash
+session-stats.sh --range week
+```
+
+关注以下指标：
+- Token 异常高峰日
+- 同一文件的重复操作（效率不佳的信号）
+- 项目分布（时间花在了哪里）
+
+### 按项目追踪
+
+```bash
+export CLAUDE_SESSION_ID="project-myapp-$(date +%s)"
+claude
+```
+
+### 团队汇总
+
+```bash
+# 每日同步到 S3
+aws s3 sync ~/.claude/logs/ s3://company-claude-logs/$(whoami)/
+
+# 合并分析
+aws s3 sync s3://company-claude-logs/ /tmp/team-logs/
+cat /tmp/team-logs/*/activity-$(date +%Y-%m-%d).jsonl | \
+  jq -s 'group_by(.project) | map({project: .[0].project, total_tokens: [.[].tokens.total] | add})'
+```
+
+### 日志轮转
+
+```bash
+# 清理 30 天前的日志
+find ~/.claude/logs -name "*.jsonl" -mtime +30 -delete
+```
+
+---
+
+## 已知限制
+
+### 监控无法做到的事
+
+| 限制 | 原因 |
+|------|------|
+| 精确的 token 计数 | CLI 不暴露 API token 指标 |
+| TTFT（首 token 时间） | Hook 在工具完成后才运行 |
+| 实时流式指标 | 响应生成期间没有 Hook 事件 |
+| 实际 API 费用 | Token 估算基于启发式方法 |
+| 每请求的模型选择 | 日志不记录使用了哪个模型 |
+| 上下文窗口使用率 | 无法查看当前上下文占比 |
+
+### 可以信赖的指标
+
+| 指标 | 准确度 |
+|------|--------|
+| 工具使用次数 | 每个工具调用的精确计数 |
+| 文件访问模式 | 哪些文件被操作过 |
+| 相对比较 | 日与日、项目与项目之间的趋势 |
+| 操作时间 | 工具使用的时间戳 |
+| Token 估算 | 与实际账单偏差约 15-25% |

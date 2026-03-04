@@ -1,0 +1,190 @@
+---
+title: "Common Beginner Mistakes"
+description: "Eight common mistakes that slow down new Claude Code users and how to avoid them"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+New Claude Code users often fall into common pitfalls that slow down their workflow or cause issues. This tutorial covers the eight most typical beginner mistakes and provides concrete solutions for each.
+
+---
+
+## The Eight Mistakes
+
+<CardGrid>
+  <Card title="Skipping the Plan" icon="warning">
+    Jumping straight into action without providing context.
+  </Card>
+  <Card title="Ignoring Context Limits" icon="warning">
+    Working until the context window is nearly full.
+  </Card>
+  <Card title="Vague Prompts" icon="warning">
+    Instructions like "make this code better" are too broad.
+  </Card>
+  <Card title="Accepting Blindly" icon="warning">
+    Hitting "y" without reading the diff.
+  </Card>
+</CardGrid>
+
+---
+
+### 1. Skipping the Plan
+
+**Mistake:** Jumping straight into "fix this bug" without explaining context.
+
+**Fix:** Use the WHAT/WHERE/HOW/VERIFY format:
+
+```
+WHAT: Fix login timeout error
+WHERE: src/auth/session.ts
+HOW: Increase token expiry from 1h to 24h
+VERIFY: Login persists after browser refresh
+```
+
+<Aside type="tip">
+Structured prompts do not just help Claude understand the task better — they also help you clarify your own thinking.
+</Aside>
+
+---
+
+### 2. Ignoring Context Limits
+
+**Mistake:** Working until context hits 95%, at which point response quality degrades noticeably.
+
+**Fix:** Watch `Ctx(u):` in the status line. Use `/compact` at 70%, `/clear` at 90%.
+
+<Aside type="caution">
+Once the context window fills up, Claude's response quality drops significantly. Build the habit of regularly checking context usage.
+</Aside>
+
+---
+
+### 3. Using Vague Prompts
+
+**Mistake:** "Make this code better" or "Check for bugs"
+
+**Fix:** Be specific: "Refactor `calculateTotal()` to handle null prices without throwing"
+
+<Tabs>
+  <TabItem label="Bad Prompts">
+    ```
+    Make this function better
+    Check for issues
+    Optimize this code
+    ```
+  </TabItem>
+  <TabItem label="Good Prompts">
+    ```
+    Refactor calculateTotal() to handle null prices without throwing
+    Check the userAuth module for SQL injection vulnerabilities
+    Optimize processOrders() from O(n²) to O(n log n) time complexity
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+### 4. Accepting Changes Blindly
+
+**Mistake:** Hitting "y" without reading the diff.
+
+**Fix:** Always review diffs. Use "n" to reject changes, then explain what is wrong.
+
+<Aside type="caution">
+Even experienced users should review every diff. AI-generated code may look correct but contain subtle logic errors.
+</Aside>
+
+---
+
+### 5. No Version Control Safety
+
+**Mistake:** Making large changes without commits.
+
+**Fix:** Commit before big changes. Use feature branches. Claude can help: `/commit`
+
+<Steps>
+
+1. Run `git commit` before starting major changes
+
+2. Use feature branches rather than working directly on main
+
+3. Let Claude help manage commits with the `/commit` command
+
+</Steps>
+
+---
+
+### 6. Overly Broad Permissions
+
+**Mistake:** Setting `Bash(*)` or using `--dangerously-skip-permissions`
+
+**Fix:** Start restrictive and expand as needed. Use allowlists:
+
+```
+Bash(npm test)
+Bash(git *)
+```
+
+<Aside type="danger">
+Overly broad permissions can lead to unintended system modifications. Always follow the principle of least privilege.
+</Aside>
+
+---
+
+### 7. Mixing Unrelated Tasks
+
+**Mistake:** "Fix the auth bug AND refactor the database AND add new tests"
+
+**Fix:** One focused task per session. Use `/clear` between different tasks.
+
+<Aside type="tip">
+Focusing on one task at a time makes Claude's output more precise and makes it easier for you to review and roll back changes.
+</Aside>
+
+---
+
+### 8. Treating Claude Code Like a Chatbot
+
+**Mistake:** Typing ad-hoc instructions every session. Repeating project conventions, re-explaining architecture, manually enforcing quality checks.
+
+**Fix:** Build structured context that compounds over time:
+
+<CardGrid>
+  <Card title="CLAUDE.md" icon="document">
+    Your conventions, stack, and patterns — loaded every session automatically.
+  </Card>
+  <Card title="Skills" icon="puzzle">
+    Reusable workflows (`/review`, `/deploy`) for consistent execution.
+  </Card>
+  <Card title="Hooks" icon="setting">
+    Automated guardrails (lint, security, formatting) — zero manual effort.
+  </Card>
+</CardGrid>
+
+<Aside type="tip">
+Create your CLAUDE.md in Week 1. Start simple and refine it as you learn what works best for your project.
+</Aside>
+
+---
+
+## Pre-Session Checklist
+
+Before starting a new session, verify these five items:
+
+<Steps>
+
+1. I have a clear, specific goal
+
+2. My project has a CLAUDE.md file
+
+3. I am on a feature branch (not main)
+
+4. I know my current context level (`/status`)
+
+5. I will review every diff before accepting
+
+</Steps>
+
+<Aside type="note">
+Building these habits transforms your Claude Code experience from "trying it out" to "second nature." Most efficiency problems can be avoided by checking these five points.
+</Aside>

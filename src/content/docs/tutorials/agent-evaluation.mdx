@@ -1,0 +1,378 @@
+---
+title: "Agent 评估指标"
+description: "衡量自定义 Agent 效果的指标、模式和工具"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+当你在 `.claude/agents/` 中创建自定义 Agent 时，你正在将专业知识编码到可复用的工作流中。但你怎么知道 Agent 是否真的有效？本指南涵盖评估指标、实现模式和可用工具。
+
+<Aside>
+核心原则：Agent 就是代码。和所有代码一样，它们需要测试、指标和可观测性。
+</Aside>
+
+---
+
+## 为什么要评估 Agent？
+
+<CardGrid>
+  <Card title="没有评估" icon="warning">
+    无法衡量响应质量是提升还是下降，无法客观比较不同配置，无法识别哪些指令需要改进。
+  </Card>
+  <Card title="有评估" icon="approve-check">
+    通过指标量化质量，A/B 测试不同配置，识别成功与失败的模式，建立持续改进的反馈循环。
+  </Card>
+</CardGrid>
+
+---
+
+## 需要跟踪的指标
+
+### 1. 响应质量指标
+
+**需要衡量什么**：
+- **任务完成率**：Agent 是否完成了既定目标？
+- **正确性**：Agent 的输出是否事实准确？
+- **相关性**：响应是否切题并解决了实际问题？
+- **幻觉率**：Agent 多频繁地编造信息？
+
+**如何跟踪**：
+
+```json
+{
+  "timestamp": "2026-02-10T14:32:00Z",
+  "agent_id": "backend-architect",
+  "task_completed": true,
+  "correctness_score": 4.5,
+  "hallucinations": 0,
+  "response_tokens": 1250
+}
+```
+
+<Aside type="tip">
+实现建议：使用用户反馈提示（点赞/点踩）或自动检查（Agent 生成代码后测试套件是否通过）。
+</Aside>
+
+---
+
+### 2. 工具使用指标
+
+**需要衡量什么**：
+- **工具调用成功率**：无错误执行的工具调用百分比
+- **工具选择准确性**：Agent 是否为任务选择了正确的工具？
+- **工具调用效率**：达成目标的最少调用次数
+- **错误恢复**：Agent 是否优雅地处理了工具失败？
+
+```json
+{
+  "timestamp": "2026-02-10T14:32:05Z",
+  "agent_id": "backend-architect",
+  "tool_name": "Read",
+  "tool_success": true,
+  "tool_parameters": {"file_path": "src/auth.ts"},
+  "execution_time_ms": 45
+}
+```
+
+---
+
+### 3. 性能指标
+
+**需要衡量什么**：
+- **响应时间**：从用户提示到完整响应的总时间
+- **Token 效率**：每个任务使用的输入/输出 Token
+- **上下文利用率**：使用了多少上下文窗口？
+- **每任务成本**：完整交互的 API 成本
+
+```json
+{
+  "timestamp": "2026-02-10T14:35:00Z",
+  "agent_id": "backend-architect",
+  "session_duration_s": 180,
+  "input_tokens": 3500,
+  "output_tokens": 2800,
+  "total_cost_usd": 0.15,
+  "context_utilization": 0.42
+}
+```
+
+---
+
+### 4. 用户满意度指标
+
+**需要衡量什么**：
+- **显式反馈**：用户评分、评论、Bug 报告
+- **隐式信号**：用户是否接受了 Agent 的建议？是否重试了提示？
+- **采纳率**：与替代方案相比，Agent 被使用的频率
+- **留存率**：用户是否为相似任务回来使用此 Agent？
+
+---
+
+## 实现模式
+
+### 模式 1：日志 Hook 系统
+
+**使用场景**：自动跟踪所有 Agent 交互，无需人工干预
+
+```bash
+# .claude/hooks/post-tool-use.sh
+#!/bin/bash
+# 每次工具调用后触发
+
+AGENT_ID=$(echo "$CLAUDE_AGENT_ID" | jq -r)
+TOOL_NAME=$(echo "$CLAUDE_TOOL_NAME" | jq -r)
+TOOL_SUCCESS=$(echo "$CLAUDE_TOOL_SUCCESS" | jq -r)
+
+# 追加到指标日志
+echo "{\"timestamp\":\"$(date -Iseconds)\",\"agent\":\"$AGENT_ID\",\"tool\":\"$TOOL_NAME\",\"success\":$TOOL_SUCCESS}" \
+  >> .claude/logs/agent-metrics.jsonl
+```
+
+| 优点 | 缺点 |
+|------|------|
+| 零人工开销 | 需要解析 Claude Code 环境变量 |
+| 完整覆盖 | 可能因版本更新而变化 |
+| 时间序列数据 | |
+
+---
+
+### 模式 2：Agent 单元测试
+
+**使用场景**：回归测试，确保 Agent 改进不会破坏现有能力
+
+```bash
+# tests/agents/backend-architect.test.sh
+#!/bin/bash
+
+# 测试 1：Agent 正确识别六边形架构层
+echo "Test: Hexagonal architecture analysis"
+RESULT=$(claude agent backend-architect "Analyze src/auth.ts for layer violations")
+if echo "$RESULT" | grep -q "domain layer"; then
+  echo "PASS: Identified layers"
+else
+  echo "FAIL: Did not identify layers"
+  exit 1
+fi
+
+# 测试 2：Agent 推荐正确的模式
+echo "Test: Pattern recommendations"
+RESULT=$(claude agent backend-architect "Improve error handling in src/api.ts")
+if echo "$RESULT" | grep -q "Result<T, E>"; then
+  echo "PASS: Recommended Result pattern"
+else
+  echo "FAIL: Incorrect pattern"
+  exit 1
+fi
+```
+
+| 优点 | 缺点 |
+|------|------|
+| 自动化，捕获回归 | 需要维护 |
+| CI/CD 集成 | 可能有误报/漏报 |
+
+---
+
+### 模式 3：A/B 测试配置
+
+**使用场景**：比较两个版本的 Agent，确定哪个表现更好
+
+<Tabs>
+  <TabItem label="控制组 v1">
+  ```yaml
+  # .claude/agents/backend-architect-v1.md
+  name: backend-architect
+  version: 1.0
+  instructions: |
+    You are a backend architect specializing in...
+    [原始指令]
+  ```
+  </TabItem>
+  <TabItem label="实验组 v2">
+  ```yaml
+  # .claude/agents/backend-architect-v2.md
+  name: backend-architect-v2
+  version: 2.0
+  instructions: |
+    You are a backend architect specializing in...
+    [增加新模式强调的修改指令]
+  ```
+  </TabItem>
+</Tabs>
+
+**评估结果对比**：
+
+| 指标 | v1 | v2 |
+|------|----|----|
+| 响应时间 | 45s | 38s |
+| 发现的问题 | 3 | 5（多发现 2 个关键问题） |
+| 用户评分 | 4/5 | 5/5 |
+
+结论：v2 更全面且更快 -> 推广到生产环境。
+
+---
+
+### 模式 4：反馈循环集成
+
+**使用场景**：基于实际使用数据持续改进 Agent
+
+```bash
+# Agent 完成任务后
+echo "你如何评价这次响应？(1-5, 或 'skip'): "
+read RATING
+
+if [ "$RATING" != "skip" ]; then
+  echo "有什么具体反馈？: "
+  read COMMENT
+
+  # 记录反馈
+  echo "{\"timestamp\":\"$(date -Iseconds)\",\"agent\":\"$AGENT_ID\",\"rating\":$RATING,\"comment\":\"$COMMENT\"}" \
+    >> .claude/logs/agent-feedback.jsonl
+fi
+```
+
+**行动节奏**：
+- **每周**：审查反馈，识别模式
+- **每月**：根据聚合数据更新 Agent 指令
+- **每季度**：如有必要进行重大 Agent 重构
+
+---
+
+## 示例：带评估的 Agent
+
+### 设置：带内建指标的分析 Agent
+
+```yaml
+# .claude/agents/analytics-agent.md
+---
+name: analytics-agent
+description: SQL 查询生成器，带评估 Hook
+version: 1.0
+tools:
+  - Read
+  - Write
+  - Bash
+hooks:
+  post_response: .claude/hooks/log-analytics-metrics.sh
+---
+
+# Analytics Agent
+
+你是一个专业的 SQL 分析师，帮助用户查询数据库。
+
+## 评估标准
+
+每次查询后检查：
+1. **正确性**：查询是否产生预期结果？
+2. **性能**：查询执行时间 < 5s？
+3. **安全性**：没有破坏性操作（DELETE, DROP, TRUNCATE）？
+4. **最佳实践**：使用正确的 JOIN、索引、参数化查询？
+```
+
+### 指标 Hook
+
+```bash
+# .claude/hooks/log-analytics-metrics.sh
+#!/bin/bash
+
+QUERY=$(echo "$CLAUDE_RESPONSE" | grep -oP 'SELECT.*?;')
+
+if [ -n "$QUERY" ]; then
+  # 检查破坏性操作
+  if echo "$QUERY" | grep -iE 'DELETE|DROP|TRUNCATE'; then
+    SAFETY="FAIL"
+  else
+    SAFETY="PASS"
+  fi
+
+  # 记录指标
+  echo "{\"timestamp\":\"$(date -Iseconds)\",\"query\":\"$QUERY\",\"safety\":\"$SAFETY\"}" \
+    >> .claude/logs/analytics-metrics.jsonl
+fi
+```
+
+### 分析
+
+```bash
+# 月度审查：分析指标
+jq -s 'group_by(.safety) | map({safety: .[0].safety, count: length})' \
+  .claude/logs/analytics-metrics.jsonl
+
+# 输出：
+# [
+#   {"safety": "PASS", "count": 127},
+#   {"safety": "FAIL", "count": 3}
+# ]
+
+# 行动：审查 3 个失败查询，更新 Agent 指令以防止未来违规
+```
+
+---
+
+## 工具与参考
+
+### 开源评估框架
+
+**nao**（分析 Agent）—— [github.com/getnao/nao](https://github.com/getnao/nao/)
+
+- 内建分析 Agent 评估框架
+- Agent 响应的单元测试能力
+- 指标收集（响应质量、工具使用、性能）
+- 反馈循环集成
+
+**如何适配 Claude Code**：
+- 将 nao 的结构化上下文方法应用到 `.claude/agents/` 配置
+- 将 nao 的评估框架转换为 Claude Code Hook 系统
+- 使用 nao 的指标 Schema 作为日志模板
+
+### Claude Code 原生模式
+
+- **Hook 系统**：`.claude/hooks/` 用于自动化日志
+- **Agent 目录**：`.claude/agents/` 用于自定义 Agent 定义
+- **MCP 可观测性**：使用 MCP 服务器进行高级日志和指标聚合
+
+---
+
+## 最佳实践
+
+### 从简单开始
+
+<Steps>
+1. **第 1 周**：添加基础日志 Hook（仅工具调用）
+2. **第 2 周**：添加用户反馈提示（手动评分）
+3. **第 3 周**：构建仪表板可视化指标
+4. **第 4 周**：对 Agent 配置运行首次 A/B 测试
+</Steps>
+
+### 聚焦可行动的指标
+
+不要跟踪你不会采取行动的指标。优先级：
+
+| 指标 | 行动 |
+|------|------|
+| 任务完成率 | 改进 Agent 指令 |
+| 工具调用错误 | 改善上下文或添加示例 |
+| 用户评分 | 识别令人困惑或无用的响应 |
+
+### 尽可能自动化
+
+人工评估无法扩展。使用：
+- Hook 进行自动日志记录
+- CI/CD 集成进行 Agent 单元测试
+- 脚本进行定期指标聚合
+
+### 建立反馈循环
+
+指标没有行动就没有用：
+- **每周**：审查指标，识别模式
+- **每月**：根据数据更新 Agent 指令
+- **每季度**：必要时进行重大 Agent 重构
+
+---
+
+## 下一步
+
+<Steps>
+1. 为你最常用的 Agent 添加日志 Hook
+2. 收集 1 周的指标数据
+3. 根据数据分析和改进 Agent
+</Steps>

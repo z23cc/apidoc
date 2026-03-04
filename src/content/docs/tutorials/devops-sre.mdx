@@ -1,0 +1,639 @@
+---
+title: "DevOps 与 SRE 实践"
+description: "使用 FIRE 框架进行基础设施诊断和 DevOps 工作流"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Claude Code 是 DevOps 和 SRE 工作流的强力助手——从诊断基础设施问题到生成事后报告、管理基础设施即代码（IaC），无所不能。本指南介绍 **FIRE 框架**，一种系统化的基础设施诊断方法，以及事件响应、Kubernetes 故障排查和基础设施即代码的实用模式。
+
+---
+
+## FIRE 框架
+
+使用 Claude Code 进行基础设施诊断遵循四个阶段：
+
+```
+F - First Response（首次响应） → 告诉 Claude 症状 + 上下文
+I - Investigate（调查）       → Claude 分析日志、指标、配置
+R - Remediate（修复）         → Claude 提出修复方案（人工审批）
+E - Evaluate（评估）          → 事后分析、文档记录、预防措施
+```
+
+<CardGrid>
+  <Card title="首次响应" icon="rocket">
+    描述故障现象，提供环境上下文。Claude 进行分诊并确定检查优先级。
+  </Card>
+  <Card title="调查" icon="magnifying-glass">
+    执行命令，粘贴输出。Claude 分析、关联并形成假设。
+  </Card>
+  <Card title="修复" icon="pencil">
+    Claude 提出修复方案并说明影响。**由你决定批准或拒绝。**
+  </Card>
+  <Card title="评估" icon="open-book">
+    Claude 生成事后报告、文档和预防建议。
+  </Card>
+</CardGrid>
+
+<Aside type="caution">
+**关键原则**：Claude 提议，你审批。对于破坏性操作（删除、缩容、重启）、生产环境和安全敏感变更，这一点尤为重要。
+</Aside>
+
+### 快速导航
+
+| 场景 | 跳转到 |
+|------|--------|
+| 正在处理线上事故 | [Kubernetes 故障排查](#kubernetes-故障排查) |
+| 首次使用 Claude 做 DevOps | [首次基础设施诊断](#首次基础设施诊断) |
+| 想要自动化运维手册 | [事件响应模式](#事件响应模式) |
+| 需要现成的提示词 | [速查提示词](#速查提示词) |
+
+---
+
+## 首次基础设施诊断
+
+以 Pod CrashLoopBackOff 场景展示 FIRE 框架的实际运用：
+
+<Steps>
+1. **首次响应** —— 提供上下文
+
+   ```bash
+   claude "I have a pod in CrashLoopBackOff in the payment-service namespace.
+   Environment: production
+   Cluster: gke-prod-us-east1
+   Started: 10 minutes ago
+   What are the first 3 things I should check?"
+   ```
+
+2. **调查** —— 执行建议的命令并分享输出
+
+   ```bash
+   kubectl describe pod payment-api-7d4b8c6f5-x2j9k -n payment-service
+   # 复制输出并粘贴给 Claude
+   ```
+
+3. **修复** —— Claude 提议，你审批
+
+   ```bash
+   claude "Based on this describe output, what's the fix?
+   CONSTRAINT: Show me the exact command but don't execute anything."
+   ```
+
+4. **评估** —— 记录事件
+
+   ```bash
+   claude "Create a brief incident note for our wiki:
+   - What happened
+   - Root cause
+   - Fix applied
+   - Prevention recommendation"
+   ```
+</Steps>
+
+### Claude 的首次响应示例
+
+```markdown
+## CrashLoopBackOff 分诊（按优先级）
+
+1. **检查退出码和最近的日志**
+   kubectl logs payment-api-7d4b8c6f5-x2j9k -n payment-service --previous
+   最常见原因：OOM（退出码 137）、配置错误（退出码 1）、依赖故障
+
+2. **检查 Pod 事件和资源限制**
+   kubectl describe pod payment-api-7d4b8c6f5-x2j9k -n payment-service
+   关注：OOMKilled、ImagePullBackOff、存活探针失败
+
+3. **检查近期部署变更**
+   kubectl rollout history deployment/payment-api -n payment-service
+   如有近期变更：考虑在排查期间先回滚
+```
+
+---
+
+## Kubernetes 故障排查
+
+### K8s MCP 服务器配置
+
+安装 K8s MCP 服务器以获得持续的集群上下文：
+
+```json
+// ~/.claude.json（或 .mcp.json）
+{
+  "mcpServers": {
+    "kubernetes": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-kubernetes"]
+    }
+  }
+}
+```
+
+<Aside type="tip">
+配置 MCP 服务器后，Claude 可以直接查询集群状态，减少手动复制粘贴。没有 MCP 也可以工作——手动将 kubectl 输出传给 Claude 同样有效。
+</Aside>
+
+### 按症状分类的提示词
+
+将 `<bracketed>` 中的值替换为你自己的实际值。
+
+#### CrashLoopBackOff
+
+```bash
+kubectl describe pod <pod> -n <ns> | claude "Analyze this CrashLoopBackOff:
+1. What's the exit code and what does it mean?
+2. Check the last 5 restarts pattern (timing, consistent or escalating?)
+3. Suggest 3 most likely root causes based on the events
+4. Give me the exact commands to investigate each hypothesis"
+```
+
+**Claude 通常会识别的常见原因**：
+
+| 退出码 | 含义 |
+|--------|------|
+| 137 | OOMKilled（内存限制超出） |
+| 1 | 应用错误（配置错误、缺少依赖） |
+| 143 | SIGTERM（优雅关闭超时） |
+
+#### OOMKilled
+
+```bash
+kubectl top pods -n <ns> && kubectl describe pod <pod> -n <ns> | claude "This pod was OOMKilled:
+1. Compare requests vs limits vs actual usage
+2. Is this a memory leak or under-provisioning?
+3. If leak: what patterns in the container suggest investigation paths?
+4. If under-provisioned: suggest optimal resource settings based on this data"
+```
+
+**内存泄漏追踪**：
+```bash
+claude "The pod has been restarting every 2 hours with OOMKilled.
+Memory grows linearly from 200Mi to 512Mi limit before crash.
+Language: Node.js 18
+What are the top 3 things to check for memory leaks in this stack?"
+```
+
+#### ImagePullBackOff
+
+```bash
+kubectl describe pod <pod> -n <ns> | claude "ImagePullBackOff diagnosis:
+1. Is this an auth issue, network issue, or wrong image name?
+2. What's the exact error message telling us?
+3. Give me commands to verify the image exists and credentials work"
+```
+
+#### Pod 卡在 Pending 状态
+
+```bash
+kubectl describe pod <pod> -n <ns> && kubectl describe nodes | claude "Pod stuck in Pending:
+1. Is this resource constraints, node selectors, or affinity rules?
+2. Which nodes were considered and why rejected?
+3. What's the quickest fix vs proper solution?"
+```
+
+#### Service 无法访问
+
+```bash
+kubectl get svc,endpoints -n <ns> && kubectl describe svc <svc> -n <ns> | claude "Service not reachable:
+1. Are there healthy endpoints?
+2. Is the selector matching pods correctly?
+3. Is it a network policy blocking traffic?
+Give me diagnostic commands for each possibility"
+```
+
+---
+
+## 实战案例：生产环境故障
+
+**背景**：电商平台，凌晨 3 点告警，结账服务返回 503。
+
+<Steps>
+1. **首次响应**
+
+   ```bash
+   claude "INCIDENT: checkout-service returning 503s, started 10 min ago.
+   Impact: 100% of checkout attempts failing.
+   Environment: AWS EKS production, us-east-1.
+   Recent changes: deployment 2 hours ago (new feature flag logic).
+   What's the fastest diagnostic path?"
+   ```
+
+2. **调查**（Claude 建议先检查 Pod）
+
+   ```bash
+   kubectl get pods -n checkout -l app=checkout-service
+   # 输出：5 个 Pod 中有 3 个处于 CrashLoopBackOff 状态
+
+   kubectl logs checkout-service-xxx --previous | tail -50 | claude "Analyze crash logs"
+   # Claude 识别出：feature flag 代码中的空指针异常
+   ```
+
+3. **修复**
+
+   ```bash
+   claude "Root cause identified: nil pointer in feature flag logic from recent deploy.
+   Options:
+   A) Rollback to previous version
+   B) Hotfix the nil check
+   Which is faster and safer at 3 AM?"
+   # Claude 建议：回滚（更快、经过验证的状态、明天再修复）
+
+   kubectl rollout undo deployment/checkout-service -n checkout
+   # 服务在 2 分钟内恢复
+   ```
+
+4. **评估**（第二天）
+
+   ```bash
+   claude "Create postmortem from this incident:
+   Timeline: 3:02 AM alert, 3:15 AM root cause found, 3:17 AM rollback, 3:19 AM resolved
+   Root cause: Feature flag nil pointer from commit abc123
+   Impact: 15 minutes checkout downtime
+   Format: Blameless, focused on prevention"
+   ```
+</Steps>
+
+**结果**：15 分钟 MTTR，清晰的事后报告，明确的预防措施。
+
+---
+
+## 日志分析与关联
+
+### 多服务日志关联
+
+```bash
+# 收集相关服务的日志
+kubectl logs -l app=api-gateway -n ingress --since=10m > gateway.log
+kubectl logs -l app=auth-service -n auth --since=10m > auth.log
+kubectl logs -l app=payment-service -n payment --since=10m > payment.log
+
+# 分析关联
+cat gateway.log auth.log payment.log | claude "Correlate these logs:
+1. Find the request flow for failed transactions
+2. Identify where the failure originates
+3. Are there patterns in timing or specific endpoints?
+4. Create a timeline of events"
+```
+
+### 日志模式检测
+
+```bash
+grep -E "ERROR|WARN|Exception" app.log | claude "Analyze error patterns:
+1. Cluster similar errors (group by type, not timestamp)
+2. What's the most frequent vs most severe?
+3. Which errors are correlated (same root cause)?
+4. Prioritize investigation order"
+```
+
+### PromQL 查询辅助
+
+```bash
+claude "I need a PromQL query to:
+- Show p99 latency for the payment-service
+- Group by endpoint
+- Alert if > 500ms for 5 minutes
+Include the alert rule YAML too"
+```
+
+---
+
+## 事件响应模式
+
+### 单人值班工作流（FIRE 实战）
+
+<Aside>
+凌晨 3 点，只有你一个人。这个工作流专为单人值班设计。
+</Aside>
+
+<Steps>
+1. **首次响应**（30 秒）
+
+   ```bash
+   claude "INCIDENT: [具体症状]
+   Context: [服务名], [环境], [开始时间]
+   Recent changes: [部署、基础设施变更、流量波动]
+   Current impact: [受影响用户百分比, 收入影响]
+   What are the 3 most critical things to check first?"
+   ```
+
+2. **调查**（2-5 分钟）
+
+   ```bash
+   # Claude 建议先检查 Pod 健康状态
+   kubectl get pods -n checkout | claude "Quick assessment of this pod list"
+
+   # 然后检查最近的日志
+   kubectl logs -l app=checkout --since=5m | head -100 | claude "Analyze for error patterns"
+   ```
+
+3. **修复**（需要审批）
+
+   ```bash
+   claude "Based on investigation:
+   - Root cause: [你的判断]
+   - Evidence: [关键发现]
+
+   Propose remediation options:
+   1. Quick mitigation (restore service)
+   2. Proper fix (address root cause)
+
+   CONSTRAINT: I need to approve before any action. Show exact commands."
+   ```
+
+4. **评估**（事后，非事中）
+
+   ```bash
+   claude "Create incident postmortem:
+   Timeline: [带时间戳的事件]
+   Format: Blameless, focus on systems not people
+   Include: Action items with owners"
+   ```
+</Steps>
+
+### 事件沟通
+
+#### 利益相关方更新生成器
+
+```bash
+claude "Generate incident update for stakeholders:
+
+Incident: Checkout service degradation
+Current status: Mitigated, monitoring
+Impact: 15 minutes of 30% checkout failures
+ETA to full resolution: 2 hours (proper fix in next deploy)
+
+Audience: Non-technical executives
+Tone: Professional, reassuring, factual
+Length: 3 sentences max"
+```
+
+**输出示例**：
+> 我们的结账服务经历了约 15 分钟的中断，影响了约 30% 的交易，目前已恢复。问题源于近期更新中的软件缺陷，已迅速回滚。我们将在下一个计划维护窗口部署永久修复，预计不会对客户产生影响。
+
+### 多 Agent 模式：事后分析
+
+<Aside type="tip">
+多 Agent 模式适合事后综合分析，不要在活跃事件中使用。
+</Aside>
+
+```bash
+# Agent 1：时间线重建
+claude "You are an incident timeline analyst.
+From these logs and Slack messages, reconstruct a precise timeline:
+[粘贴日志和通讯记录]"
+
+# Agent 2：根因分析
+claude "You are a root cause analyst.
+Given this timeline, perform 5-whys analysis:
+[粘贴 Agent 1 的时间线]"
+
+# Agent 3：预防建议
+claude "You are an SRE process improvement specialist.
+Given this root cause analysis:
+[粘贴 Agent 2 的根因分析]
+Output: Prioritized prevention measures, effort estimates"
+```
+
+### 实战数据：MTTR 下降
+
+| 指标 | 使用 Claude 之前 | 3 个月后 |
+|------|-----------------|---------|
+| 平均 MTTR | 45 分钟 | 18 分钟（下降 60%） |
+| 事后报告完成率 | 经常延迟或跳过 | 24 小时内完成率 95% |
+| 知识共享 | 工程师各自为政 | Claude 生成的运维手册全员可用 |
+
+**核心发现**：最大的收益不是速度——而是一致性和文档化。
+
+---
+
+## 基础设施即代码模式
+
+### Terraform 与 Claude
+
+#### Plan 审查
+
+```bash
+terraform plan -out=plan.txt && cat plan.txt | claude "Review this Terraform plan:
+1. Any dangerous changes? (data loss, downtime)
+2. Are the changes what we expect?
+3. Any missing changes we should add?
+4. Cost implications if visible"
+```
+
+#### 模块生成
+
+```bash
+claude "Generate a Terraform module for:
+- AWS ECS Fargate service
+- With ALB and target group
+- Auto-scaling based on CPU
+- Secrets from SSM Parameter Store
+
+Follow these conventions:
+- Use for_each over count
+- All resources tagged with var.tags
+- Output the service URL and ARN"
+```
+
+#### State 迁移辅助
+
+```bash
+claude "I need to move a resource to a different state file:
+Current state: terraform-prod/terraform.tfstate
+Resource: aws_s3_bucket.logs
+Target state: terraform-shared/terraform.tfstate
+
+What's the safest procedure? Include rollback steps."
+```
+
+#### 漂移检测
+
+```bash
+terraform plan -detailed-exitcode 2>&1 | tee drift.txt
+
+cat drift.txt | claude "Analyze this Terraform drift:
+1. What changed outside of Terraform?
+2. Is this drift expected (manual change) or concerning?
+3. Should we import the changes or revert to Terraform state?
+4. What's the safest remediation path?"
+```
+
+### Ansible 与 Claude
+
+#### Playbook 审查
+
+```bash
+cat playbook.yml | claude "Review this Ansible playbook:
+1. Idempotency issues?
+2. Security concerns?
+3. Error handling gaps?
+4. Performance optimizations?"
+```
+
+#### Role 生成
+
+```bash
+claude "Generate an Ansible role for:
+- Installing and configuring Nginx
+- SSL certificates via Let's Encrypt (certbot)
+- Hardened configuration (disable server tokens, etc.)
+- Log rotation
+
+Follow best practices:
+- Use handlers for service restarts
+- Variables in defaults/main.yml
+- Include molecule tests structure"
+```
+
+### GitOps 与 Claude
+
+#### ArgoCD Application 审查
+
+```bash
+cat application.yaml | claude "Review this ArgoCD Application:
+1. Sync policy appropriate for the environment?
+2. Resource health checks defined?
+3. Any sync wave ordering issues?
+4. Namespace and project permissions correct?"
+```
+
+#### Helm Values 生成
+
+```bash
+claude "Generate Helm values for deploying [application] to:
+- Environment: staging
+- Resources: Limited (cost-conscious)
+- Replicas: 2
+- Ingress: Internal only
+- Secrets: From external-secrets operator
+
+Base chart: [chart name]
+Include comments explaining each value"
+```
+
+---
+
+## 安全审查自动化
+
+### 基础设施安全扫描
+
+```bash
+tfsec . --format=json | claude "Analyze these security findings:
+1. Prioritize by severity and exploitability
+2. Which are false positives in our context?
+3. For real issues: what's the fix?
+4. Which can we ignore with a documented reason?"
+```
+
+### IAM 策略审查
+
+```bash
+cat iam-policy.json | claude "Review this IAM policy:
+1. Does it follow least privilege?
+2. Any overly permissive actions? (*, admin, etc.)
+3. Resource constraints appropriate?
+4. Suggest a more restrictive version that still works"
+```
+
+---
+
+## 安全边界与团队采纳
+
+### 成本意识
+
+| 模型 | 输入 (1M tokens) | 输出 (1M tokens) |
+|------|------------------|------------------|
+| Sonnet 4 | $3 | $15 |
+| Opus 4 | $15 | $75 |
+
+**典型 DevOps 会话**：20K-50K tokens = $0.10-$0.50
+
+**成本控制策略**：
+
+<Steps>
+1. 日常任务使用 Sonnet（默认）
+2. 复杂的多系统分析使用 Opus
+3. 对话过长时使用 `/compact` 压缩上下文
+4. 避免粘贴完整日志——先用 grep 筛选相关部分
+</Steps>
+
+<Aside type="caution">
+Claude 看不到你的云账单。在应用变更前，务必询问基础设施成本影响。
+</Aside>
+
+### 安全边界
+
+| 数据类型 | 为什么不行 | 替代方案 |
+|---------|-----------|---------|
+| API 密钥、Token | 可能被缓存或记录 | 使用占位符：`<API_KEY>` |
+| 生产环境密钥 | 安全风险 | 描述密钥类型，而非实际值 |
+| 客户 PII | 隐私合规要求 | 使用脱敏示例 |
+| 含 PII 的事件详情 | 法律责任 | 分享前先脱敏 |
+
+### Claude 的优势与局限
+
+<Tabs>
+  <TabItem label="Claude 擅长">
+    - 涉及多个系统交互的复杂根因分析
+    - 文档生成（事后报告、运维手册、操作流程）
+    - 学习新工具（不熟悉的云服务、新的 K8s 特性）
+    - 验证你的假设（作为第二意见）
+    - 批量操作（为多环境生成配置）
+  </TabItem>
+  <TabItem label="已知局限">
+    | 局限 | 应对方式 |
+    |------|---------|
+    | 无法实时获取集群状态 | 使用 K8s MCP 或粘贴 kubectl 输出 |
+    | 无法直接调用云 API | 使用 MCP 服务器或分享 CLI 输出 |
+    | 上下文窗口限制（约 100K） | 聚焦相关日志，而非全量导入 |
+    | 无持久记忆 | 使用 CLAUDE.md 保存项目上下文 |
+    | 存在幻觉风险 | 执行前务必验证命令 |
+  </TabItem>
+  <TabItem label="不建议使用的场景">
+    - 30 秒内的紧急决策（你的肌肉记忆更快）
+    - 高度机密的事件（数据泄露调查）
+    - 简单明了的修复（你已经知道答案了）
+    - 合规受限的环境（先确认是否允许使用 AI 工具）
+  </TabItem>
+</Tabs>
+
+---
+
+## 速查提示词
+
+### Kubernetes 症状
+
+| 症状 | 提示词 |
+|------|--------|
+| CrashLoopBackOff | `kubectl describe pod <pod> -n <ns> \| claude "Exit code meaning? 3 likely causes?"` |
+| OOMKilled | `kubectl top pods && describe pod \| claude "Leak or under-provisioned?"` |
+| ImagePullBackOff | `kubectl describe pod \| claude "Auth, network, or wrong image?"` |
+| Pending | `kubectl describe pod && describe nodes \| claude "Resource, selector, or affinity?"` |
+| Service 不可达 | `kubectl get svc,endpoints \| claude "Healthy endpoints? Selector matching?"` |
+
+### 云基础设施
+
+| 症状 | 提示词 |
+|------|--------|
+| 高延迟 | `[metrics] \| claude "Bottleneck location? Compute, network, or dependency?"` |
+| 磁盘满 | `df -h && du -sh /* \| claude "What's consuming space? Safe to delete?"` |
+| 连接拒绝 | `netstat -tlnp \| claude "Service listening? Port correct? Firewall?"` |
+| SSL 证书过期 | `openssl s_client -connect host:443 \| claude "Days until expiry? Renewal steps?"` |
+| DNS 问题 | `dig +trace domain \| claude "Where does resolution fail?"` |
+
+### Terraform
+
+| 任务 | 提示词 |
+|------|--------|
+| Plan 审查 | `terraform plan \| claude "Dangerous changes? Missing? Cost impact?"` |
+| 漂移分析 | `terraform plan -detailed-exitcode \| claude "What drifted? Expected? Fix?"` |
+| 模块请求 | `claude "Generate Terraform module for [resource] with [requirements]"` |
+
+### DevOps 相关 MCP 服务器
+
+| 服务器 | 用途 | 安装命令 |
+|--------|------|---------|
+| Kubernetes | 直接访问集群 | `npx -y @anthropic/mcp-kubernetes` |
+| AWS | AWS API 访问 | `npx -y @anthropic/mcp-aws` |
+| GCP | GCP API 访问 | `npx -y @anthropic/mcp-gcp` |
+
+配置位置：`~/.claude.json`（`"mcpServers"` 字段）

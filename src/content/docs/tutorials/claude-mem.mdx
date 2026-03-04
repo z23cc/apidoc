@@ -1,0 +1,670 @@
+---
+title: Claude-Mem 持久记忆
+description: 使用 Claude-Mem 插件实现跨会话持久记忆
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## 什么是 Claude-Mem？
+
+Claude-Mem 是 Claude Code 的**持久记忆压缩系统**插件。它通过自动捕获工具使用观察、生成语义摘要，并在未来会话中注入上下文，让 Claude 在会话结束或重连后仍能保持项目知识的连续性。
+
+<CardGrid>
+  <Card title="持久记忆" icon="open-book">
+    上下文在会话间自动保存和恢复，Claude 不再"失忆"。
+  </Card>
+  <Card title="全自动运行" icon="approve-check-circle">
+    安装后无需手动操作，自动捕获、处理和注入上下文。
+  </Card>
+  <Card title="隐私控制" icon="warning">
+    使用 &lt;private&gt; 标签排除敏感内容，精确控制存储内容。
+  </Card>
+  <Card title="多语言支持" icon="translate">
+    支持 28 种语言，包括中文、日文、法语、西班牙语等。
+  </Card>
+</CardGrid>
+
+---
+
+## 快速安装
+
+<Steps>
+1. 在 Claude Code 终端中运行以下命令：
+   ```bash
+   /plugin marketplace add thedotmack/claude-mem
+   /plugin install claude-mem
+   ```
+
+2. 重启 Claude Code。之前会话的上下文会自动出现在新会话中。
+</Steps>
+
+<Aside type="caution">
+Claude-Mem 已发布到 npm，但 `npm install -g claude-mem` 只安装 SDK/库，不会注册插件 hooks 或启动 worker 服务。始终使用 `/plugin` 命令安装。
+</Aside>
+
+### 系统要求
+
+| 组件 | 要求 |
+|------|------|
+| Node.js | 18.0.0 或更高 |
+| Claude Code | 最新版本（支持插件） |
+| Bun | JavaScript 运行时（自动安装） |
+| SQLite 3 | 持久存储（已捆绑） |
+
+### 从源码安装
+
+```bash
+git clone https://github.com/thedotmack/claude-mem.git
+cd claude-mem
+npm install
+npm run build
+npm run worker:start    # 手动启动（通常自动启动）
+npm run worker:status   # 检查状态
+```
+
+### 数据目录
+
+数据存储在 `~/.claude-mem/`：
+
+| 文件 | 说明 |
+|------|------|
+| `claude-mem.db` | SQLite 数据库 |
+| `.worker.pid` | PID 文件 |
+| `.worker.port` | 端口文件 |
+| `logs/worker-*.log` | 日志文件 |
+| `settings.json` | 配置文件 |
+
+可通过环境变量覆盖：`export CLAUDE_MEM_DATA_DIR=/custom/path`
+
+---
+
+## 工作原理
+
+```
+┌──────────────────────────────────────────────┐
+│ 会话启动 → 注入最近 10 个会话的上下文         │
+└──────────────────────────────────────────────┘
+                      ↓
+┌──────────────────────────────────────────────┐
+│ 用户输入 → 创建会话，保存用户提示             │
+└──────────────────────────────────────────────┘
+                      ↓
+┌──────────────────────────────────────────────┐
+│ 工具执行 → 捕获观察（Read, Write, Bash 等）   │
+└──────────────────────────────────────────────┘
+                      ↓
+┌──────────────────────────────────────────────┐
+│ Worker 处理 → 通过 Claude Agent SDK 提取学习  │
+└──────────────────────────────────────────────┘
+                      ↓
+┌──────────────────────────────────────────────┐
+│ 会话结束 → 生成摘要，准备下次注入              │
+└──────────────────────────────────────────────┘
+```
+
+### 核心组件
+
+| 组件 | 说明 |
+|------|------|
+| 4 个生命周期 Hooks | SessionStart、UserPromptSubmit、PostToolUse、Stop |
+| 智能安装器 | 缓存依赖检查的预 hook 脚本 |
+| Worker 服务 | Bun 管理的 HTTP API，端口 37777 |
+| SQLite 数据库 | 存储会话、观察和摘要，支持 FTS5 搜索 |
+| MCP 搜索工具 | 用自然语言查询历史上下文 |
+| Web 查看器 | 实时可视化界面（SSE + 无限滚动） |
+
+### 捕获的内容
+
+每次 Claude 使用工具时，claude-mem 都会捕获并提取：
+
+| 字段 | 说明 |
+|------|------|
+| Title | 简短描述发生了什么 |
+| Narrative | 详细说明 |
+| Facts | 关键学习要点（列表） |
+| Concepts | 相关标签和分类 |
+| Type | 分类（decision、bugfix、feature 等） |
+| Files | 读取或修改的文件 |
+
+### 会话摘要
+
+当 Claude 完成响应时（触发 Stop hook），自动生成包含以下内容的摘要：
+
+- **Request** — 你的请求
+- **Investigated** — Claude 探索了什么
+- **Learned** — 关键发现和洞察
+- **Completed** — 完成了什么
+- **Next Steps** — 下一步建议
+
+---
+
+## 渐进式披露
+
+上下文注入采用三层渐进式披露策略，高效利用 token：
+
+### Layer 1：索引显示（会话启动）
+
+显示观察标题和 token 成本估算，按时间顺序分组。
+
+**Token 成本**：约 50-200 tokens
+
+### Layer 2：按需详情（MCP 工具）
+
+自然语言查询：「我们修复了哪些 bug？」或「X 是怎么实现的？」
+
+Claude 自动调用 MCP 搜索工具获取完整详情。
+
+**Token 成本**：约 100-500 tokens/观察
+
+### Layer 3：完全回忆（代码访问）
+
+直接读取源文件获取完整信息。
+
+---
+
+## MCP 搜索工具
+
+Claude-Mem 提供 4 个 MCP 工具，遵循 token 高效的三层工作流：
+
+### 三层工作流
+
+```
+Search → 获取紧凑索引（~50-100 tokens/结果）
+    ↓
+Timeline → 获取感兴趣结果的上下文
+    ↓
+Get Observations → 仅获取过滤后 ID 的完整详情
+```
+
+与传统 RAG 方法相比，节省约 **10 倍** token。
+
+### search — 搜索记忆索引
+
+搜索记忆，返回带 ID 的紧凑索引。
+
+```bash
+search(query="authentication bug", type="bugfix", limit=10)
+```
+
+**参数**：`query`、`limit`、`offset`、`type`（bugfix/feature/decision/discovery/refactor/change）、`project`、`dateStart`、`dateEnd`、`orderBy`
+
+### timeline — 获取时间线上下文
+
+获取特定观察点周围的时间顺序视图。
+
+```bash
+timeline(anchor=12345, depth_before=5, depth_after=5)
+# 或基于搜索
+timeline(query="implemented JWT auth", depth_before=3, depth_after=3)
+```
+
+### get_observations — 获取完整详情
+
+按 ID 获取完整的观察详情，始终批量请求。
+
+```bash
+get_observations(ids=[123, 456, 789])
+```
+
+### 常见用例
+
+**调试问题**：
+```
+1. search(query="error database connection", type="bugfix", limit=10)
+2. timeline(anchor=312, depth_before=3, depth_after=3)
+3. get_observations(ids=[312, 489])
+```
+
+**理解决策**：
+```
+1. search(query="authentication", type="decision", limit=5)
+2. get_observations(ids=[相关ID])
+```
+
+---
+
+## Claude Desktop MCP 集成
+
+在 Claude Desktop 中通过 MCP 工具访问 claude-mem 记忆数据库。
+
+### 配置
+
+<Tabs>
+<TabItem label="macOS">
+
+编辑 `~/Library/Application Support/Claude/claude_desktop_config.json`：
+
+```json
+{
+  "mcpServers": {
+    "mcp-search": {
+      "command": "node",
+      "args": [
+        "/Users/YOUR_USERNAME/.claude/plugins/marketplaces/thedotmack/plugin/scripts/mcp-server.cjs"
+      ]
+    }
+  }
+}
+```
+
+</TabItem>
+<TabItem label="Windows">
+
+编辑 `%APPDATA%\Claude\claude_desktop_config.json`，使用相同格式但替换为 Windows 路径。
+
+</TabItem>
+</Tabs>
+
+重启 Claude Desktop 后，自然语言查询即可搜索过去的工作记录。
+
+---
+
+## 隐私标签
+
+使用 `<private>` 标签精确控制哪些内容不被持久化存储。
+
+### 使用方式
+
+```xml
+<private>
+此内容不会被存储到记忆中
+</private>
+```
+
+Claude 在当前会话中可以看到和使用该内容，但不会保存为观察记录。
+
+### 使用场景
+
+**敏感信息**：
+```xml
+请分析这个错误：
+<private>
+Error: Database connection failed
+Host: internal-db-prod.company.com
+User: admin_user
+</private>
+可能的原因是什么？
+```
+
+**临时上下文**：
+```xml
+<private>
+背景：这是明天要上线的紧急修复
+</private>
+帮我快速修复这个 bug。
+```
+
+### 技术细节
+
+| 被过滤 | 不被过滤 |
+|--------|----------|
+| 用户提示存储 | 会话摘要 |
+| 工具输入参数 | Claude 的响应 |
+| 工具响应输出 | |
+| 所有可搜索内容 | |
+
+<Aside>
+标签在存储时被剥离，而非从实时对话中移除。Claude 在会话中能看到包含 &lt;private&gt; 标签的完整内容。
+</Aside>
+
+---
+
+## 文件夹上下文文件
+
+Claude-Mem 可自动在项目文件夹中生成 `CLAUDE.md` 文件，提供目录级上下文。
+
+<Aside type="caution">
+此功能默认禁用。需在设置中启用。
+</Aside>
+
+### 启用方法
+
+编辑 `~/.claude-mem/settings.json`：
+
+```json
+{
+  "CLAUDE_MEM_FOLDER_CLAUDEMD_ENABLED": "true"
+}
+```
+
+### 生成内容
+
+每个文件夹的 `CLAUDE.md` 包含活动时间线：
+
+```markdown
+<claude-mem-context>
+# Recent Activity
+
+### Jan 4, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #1234 | 4:30 PM | 🔵 | 实现用户认证 | ~250 |
+| #1235 | " | 🔴 | 修复登录重定向 bug | ~180 |
+</claude-mem-context>
+```
+
+**用户内容保留**：`<claude-mem-context>` 标签外的内容在重新生成时不会被覆盖。
+
+**项目根目录排除**：包含 `.git` 目录的根目录不会自动生成，避免覆盖手写的项目文档。
+
+### 清理模式
+
+```bash
+# 预览（不实际删除）
+bun scripts/regenerate-claude-md.ts --clean --dry-run
+
+# 实际清理
+bun scripts/regenerate-claude-md.ts --clean
+```
+
+---
+
+## 记忆导出/导入
+
+在不同 claude-mem 安装间共享知识，自动防止重复。
+
+### 导出
+
+```bash
+# 导出与 Windows 相关的记忆
+npx tsx scripts/export-memories.ts "windows" windows-memories.json
+
+# 导出 bug 修复
+npx tsx scripts/export-memories.ts "bugfix" bugfixes.json
+
+# 按项目过滤
+npx tsx scripts/export-memories.ts "auth" auth.json --project=myapp
+```
+
+### 导入
+
+```bash
+npx tsx scripts/import-memories.ts windows-memories.json
+```
+
+重复导入时自动跳过已存在的记录。
+
+### 安全特性
+
+- 重复预防 — 不会重复导入已有记录
+- 事务性 — 全部成功或全部回滚
+- 只读导出 — 导出脚本以只读模式打开数据库
+- 依赖排序 — 先导入会话，再导入观察/摘要
+
+---
+
+## 手动恢复
+
+当 worker 崩溃或系统重启后，恢复卡在处理队列中的观察。
+
+### 使用 CLI 工具
+
+```bash
+# 交互式检查和恢复
+bun scripts/check-pending-queue.ts
+
+# 自动处理（无提示）
+bun scripts/check-pending-queue.ts --process
+
+# 限制处理会话数
+bun scripts/check-pending-queue.ts --process --limit 5
+```
+
+### 使用 HTTP API
+
+```bash
+# 检查队列状态
+curl http://localhost:37777/api/pending-queue
+
+# 触发恢复
+curl -X POST http://localhost:37777/api/pending-queue/process \
+  -H "Content-Type: application/json" \
+  -d '{"sessionLimit": 10}'
+```
+
+### 队列状态
+
+| 状态 | 说明 |
+|------|------|
+| pending | 已排队，等待处理 |
+| processing | 正在被 SDK agent 处理 |
+| processed | 成功完成 |
+| failed | 重试 3 次后失败 |
+
+处于 `processing` 状态超过 5 分钟视为卡住，自动重置为 `pending`。
+
+---
+
+## AI 提供商
+
+Claude-Mem 支持三种 AI 提供商进行观察提取：
+
+<Tabs>
+<TabItem label="Claude（默认）">
+
+使用 Claude Agent SDK，Claude Code 订阅用户的默认选择。
+
+```json
+{
+  "CLAUDE_MEM_PROVIDER": "claude",
+  "CLAUDE_MEM_MODEL": "sonnet"
+}
+```
+
+可用模型简写：`haiku`（快速）、`sonnet`（平衡，默认）、`opus`（最强）
+
+</TabItem>
+<TabItem label="Gemini（免费）">
+
+Google Gemini API，提供免费层级。
+
+```json
+{
+  "CLAUDE_MEM_PROVIDER": "gemini",
+  "CLAUDE_MEM_GEMINI_API_KEY": "your-api-key",
+  "CLAUDE_MEM_GEMINI_MODEL": "gemini-2.5-flash-lite"
+}
+```
+
+| 模型 | 免费 RPM | 说明 |
+|------|----------|------|
+| gemini-2.5-flash-lite | 10 | 默认推荐 |
+| gemini-2.5-flash | 5 | 更强能力 |
+| gemini-3-flash-preview | 5 | 最新模型 |
+
+<Aside type="tip">
+获取免费 API Key：访问 [Google AI Studio](https://aistudio.google.com)，无需信用卡。建议启用 billing 解锁更高速率限制（1000-4000 RPM）。
+</Aside>
+
+</TabItem>
+<TabItem label="OpenRouter">
+
+统一 API 访问 100+ 模型，包含多个免费模型。
+
+```json
+{
+  "CLAUDE_MEM_PROVIDER": "openrouter",
+  "CLAUDE_MEM_OPENROUTER_API_KEY": "sk-or-v1-your-key",
+  "CLAUDE_MEM_OPENROUTER_MODEL": "xiaomi/mimo-v2-flash:free"
+}
+```
+
+**推荐免费模型**：
+
+| 模型 | 参数 | 上下文 |
+|------|------|--------|
+| Xiaomi MiMo-V2-Flash | 309B (MoE) | 256K |
+| Gemini 2.0 Flash | — | 1M |
+| DeepSeek R1 | 671B | 64K |
+| Llama 3.1 70B | 70B | 128K |
+
+</TabItem>
+</Tabs>
+
+**提供商切换**：随时无需重启即可切换提供商。如果选择的提供商出错，自动回退到 Claude SDK。
+
+---
+
+## Cursor IDE 集成
+
+Claude-Mem 也支持 Cursor IDE，**无需 Claude Code 订阅**。
+
+### 安装方式
+
+<Tabs>
+<TabItem label="Cursor 用户（无 Claude Code）">
+
+```bash
+git clone https://github.com/thedotmack/claude-mem.git
+cd claude-mem && bun install && bun run build
+bun run cursor:setup    # 交互式设置向导
+```
+
+</TabItem>
+<TabItem label="Claude Code 用户">
+
+```bash
+/plugin marketplace add thedotmack/claude-mem
+/plugin install claude-mem
+claude-mem cursor install
+```
+
+</TabItem>
+</Tabs>
+
+### 常用命令
+
+| 命令 | 说明 |
+|------|------|
+| `bun run cursor:setup` | 交互式设置向导 |
+| `bun run cursor:install` | 安装 Cursor hooks |
+| `bun run cursor:uninstall` | 移除 Cursor hooks |
+| `bun run cursor:status` | 检查 hook 安装状态 |
+
+---
+
+## 模式系统
+
+Claude-Mem 通过模式系统适配不同工作流和语言。
+
+### 配置
+
+```json
+{
+  "CLAUDE_MEM_MODE": "code--zh"
+}
+```
+
+### 可用模式
+
+| 模式 | ID | 说明 |
+|------|-----|------|
+| Code（默认） | `code` | 标准软件开发模式 |
+| Code Chill | `code--chill` | 减少观察，仅记录重要内容 |
+| Email Investigation | `email-investigation` | 邮件分析模式 |
+
+### 多语言代码模式
+
+使用 `code--语言代码` 格式切换语言：
+
+| 语言 | 模式 ID |
+|------|---------|
+| 中文 | `code--zh` |
+| 日语 | `code--ja` |
+| 韩语 | `code--ko` |
+| 法语 | `code--fr` |
+| 德语 | `code--de` |
+| 西班牙语 | `code--es` |
+| 俄语 | `code--ru` |
+
+支持共 28 种语言。模式使用 `--` 分隔符实现继承，子模式覆盖父模式的特定配置。
+
+---
+
+## Endless Mode（Beta）
+
+实验性生物仿真记忆架构，大幅延长 Claude 的上下文保持能力。
+
+<Aside type="caution">
+Endless Mode 为实验功能，不包含在稳定版中。需手动切换到 beta 分支。
+</Aside>
+
+### 解决的问题
+
+标准 Claude Code 会话中，工具输出在上下文窗口中累积，约 50 次工具使用后上下文窗口填满（约 200k token），必须开新会话。这是 O(N&sup2;) 复杂度。
+
+### 工作原理
+
+Endless Mode 采用两层记忆系统：
+
+| 层级 | 存储位置 | 内容 |
+|------|----------|------|
+| 工作记忆 | 上下文窗口 | 压缩观察（每个约 500 tokens） |
+| 归档记忆 | 磁盘转录文件 | 完整工具输出（可搜索） |
+
+每次工具使用后，阻塞等待 worker 生成压缩观察，替换完整输出，将 O(N&sup2;) 转为 O(N)。
+
+### 启用方式
+
+```bash
+cd ~/.claude/plugins/marketplaces/thedotmack/
+git checkout beta/endless-mode
+npm install
+npm run worker:restart
+```
+
+---
+
+## 配置参考
+
+### 核心设置
+
+| 设置 | 默认值 | 说明 |
+|------|--------|------|
+| `CLAUDE_MEM_MODEL` | `sonnet` | AI 模型 |
+| `CLAUDE_MEM_PROVIDER` | `claude` | AI 提供商 |
+| `CLAUDE_MEM_MODE` | `code` | 活动模式 |
+| `CLAUDE_MEM_CONTEXT_OBSERVATIONS` | `50` | 注入的观察数量 |
+| `CLAUDE_MEM_WORKER_PORT` | `37777` | Worker 服务端口 |
+| `CLAUDE_MEM_SKIP_TOOLS` | `ListMcpResourcesTool,...` | 排除的工具 |
+
+### 系统设置
+
+| 设置 | 默认值 | 说明 |
+|------|--------|------|
+| `CLAUDE_MEM_DATA_DIR` | `~/.claude-mem` | 数据目录 |
+| `CLAUDE_MEM_LOG_LEVEL` | `INFO` | 日志级别 |
+
+---
+
+## 常见问题
+
+### Worker 服务不启动
+
+```bash
+npm run worker:status     # 检查状态
+npm run worker:logs       # 查看日志
+npm run worker:restart    # 重启
+lsof -i :37777           # 检查端口占用
+```
+
+### Web 查看器无法访问
+
+```bash
+curl http://localhost:37777/health    # 验证健康状态
+npm run worker:restart               # 重启 worker
+```
+
+### 没有上下文出现
+
+- 确认 worker 正在运行：`npm run worker:status`
+- 访问 `http://localhost:37777` 检查是否有观察记录
+- 验证 API key 配置正确
+
+### 安装缓存问题
+
+```bash
+rm ~/.claude/plugins/marketplaces/thedotmack/.install-version
+cd ~/.claude/plugins/marketplaces/thedotmack && npm install --force
+```

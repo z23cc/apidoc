@@ -157,9 +157,21 @@ If you get permission errors, use `sudo npm install -g @anthropic-ai/claude-code
 
 ## Step 3: Configure Environment Variables
 
-You'll need:
-- **API URL** (`ANTHROPIC_BASE_URL`): Your API endpoint
-- **Auth Token** (`ANTHROPIC_AUTH_TOKEN`): Your authentication key
+You'll need to obtain the following credentials from the relay station:
+
+- **API URL** (`ANTHROPIC_BASE_URL`): The relay station's API endpoint
+- **Auth Token** (`ANTHROPIC_AUTH_TOKEN`): A Key created in the **cc group** on the relay station
+
+<Steps>
+1. Log in to your relay station dashboard
+2. Navigate to the **Token / API Key** management page
+3. Click **Create Token** and select the **cc** group (dedicated Claude Code group)
+4. Copy the generated Key — this is your `ANTHROPIC_AUTH_TOKEN` value
+</Steps>
+
+<Aside type="caution">
+Make sure to create the Key under the **cc group**. Keys from other groups may not work properly with Claude Code.
+</Aside>
 
 ### Temporary (Current Session Only)
 

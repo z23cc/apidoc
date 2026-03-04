@@ -1,0 +1,495 @@
+---
+title: "Learning to Code with AI"
+description: "A guide for junior developers on learning to code effectively with AI assistance"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+AI can make you 3x more productive OR unemployable in 3 years. The difference is how you use it. This guide, based on academic research from 2023-2025 and educator feedback, helps junior developers learn effectively with AI assistance.
+
+---
+
+## Quick Self-Check
+
+Before diving in, answer honestly:
+
+| # | Question | Yes | No |
+|---|----------|-----|-----|
+| 1 | Can you explain the last code that AI generated for you? | | |
+| 2 | Have you debugged code without AI this week? | | |
+| 3 | Do you know WHY the solution works (not just THAT it works)? | | |
+| 4 | Could you write the same function without assistance? | | |
+| 5 | Do you know the AI's limitations on this type of problem? | | |
+
+| Score | Where You Are | Recommendation |
+|-------|--------------|----------------|
+| **0-2 yes** | Dependency risk -- you are outsourcing thinking | See "Breaking Dependency" section |
+| **3-4 yes** | On track -- room for optimization | See "Optimizing Your Flow" section |
+| **5 yes** | Augmented -- you are using AI correctly | See "Case Study" section |
+
+---
+
+## The Problem in 60 Seconds
+
+<Aside type="caution">
+AI is your GPS. Great for getting somewhere fast. Dangerous if you lose the ability to navigate without it. Truly useful when you understand the map AND use the GPS.
+</Aside>
+
+### The Skills Gap
+
+```
+Traditional learning:     Problem --> Struggle --> Understanding --> Solution
+AI-assisted (wrong):      Problem --> AI --> Solution --> ??? (no understanding)
+AI-assisted (right):      Problem --> Attempt --> AI guidance --> Understanding --> Solution
+```
+
+The struggle is not optional. It is where learning happens.
+
+### The "Vibe Coding" Trap
+
+Term coined by Andrej Karpathy (Feb 2025): coding by "fully giving in to the vibes" without understanding the generated code.
+
+**Symptoms**:
+- Accept All without reading diffs
+- Copy-paste errors without understanding root cause
+- Debug by asking AI for random changes until it works
+
+**Antidote**: The UVAL Protocol forces understanding before acceptance.
+
+---
+
+## The Reality of AI Productivity
+
+### The Productivity Curve (Not a Straight Line)
+
+| Phase | Timeline | Productivity | What Happens |
+|-------|----------|--------------|--------------|
+| **Wow Effect** | 0-2 weeks | ~0% gain | Excitement masks learning curve; prompting time offsets time saved |
+| **Targeted Gains** | 2-8 weeks | +20-50% | AI accelerates specific tasks you have learned to delegate |
+| **Sustainable Plateau** | 3-6 months | +20-30% | Stable gains, but only for developers with strong fundamentals |
+
+<Aside type="caution">
+Critical nuance: Studies show experienced developers (5+ years) see larger, sustained gains. Junior developers often see initial spikes followed by regression because speed without understanding creates technical debt. A 2026 RCT (Shen and Tamkin, Anthropic Fellows) measured a 17% reduction in skills acquisition when developers learned a new library with AI assistance, with no significant time savings.
+</Aside>
+
+### Where AI Helps (And Where It Hurts)
+
+| High-Gain Tasks | Low/Negative-Gain Tasks |
+|-----------------|-------------------------|
+| Boilerplate generation | Architecture decisions |
+| Test scaffolding | Domain-specific logic |
+| Refactoring known patterns | Deep debugging |
+| Documentation drafts | Fine-grained optimization |
+| Codebase onboarding | Security-critical code |
+| CRUD operations | Novel algorithm design |
+
+**The pattern**: AI excels at well-defined, repeatable tasks. It struggles with ambiguous problems requiring deep context or creative judgment.
+
+---
+
+## The Three Patterns
+
+Every developer using AI falls into one of three patterns:
+
+<CardGrid>
+  <Card title="Dependent" icon="warning">
+    Copy-paste without understanding, cannot debug AI code, anxiety without AI. Risk: unemployable.
+  </Card>
+  <Card title="Avoidant" icon="close">
+    Refuses AI "on principle", slower than peers, dismissive of tools. Risk: left behind.
+  </Card>
+  <Card title="Augmented" icon="approve-check">
+    Uses AI critically, understands everything, knows AI limits. Status: thriving.
+  </Card>
+</CardGrid>
+
+**Productivity trajectory by pattern**:
+
+| Pattern | 0-2 weeks | 2-8 weeks | 6+ months |
+|---------|-----------|-----------|-----------|
+| Dependent | +50% (illusory) | +20% | -10% (debt accumulates) |
+| Avoidant | -30% | -20% | 0% (no AI leverage) |
+| Augmented | +10% | +30-50% | +20-30% (sustainable) |
+
+---
+
+## The UVAL Protocol
+
+A systematic approach to using AI without losing your edge.
+
+| Step | Action | Why It Matters |
+|------|--------|----------------|
+| **U** -- Understand First | Think before asking AI | Ask better questions, catch wrong answers |
+| **V** -- Verify | Explain it back | Ensure you actually learned, not just copied |
+| **A** -- Apply | Transform, do not copy | Turn knowledge into skill through modification |
+| **L** -- Learn | Capture insights | Retain key discoveries for long-term memory |
+
+### U -- Understand First (The 15-Minute Rule)
+
+<Steps>
+1. **State the Problem** (2 min)
+
+   Write the problem in ONE sentence. If you cannot, you do not understand it yet.
+
+   ```
+   X "The code doesn't work"
+   O "The login form doesn't show validation errors when email is empty"
+   ```
+
+2. **Brainstorm Approaches** (5 min)
+
+   List 3 possible approaches, even if you are not sure they will work:
+
+   ```
+   1. Add client-side validation with JavaScript
+   2. Use HTML5 required attribute
+   3. Add server-side validation and return errors
+   ```
+
+3. **Identify Knowledge Gaps** (3 min)
+
+   What specifically do you NOT know?
+
+   ```
+   - I know I need validation, but I don't know how to display inline errors in React
+   - I've never used Zod before but it keeps coming up
+   ```
+
+4. **THEN Ask AI** (5 min)
+
+   Now your question is 10x better:
+
+   ```
+   "I'm building a React login form. I want to:
+    1. Validate email format client-side
+    2. Show inline error messages below the input
+    3. Use Zod for schema validation
+
+    I've tried using the HTML required attribute but need custom error messages.
+    What's the idiomatic React approach?"
+   ```
+</Steps>
+
+**Claude Code implementation**: Add to your CLAUDE.md:
+
+```markdown
+## Learning Mode
+Before generating code for me, ask:
+1. What approaches have I already considered?
+2. What specifically am I stuck on?
+3. What do I expect the solution to look like?
+
+If I skip these, remind me to think first.
+```
+
+### V -- Verify (Explain It Back)
+
+**The rule**: If you cannot explain the code to a colleague, you have not learned it.
+
+After AI generates code:
+1. Read every line out loud
+2. Explain what each part does
+3. Explain WHY it is done this way (not just what)
+4. Identify parts you do not understand
+5. Ask AI to explain those specific parts
+
+### A -- Apply (Transform, Do Not Copy)
+
+**The rule**: Never copy-paste AI code directly. Always modify something.
+
+| Action | Cognitive Load | Learning |
+|--------|---------------|----------|
+| Copy-paste | Zero | Zero |
+| Rename variables | Low | Some |
+| Add edge case | Medium | Good |
+| Refactor structure | High | Excellent |
+
+**Minimum viable modifications** -- always do at least one:
+1. **Rename** -- Change variable names to match your project conventions
+2. **Restructure** -- Extract a helper function, change iteration method
+3. **Extend** -- Add an edge case, validation, or error handling
+4. **Simplify** -- Remove features you do not need
+
+### L -- Learn (Capture the Insight)
+
+**The One-Thing Rule**: At the end of each coding session, capture ONE thing you learned. Not ten. One.
+
+```markdown
+## 2026-01-17
+**Learned**: Zod's `refine()` method for cross-field validation
+**Context**: Login form needed password != email check
+**Future me**: Use refine() when validation involves multiple fields
+```
+
+---
+
+## Configuring Learning Mode in Claude Code
+
+### CLAUDE.md Learning Configuration
+
+```markdown
+# Learning-First Configuration
+
+## My Learning Goals
+- I'm learning: [React hooks, TypeScript, system design, etc.]
+- My level: [beginner/intermediate] on these topics
+- I learn best when: [examples are shown first, concepts are explained, etc.]
+
+## Response Style
+- Always explain WHY, not just WHAT
+- After code blocks, ask "What questions do you have about this?"
+- Highlight concepts I should understand deeper
+- Point out common mistakes beginners make
+
+## Challenges
+- Suggest exercises to reinforce concepts after implementing
+- Point out edge cases I should consider
+- Ask me to predict output before showing it
+```
+
+### Learning Slash Commands
+
+| Command | Purpose | When to Use |
+|---------|---------|-------------|
+| `/explain` | Explain existing code | Built-in -- use on any confusing code |
+| `/learn:quiz` | Test your understanding | After implementing a new concept |
+| `/learn:alternatives` | Show other approaches | When you want to understand trade-offs |
+| `/learn:teach <concept>` | Step-by-step explanation | When learning something new |
+
+### The 70/30 Weekly Split
+
+| Activity | Time | AI Usage | Why |
+|----------|------|----------|-----|
+| **Core learning** (new concepts) | 70% | 30% AI | Struggle builds understanding |
+| **Practice/projects** (applying known skills) | 30% | 70% AI | Leverage what you already know |
+
+```
+Monday:    Learn new React pattern     (minimal AI)
+Tuesday:   Learn new React pattern     (minimal AI)
+Wednesday: Apply to project            (full AI assistance)
+Thursday:  Learn testing approach      (minimal AI)
+Friday:    Apply + ship                (full AI assistance)
+```
+
+<Aside type="tip">
+The key: Do not use AI heavily when learning NEW concepts. Use it heavily when applying concepts you already understand.
+</Aside>
+
+---
+
+## Breaking Dependency
+
+**For Dependent pattern developers**: You have been using AI as a crutch. Here is how to rebuild your foundation.
+
+### Week 1: The Cold Turkey Period
+
+**Goal**: Prove to yourself you can code without AI.
+
+| Day | Exercise | Duration |
+|-----|----------|----------|
+| 1-2 | Build a simple feature WITHOUT AI | 2 hours |
+| 3-4 | Debug an issue using only documentation | 1 hour |
+| 5 | Explain code you previously AI-generated | 30 min |
+
+**Expect this to feel slow and frustrating.** That is the learning happening.
+
+### Week 2: Guided Reintroduction
+
+| Day | Exercise | AI Role |
+|-----|----------|---------|
+| 1-2 | Ask AI to explain concepts, then implement yourself | Tutor |
+| 3-4 | Write code first, then ask AI for review | Reviewer |
+| 5 | Compare your solution to AI's, understand differences | Comparator |
+
+### Week 3-4: Balanced Usage
+
+Apply the UVAL protocol to every interaction.
+
+### Red Flags You Are Slipping
+
+| Sign | Action |
+|------|--------|
+| Copying without reading | Stop. Read every line first. |
+| Cannot explain what code does | Use `/explain` command |
+| Anxiety when AI unavailable | Practice 30 min daily without AI |
+| Failed interview questions | Focus on fundamentals without AI |
+
+---
+
+## Embracing AI Tools
+
+**For Avoidant pattern developers**: You have been avoiding AI. Here is why that hurts you and how to change.
+
+### Why Avoidance Is a Problem
+
+- Teams expect AI-assisted productivity
+- "Pure" coding is slower for routine tasks
+- Refusing tools signals inflexibility
+
+You are not cheating by using AI. You are being inefficient by not using it.
+
+### Week 1: Low-Stakes Introduction
+
+| Task | Why It Is Safe | Try It |
+|------|---------------|--------|
+| Generate boilerplate | Nobody learns from typing imports | "Generate React component boilerplate" |
+| Explain unfamiliar code | You would Google this anyway | `/explain this codebase` |
+| Write documentation | Documentation is not the core skill | "Document this function" |
+| Generate test cases | Tests verify YOUR understanding | "Generate test cases for this function" |
+
+### Mindset Shift
+
+**Old thinking**: "Using AI means I'm not a real developer."
+
+**New thinking**: "AI handles routine tasks so I can focus on architecture, design, and complex problem-solving."
+
+The best developers use every tool available. AI is a tool.
+
+---
+
+## Optimizing Your Flow
+
+**For Augmented pattern developers**: You are using AI well. Here is how to level up.
+
+### Predictive Prompting
+
+Before AI generates code, predict the approach:
+
+```
+My prediction: This will probably use reduce() with an accumulator
+Then compare to AI output -- learn from differences
+```
+
+### Teaching Mode
+
+Use AI to test your knowledge by teaching:
+
+```
+I'll explain how React hooks work. Correct my mistakes and fill gaps.
+
+useState stores state that persists between renders...
+```
+
+### Comparative Analysis
+
+Ask for multiple approaches, then choose:
+
+```
+Show me 3 ways to implement this:
+1. Using class components
+2. Using hooks
+3. Using a state management library
+
+Explain trade-offs of each.
+```
+
+This builds architectural thinking.
+
+---
+
+## 30-Day Progression Plan
+
+### Week 1: Foundations
+
+| Day | Activity | AI Usage |
+|-----|----------|----------|
+| 1-2 | Build simple feature WITHOUT AI | 0% |
+| 3 | Review: Explain your code out loud | 0% |
+| 4-5 | Refactor with AI review (not generation) | 20% |
+| 6 | Debug issue without AI | 0% |
+| 7 | Rest/reflection | -- |
+
+**Success criteria**: Can explain every line you wrote.
+
+### Week 2: Understanding
+
+| Day | Activity | AI Usage |
+|-----|----------|----------|
+| 1-2 | Ask AI to generate, explain EVERY line | 40% |
+| 3 | Write code, AI reviews, you fix | 30% |
+| 4-5 | AI explains new concept, you implement | 40% |
+| 6 | Quiz yourself on the week's concepts | 10% |
+| 7 | Rest/reflection | -- |
+
+**Success criteria**: Can modify AI-generated code confidently.
+
+### Week 3: Critical Usage
+
+| Day | Activity | AI Usage |
+|-----|----------|----------|
+| 1-2 | Ask for multiple approaches, choose best | 60% |
+| 3 | Find bugs in AI-generated code | 50% |
+| 4-5 | Complex feature with AI assistance | 60% |
+| 6 | Explain entire feature to rubber duck | 10% |
+| 7 | Rest/reflection | -- |
+
+**Success criteria**: Can identify when AI is wrong.
+
+### Week 4: Augmented
+
+| Day | Activity | AI Usage |
+|-----|----------|----------|
+| 1-5 | Real project work with UVAL protocol | 70% |
+| 6 | Review: What did you learn this week? | 10% |
+| 7 | Plan next learning goals | -- |
+
+**Success criteria**: Fast AND you understand everything.
+
+---
+
+## Red Flags Checklist
+
+| Red Flag | What Happens | Immediate Action |
+|----------|-------------|------------------|
+| Cannot start without AI | Outsourced problem decomposition | Code 30 min daily without AI |
+| Do not understand AI code | Copying without learning | Use `/explain` on EVERYTHING |
+| Cannot debug AI errors | Never learned debugging | Deliberately break code, fix manually |
+| Anxiety without AI | Emotional dependence | It is a tool, not a lifeline -- practice without |
+| Rejected in interviews | Fundamentals atrophied | Practice whiteboard problems without AI |
+| Task feels easy but you cannot explain it | Perception gap | After each task, explain the solution without looking at code |
+
+### Weekly Self-Audit
+
+Every Friday, ask:
+
+1. What did I learn this week that I did not know before?
+2. Could I have done this week's work without AI?
+3. Did I understand everything I shipped?
+4. Am I faster than last month? Am I smarter?
+
+<Aside type="caution">
+If you are faster but not smarter, you are building dependency.
+</Aside>
+
+---
+
+## UVAL Protocol Quick Reference
+
+```
+U -- UNDERSTAND FIRST
+    State --> Brainstorm --> Identify gaps --> THEN ask AI
+
+V -- VERIFY
+    Read every line --> Explain out loud --> Ask about gaps
+
+A -- APPLY
+    Never copy raw --> Rename/Restructure/Extend/Simplify
+
+L -- LEARN
+    One insight per session --> Log it --> Review later
+```
+
+### The 70/30 Rule
+
+```
+Learning new things:      70% struggle, 30% AI
+Applying known skills:    30% struggle, 70% AI
+```
+
+### Daily Minimums
+
+```
+[ ] 15 min: Code something without AI
+[ ] 5 min: Explain one piece of code out loud
+[ ] 1 min: Log one thing you learned
+```

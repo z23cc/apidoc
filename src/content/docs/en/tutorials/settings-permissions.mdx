@@ -1,0 +1,441 @@
+---
+title: "Settings & Permissions"
+description: "Complete guide to Claude Code configuration files, permission system, and precedence rules"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Claude Code provides a flexible configuration system covering team-shared settings, personal permission overrides, terminal personalization, and precedence rules. This tutorial covers how to configure and manage all of these.
+
+<CardGrid>
+  <Card title="Team Configuration" icon="setting">
+    Use settings.json to share team-level hooks, permissions, and environment variables.
+  </Card>
+  <Card title="Personal Permissions" icon="approve-check-circle">
+    Use settings.local.json for personal permission overrides.
+  </Card>
+  <Card title="Precedence Rules" icon="list-format">
+    Understand the priority hierarchy for settings and CLAUDE.md files.
+  </Card>
+  <Card title="Progressive Permissions" icon="rocket">
+    Gradually open tool access based on experience level.
+  </Card>
+</CardGrid>
+
+---
+
+## settings.json -- Team Configuration
+
+The `.claude/settings.json` file configures hooks, permissions, environment variables, and more. It is committed to version control and shared with the team.
+
+Available keys include: `hooks`, `env`, `allowedTools`, `autoApproveTools`, `dangerouslyAllowedPatterns`, `teammates`, `teammateMode`, `apiKeyHelper`, `spinnerVerbs`, `spinnerTipsOverride`, `plansDirectory`, `enableAllProjectMcpServers`.
+
+### Hooks Example
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/security-check.sh",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/auto-format.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/git-context.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+---
+
+## settings.local.json -- Personal Permissions
+
+Personal permission overrides (gitignored):
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(pnpm *)",
+      "Bash(npm test)",
+      "Edit",
+      "Write",
+      "WebSearch"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(sudo *)"
+    ],
+    "ask": [
+      "Bash(npm publish)",
+      "Bash(git push --force)"
+    ]
+  }
+}
+```
+
+### Permission Behavior
+
+| Category | Behavior |
+|----------|----------|
+| `allow` | Auto-approve without asking |
+| `deny` | Block completely |
+| `ask` | Prompt for confirmation |
+| (default) | Use default permission mode |
+
+---
+
+## Terminal Personalization
+
+Two settings let you customize the text that rotates in the terminal while the agent is working.
+
+### spinnerVerbs
+
+Replaces or extends the action words displayed in the spinner:
+
+```json
+{
+  "spinnerVerbs": {
+    "mode": "replace",
+    "verbs": ["Hacking…", "Spellcasting…", "Overthinking…", "Caffeinating…"]
+  }
+}
+```
+
+Use `"mode": "add"` to extend the default list instead of replacing it.
+
+### spinnerTipsOverride
+
+Customizes the tips shown in the spinner. Use `excludeDefault: true` to remove all built-in tips:
+
+```json
+{
+  "spinnerTipsOverride": {
+    "tips": ["Try /compact when context is full", "Use --print for CI pipelines"],
+    "excludeDefault": true
+  }
+}
+```
+
+<Aside type="note">
+These go in `~/.claude/settings.json` (personal, not committed) or `.claude/settings.json` (shared with team). Pure UX personalization with zero functional impact.
+</Aside>
+
+---
+
+## Permission Patterns
+
+### Matching Patterns
+
+| Pattern | Matches |
+|---------|---------|
+| `Bash(git *)` | Any git command |
+| `Bash(pnpm *)` | Any pnpm command |
+| `Edit` | All file edits |
+| `Write` | All file writes |
+| `WebSearch` | Web search capability |
+| `mcp__serena__*` | All Serena MCP tools |
+| `mcp__github__create_issue` | Specific MCP tool (format: `mcp__<server>__<tool>`) |
+| `Read(file_path:*.env*)` | Read matching file paths |
+| `Edit(file_path:*.pem)` | Edit matching file paths |
+| `Write(file_path:*.key)` | Write matching file paths |
+
+### Tool-Qualified Deny Format
+
+Lock down file access by path pattern, not just by tool name:
+
+```json
+{
+  "permissions": {
+    "deny": [
+      "Bash(command:*rm -rf*)",
+      "Bash(command:*terraform destroy*)",
+      "Read(file_path:*.env*)",
+      "Read(file_path:*.pem)",
+      "Read(file_path:*credentials*)",
+      "Edit(file_path:*.env*)",
+      "Edit(file_path:*.key)",
+      "Write(file_path:*.env*)",
+      "Write(file_path:*.key)"
+    ]
+  }
+}
+```
+
+<Aside type="caution">
+The `file_path:` prefix matches against the full path argument passed to Read/Edit/Write. Use glob patterns (`*`, `**`). This is more granular than the simple string form (e.g. `".env"`) which only matches exact file names.
+</Aside>
+
+<Aside type="caution">
+**Defense-in-depth**: `permissions.deny` has a known limitation -- background indexing may expose file contents via system reminders before permission checks apply. Store secrets outside the project directory for guaranteed protection.
+</Aside>
+
+---
+
+## allowedTools / autoApproveTools Configuration
+
+### autoApproveTools (Array Format)
+
+The simpler format that auto-approves listed tools without prompts:
+
+```json
+{
+  "allowedTools": [
+    "Read",
+    "Grep",
+    "Glob",
+    "WebFetch",
+    "TodoRead",
+    "TodoWrite",
+    "Task",
+    "Bash(git status *)",
+    "Bash(git diff *)",
+    "Bash(git log *)",
+    "Bash(pnpm typecheck *)",
+    "Bash(pnpm lint *)",
+    "Bash(pnpm test *)"
+  ]
+}
+```
+
+### Progressive Permission Levels
+
+<Tabs>
+  <TabItem label="Level 1 - Beginner">
+    Very restrictive, read-only operations:
+    ```json
+    {
+      "autoApproveTools": ["Read", "Grep", "Glob"]
+    }
+    ```
+  </TabItem>
+  <TabItem label="Level 2 - Intermediate">
+    Add git and package manager commands:
+    ```json
+    {
+      "autoApproveTools": [
+        "Read", "Grep", "Glob",
+        "Bash(git *)", "Bash(pnpm *)"
+      ]
+    }
+    ```
+  </TabItem>
+  <TabItem label="Level 3 - Advanced">
+    Include file editing and more tools:
+    ```json
+    {
+      "autoApproveTools": [
+        "Read", "Grep", "Glob", "WebFetch",
+        "Edit", "Write",
+        "Bash(git *)", "Bash(pnpm *)", "Bash(npm *)"
+      ]
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+<Aside type="danger">
+**Never use `--dangerously-skip-permissions`**
+
+Horror stories from the community include:
+- `rm -rf node_modules` followed by `rm -rf .` (path error)
+- `git push --force` to main unintentionally
+- `DROP TABLE users` in a poorly generated migration
+- Deletion of `.env` files with credentials
+
+**Always prefer granular `allowedTools` over disabling permissions entirely.**
+</Aside>
+
+<Aside type="tip">
+**Safe alternative**: For autonomous execution, run Claude Code inside Docker sandboxes or a similar isolated environment. The sandbox becomes the security boundary, making `--dangerously-skip-permissions` safe to use.
+</Aside>
+
+---
+
+## Dynamic Memory (Profile Switching)
+
+<Tabs>
+  <TabItem label="Git Stash">
+    Temporarily modify CLAUDE.md for specific tasks, then restore:
+    ```bash
+    # Before modification
+    git stash push -m "CLAUDE.md original" CLAUDE.md
+
+    # Claude modifies CLAUDE.md for specific task
+    # ... work ...
+
+    # After task
+    git stash pop
+    ```
+  </TabItem>
+  <TabItem label="Profile Library">
+    Maintain multiple profile files:
+    ```
+    ~/.claude/profiles/
+    ├── default.md          # General config
+    ├── security-audit.md   # For security audits
+    ├── refactoring.md      # For major refactoring
+    ├── documentation.md    # For writing docs
+    └── debugging.md        # For debug sessions
+    ```
+
+    **Profile switch script**:
+    ```bash
+    #!/bin/bash
+    # ~/.local/bin/claude-profile
+    PROFILE=$1
+    cp ~/.claude/profiles/${PROFILE}.md ./CLAUDE.md
+    echo "Switched to profile: $PROFILE"
+    ```
+
+    **Usage**:
+    ```bash
+    claude-profile security-audit
+    claude  # Launches with security profile
+    ```
+  </TabItem>
+  <TabItem label="Parallel Instances">
+    Run different configurations in separate terminals:
+    ```bash
+    # Terminal 1: Main project
+    cd ~/projects/myapp
+    claude  # Loads myapp's CLAUDE.md
+
+    # Terminal 2: Worktree for isolated feature
+    cd ~/projects/myapp-feature-x
+    # Different CLAUDE.md, isolated context
+    claude
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## Precedence Rules
+
+When memory files or settings conflict, Claude Code uses the following precedence hierarchy.
+
+### Settings Precedence
+
+```
+Highest Priority
+    |
+    v
+settings.local.json          Personal overrides
+    |
+    v
+.claude/settings.json        Project settings
+    |
+    v
+~/.claude/settings.json      Global defaults
+    |
+    v
+Lowest Priority
+```
+
+### CLAUDE.md Precedence
+
+```
+Highest Priority
+    |
+    v
+.claude/CLAUDE.md             Local (personal)
+    |
+    v
+/project/CLAUDE.md            Project (team)
+    |
+    v
+~/.claude/CLAUDE.md           Global (personal)
+    |
+    v
+Lowest Priority
+```
+
+---
+
+## Rules Auto-Loading
+
+Files in `.claude/rules/` are automatically loaded and combined at session start:
+
+```
+.claude/rules/
+├── code-conventions.md    ──┐
+├── git-workflow.md        ──┼──→  All loaded at session start
+└── architecture.md        ──┘
+```
+
+### Memory Loading Comparison
+
+Understanding when each memory method loads is critical for token optimization:
+
+| Method | When Loaded | Token Cost | Use Case |
+|--------|-------------|------------|----------|
+| `CLAUDE.md` | Session start | Always | Core project context |
+| `.claude/rules/*.md` | Session start (ALL files) | Always | Conventions that always apply |
+| `@path/to/file.md` | On-demand (when referenced) | Only when used | Optional/conditional context |
+| `.claude/commands/*.md` | Invocation only | Only when invoked | Workflow templates |
+| `.claude/skills/*.md` | Invocation only | Only when invoked | Domain knowledge modules |
+
+<Aside type="caution">
+`.claude/rules/` is NOT on-demand. Every `.md` file in that directory loads at session start, consuming tokens. Reserve it for always-relevant conventions, not rarely-used guidelines.
+</Aside>
+
+---
+
+## Path-Specific Rules
+
+Rules can target specific file paths using YAML frontmatter:
+
+```markdown
+---
+paths:
+  - "src/api/**/*.ts"
+  - "lib/handlers/**/*.ts"
+---
+
+# API Endpoint Conventions
+
+These rules only apply when working with API files:
+
+- All endpoints must have OpenAPI documentation
+- Use zod for request/response validation
+- Include rate limiting middleware
+```
+
+<Aside type="tip">
+This enables progressive context loading -- rules only appear when Claude works with matching files. Real-world example: Avo migrated a 600-line CLAUDE.md to ~15 path-scoped files, reporting sharper responses and easier maintenance across domains.
+</Aside>
+
+### How Matching Works
+
+- Patterns use glob syntax (same as `.gitignore`)
+- Multiple rules can match the same file (all are loaded)
+- Rules without `paths:` frontmatter always load

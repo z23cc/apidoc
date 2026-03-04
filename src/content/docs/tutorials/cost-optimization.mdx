@@ -1,0 +1,503 @@
+---
+title: "成本优化策略"
+description: "最小化 Claude Code API 成本的实用技巧，同时最大化开发效率"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+本指南介绍最小化 API 成本同时最大化生产力的实用技巧，包括模型选择、Token 节省技巧、RTK 工具、成本追踪和经济工作流模式。
+
+---
+
+## 模型选择矩阵
+
+选择合适的模型，平衡成本与能力。
+
+### OpusPlan 模式（推荐）
+
+- **规划阶段**：Opus 进行高层思考
+- **执行阶段**：Sonnet 进行实现
+- **两全其美**：战略思考 + 经济执行
+
+```bash
+# 激活 OpusPlan 模式
+/model opusplan
+
+# 进入 Plan 模式（Opus 规划）
+Shift+Tab × 2
+
+You: "Design a caching layer for the API"
+# Opus 创建详细的架构方案
+
+# 退出 Plan 模式（Sonnet 执行）
+Shift+Tab
+
+You: "Implement the caching layer following the plan"
+# Sonnet 以更低成本执行方案
+```
+
+---
+
+## Token 节省技巧
+
+<Aside type="note">
+Claude Code 使用懒加载——启动时不会"加载"整个代码库。文件按需读取。启动时主要的上下文消耗者是 CLAUDE.md 文件和自动加载的规则。
+</Aside>
+
+### CLAUDE.md Token 成本估算
+
+| 文件大小 | 大约 Token 数 | 影响 |
+|---------|-------------|------|
+| 50 行 | 500-1,000 tokens | 最小（推荐） |
+| 100 行 | 1,000-2,000 tokens | 可接受 |
+| 200 行 | 2,000-3,500 tokens | 上限 |
+| 500+ 行 | 5,000+ tokens | 考虑拆分 |
+
+<Aside type="caution">
+超越文件大小，包含非必要信息的上下文文件（风格指南、架构描述、通用约定）会增加**每会话 20-23% 的推理成本**——因为 Agent 会处理并执行每条指令。（Gloaguen 等，2026）
+</Aside>
+
+### 1. 保持 CLAUDE.md 精简
+
+```markdown
+# 差：臃肿的 CLAUDE.md（每次会话浪费 token）
+- 500+ 行指令
+- 多个 @includes 导入其他文件
+- 很少使用的准则
+
+# 好：精简的 CLAUDE.md
+- 仅包含必要的项目上下文（&lt;200 行）
+- 将专门规则移至 .claude/rules/（会话启动时自动加载）
+- 按关注点拆分：团队规则在项目 CLAUDE.md，个人偏好在 ~/.claude/CLAUDE.md
+```
+
+<Aside type="tip" title="研究发现">
+ETH Zürich 2026 年的研究（138 个基准测试，12 个仓库）显示：开发者手写的 CLAUDE.md 使 Agent 成功率提高 **+4%**，但 LLM 生成的文件使成功率降低 **-3%**。建议：仅包含构建/测试命令和项目特定工具。
+</Aside>
+
+### 2. 使用精确的文件引用
+
+```bash
+# 差：模糊请求（Claude 读取多个文件找上下文）
+"Fix the authentication bug"
+
+# 好：精确请求（Claude 只读取需要的内容）
+"Fix the JWT validation in @src/auth/middleware.ts line 45"
+```
+
+### 3. 主动 Compact
+
+```bash
+# 差：等到 90% 上下文
+/status  # Context: 92% - 太晚了，性能已下降
+
+# 好：在 70% 时 Compact
+/status  # Context: 72%
+/compact  # 释放上下文，保持性能
+```
+
+### 4. Agent 专业化
+
+```markdown
+---
+name: test-writer
+description: Generate unit tests (use for test generation only)
+model: haiku
+---
+
+Generate comprehensive unit tests with edge cases.
+```
+
+**好处**：Haiku 成本低于 Sonnet、聚焦上下文（仅测试）、更快执行。
+
+### 5. 批量处理相似操作
+
+```bash
+# 差：每个修复单独会话
+claude -p "Fix typo in auth.ts"
+claude -p "Fix typo in user.ts"
+claude -p "Fix typo in api.ts"
+
+# 好：在单个会话中批量处理
+claude
+You: "Fix typos in auth.ts, user.ts, and api.ts"
+# 单次上下文加载，多次修复
+```
+
+---
+
+## RTK 命令输出优化
+
+**RTK（Rust Token Killer）** 在 bash 命令输出到达 Claude 上下文之前进行过滤，在 Git、测试和开发工作流中实现 **60-90% 的 Token 减少**。
+
+### 安装
+
+```bash
+# 选项 1: Homebrew (macOS/Linux)
+brew install rtk-ai/tap/rtk
+
+# 选项 2: Cargo (所有平台)
+cargo install rtk
+
+# 选项 3: 安装脚本
+curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/main/install.sh | bash
+```
+
+### 验证过的 Token 节省
+
+| 命令 | 原始大小 | RTK 处理后 | 减少率 |
+|------|---------|-----------|-------|
+| `rtk git log` | 13,994 字符 | 1,076 字符 | **92.3%** |
+| `rtk git status` | 100 字符 | 24 字符 | **76.0%** |
+| `rtk git diff` | 15,815 字符 | 6,982 字符 | **55.9%** |
+| `rtk vitest run` | ~50,000 字符 | ~5,000 字符 | **90.0%** |
+| `rtk pnpm list` | ~8,000 字符 | ~2,400 字符 | **70.0%** |
+
+### 支持的命令
+
+<Tabs>
+  <TabItem label="Git">
+    ```bash
+    rtk git log
+    rtk git status
+    rtk git diff HEAD~1
+    ```
+  </TabItem>
+  <TabItem label="JS/TS">
+    ```bash
+    rtk vitest run           # 测试结果精简
+    rtk pnpm list            # 依赖树优化
+    rtk prisma migrate status # 迁移状态过滤
+    ```
+  </TabItem>
+  <TabItem label="Python/Go/Rust">
+    ```bash
+    rtk python pytest        # Python 测试输出精简
+    rtk go test              # Go 测试结果过滤
+    rtk cargo test           # Cargo 测试输出精简
+    rtk cargo clippy         # Lint 按严重性分组
+    ```
+  </TabItem>
+  <TabItem label="工具">
+    ```bash
+    rtk init                 # 初始化 RTK（hook 优先安装）
+    rtk tree                 # 项目结构精简
+    rtk gain                 # Token 节省仪表盘
+    rtk discover             # 发现优化机会
+    ```
+  </TabItem>
+</Tabs>
+
+### 真实影响
+
+```
+30 分钟 Claude Code 会话：
+- 无 RTK：~150K tokens（10-15 个 git 命令 @ ~10K tokens 每个）
+- 有 RTK：~41K tokens（10-15 个 git 命令 @ ~2.7K tokens 每个）
+- 节省：109K tokens（72.6% 减少）
+```
+
+### 集成策略
+
+<Steps>
+1. **Hook 优先安装**（推荐）
+
+   ```bash
+   rtk init  # 自动设置 PreToolUse hook
+   ```
+
+2. **CLAUDE.md 指令**（手动包装）
+
+   ```markdown
+   ## Token Optimization
+   Use RTK for all supported commands:
+   - `rtk git log` (92.3% reduction)
+   - `rtk git status` (76.0% reduction)
+   - `rtk git diff` (55.9% reduction)
+   ```
+
+3. **Skill**（自动建议）
+
+   检测高冗余命令，自动建议 RTK 包装。
+
+4. **Hook**（自动包装）
+
+   PreToolUse hook 拦截 bash 命令，在有益时应用 RTK 包装。
+</Steps>
+
+---
+
+## 成本追踪
+
+### 使用 /status 监控
+
+```bash
+/status
+
+# 输出:
+Model: Sonnet | Ctx: 45.2k | Cost: $1.23 | Ctx(u): 42.0%
+```
+
+### API 预算提醒
+
+```python
+# 如果直接使用 Anthropic API
+import anthropic
+
+client = anthropic.Anthropic()
+
+response = client.messages.create(
+    model="claude-sonnet-4-5",
+    max_tokens=1024,
+    messages=[...],
+    metadata={
+        "user_id": "user_123",
+        "project": "api_development"
+    }
+)
+
+# 记录每次请求的成本
+cost = calculate_cost(response.usage)
+if cost > BUDGET_THRESHOLD:
+    alert_team(f"Budget threshold exceeded: ${cost}")
+```
+
+### 会话成本限制
+
+```markdown
+## CLAUDE.md - Cost Awareness
+
+**Budget-conscious mode:**
+- Use Haiku for reviews and simple tasks
+- Reserve Sonnet for feature work
+- Use Opus only for critical decisions
+- Compact context at 70% to avoid waste
+- Close sessions after task completion
+```
+
+---
+
+## 经济工作流模式
+
+<CardGrid>
+  <Card title="模式 1：Haiku 测试 + Sonnet 实现" icon="setting">
+    ```bash
+    # 终端 1：测试生成（Haiku）
+    claude --model haiku
+    You: "Generate tests for the auth module"
+
+    # 终端 2：实现（Sonnet）
+    claude --model sonnet
+    You: "Implement the auth module"
+    ```
+  </Card>
+  <Card title="模式 2：渐进式模型升级" icon="up-caret">
+    ```bash
+    # 从 Haiku 开始
+    claude --model haiku
+    You: "Review this code for obvious issues"
+
+    # 发现复杂问题，升级到 Sonnet
+    /model sonnet
+    You: "Deep analysis of the race condition"
+
+    # 如果是架构问题，升级到 Opus
+    /model opus
+    You: "Redesign the concurrency model"
+    ```
+  </Card>
+</CardGrid>
+
+### 模式 3：上下文复用
+
+```bash
+# 构建一次上下文，多次复用
+claude
+You: "Analyze the authentication flow"
+# 上下文已构建：~20k tokens
+
+# 同一会话 - 上下文已加载
+You: "Now add 2FA to the authentication flow"
+# 无需重建上下文
+
+You: "Generate tests for the 2FA feature"
+# 仍然使用同一上下文
+
+# 完成后提交
+You: "Create commit for 2FA implementation"
+```
+
+---
+
+## Token 计算参考
+
+### 输入与输出 Token
+
+**输入 Token**：源代码上下文、对话历史、Memory 文件（CLAUDE.md）、Agent/Skill 指令
+
+**输出 Token**：Claude 的回复、生成的代码、解释
+
+### 粗略估算
+
+- 1 token 约等于 0.75 个英文单词
+- 1 token 约等于 4 个字符
+- 平均函数：50-200 tokens
+- 平均文件（500 LOC）：2,000-5,000 tokens
+
+### 成本计算示例
+
+```
+上下文加载:
+- 10 个文件 × 500 LOC × 4 tokens/LOC = 20,000 tokens
+- 对话历史: 5,000 tokens
+- CLAUDE.md: 1,000 tokens
+总输入: 26,000 tokens
+
+Claude 响应:
+- 生成代码: 500 LOC × 4 = 2,000 tokens
+- 解释: 500 tokens
+总输出: 2,500 tokens
+
+每次交互总成本: (26,000 + 2,500) tokens × 模型价格
+```
+
+### Sonnet 定价（近似）
+
+```
+输入: $3 / 百万 tokens
+输出: $15 / 百万 tokens
+
+会话成本:
+输入: 26,000 × $3 / 1,000,000 = $0.078
+输出: 2,500 × $15 / 1,000,000 = $0.0375
+总计: ~$0.12 每次交互
+```
+
+---
+
+## 成本优化清单
+
+```markdown
+日常实践:
+□ 使用 /status 监控上下文和成本
+□ 在 70% 上下文使用量时执行 Compact
+□ 任务完成后关闭会话
+□ 使用 permissions.deny 屏蔽敏感文件
+
+模型选择:
+□ 大多数工作默认使用 Sonnet
+□ 审查和简单修复使用 Haiku
+□ 架构和关键调试保留使用 Opus
+□ 尝试 OpusPlan 模式处理战略性工作
+
+上下文管理:
+□ 使用精确文件引用（@path/to/file.ts）
+□ 在单个会话中批量处理相似任务
+□ 对多个相关任务复用上下文
+□ 创建带聚焦上下文的专业化 Agent
+
+团队实践:
+□ 在团队 wiki 中分享成本有效的模式
+□ 按项目追踪支出
+□ 为高成本操作设置预算提醒
+□ 在回顾会议中审查成本指标
+```
+
+---
+
+## 替代方案：Copilot Pro+ 固定费率
+
+对于高频使用者，可以考虑 **cc-copilot-bridge** 通过 GitHub Copilot Pro+（$10/月固定费）路由请求，替代按 Token 计费。
+
+```bash
+# 切换到 Copilot 模式（固定费率）
+ccc  # 使用 Copilot Pro+ 订阅
+
+# 切回 Anthropic（按 Token 计费）
+ccd  # 使用 ANTHROPIC_API_KEY
+```
+
+**适用场景**：
+- 频繁触发速率限制
+- 月成本超过 $50-100
+- 已有 Copilot Pro+ 订阅
+
+---
+
+## 成本感知的 CI/CD
+
+```yaml
+# .github/workflows/claude-review.yml
+name: Claude Code Review
+on: [pull_request]
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      # 使用 Haiku 进行成本有效的审查
+      - name: Run Claude review
+        run: |
+          claude --model haiku \
+                 -p "Review changes for security and style issues" \
+                 --add-dir src/ \
+                 --output-format json > review.json
+
+      # 仅在发现问题时升级到 Sonnet
+      - name: Deep analysis (if needed)
+        if: contains(steps.*.outputs.*, 'CRITICAL')
+        run: |
+          claude --model sonnet \
+                 -p "Detailed analysis of critical issues found" \
+                 --add-dir src/
+```
+
+### 成本对比
+
+```
+Haiku 审查（每 PR）：~$0.02
+Sonnet 审查（每 PR）：~$0.10
+Opus 审查（每 PR）：~$0.50
+
+每月 100 个 PR：
+- 全部 Haiku：$2/月
+- 全部 Sonnet：$10/月
+- 全部 Opus：$50/月
+
+智能升级（Haiku → 10% PR 升级到 Sonnet）：
+- 基础成本：$2（Haiku 处理所有）
+- 升级成本：$1（Sonnet 处理 10%）
+- 总计：$3/月（vs $10 或 $50）
+```
+
+---
+
+## 成本与生产力的权衡
+
+<CardGrid>
+  <Card title="错误的经济观" icon="close">
+    - 花 2 小时手动调试以省 $1 API 成本
+    - 对复杂任务使用 Haiku，生成错误代码
+    - 过度 Compact 上下文，丢失有价值的历史
+  </Card>
+  <Card title="聪明的优化" icon="approve-check">
+    - 为任务选择合适的模型（时间节省 >> 成本）
+    - 投资于好的 Prompt 和 Memory 文件（减少迭代）
+    - 使用 Agent 自动化（一致、高效）
+  </Card>
+</CardGrid>
+
+### 何时积极优化
+
+- 高频操作（&gt;1000 请求/天）
+- 24/7 运行的自动化流水线
+- 大团队（成本随用户扩展）
+- 预算受限的项目
+
+### 何时生产力更重要
+
+- 关键 Bug 修复
+- 时间敏感的功能
+- 学习和实验
+- 复杂的架构决策

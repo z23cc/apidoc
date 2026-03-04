@@ -1,0 +1,221 @@
+---
+title: "骨架项目工作流"
+description: "使用经过验证的代码仓库作为新项目的脚手架"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+用经过实战验证的现有仓库作为脚手架来启动新项目，而不是从零开始。这套工作流帮助你快速搭建项目基础，同时保留成熟的架构模式和最佳实践。
+
+---
+
+## 适用场景
+
+<CardGrid>
+  <Card title="启动新项目" icon="rocket">
+    技术栈已确定，需要快速搭建项目骨架。
+  </Card>
+  <Card title="团队模式标准化" icon="setting">
+    在多个微服务之间统一架构模式和代码规范。
+  </Card>
+  <Card title="快速原型开发" icon="pencil">
+    架构决策已完成，需要尽快进入业务开发。
+  </Card>
+  <Card title="新人引导" icon="open-book">
+    为新成员提供可运行的参考项目，加速上手。
+  </Card>
+</CardGrid>
+
+<Aside type="caution">
+**不适用的场景：** 如果你正在探索未知技术栈，建议先用探索式开发（Vibe Coding）确定方向；如果项目需求过于特殊，现有模板可能适得其反。
+</Aside>
+
+---
+
+## 前置条件
+
+- Claude Code 已安装并配置完成
+- 具有参考仓库的 Git 访问权限
+- 对目标项目的需求有清晰的理解
+
+---
+
+## 完整流程
+
+### 阶段一：寻找并评估骨架
+
+不要从零开始。先找到一个与目标架构匹配的现有仓库。
+
+<Steps>
+1. **搜索候选仓库**
+
+   ```bash
+   # 让 Claude 帮你搜索参考仓库
+   claude -p "I need a skeleton for a Next.js 15 app with:
+   - App Router
+   - Prisma ORM with PostgreSQL
+   - tRPC for type-safe API
+   - Tailwind CSS
+   - Jest + Playwright testing
+
+   Search GitHub for well-maintained starter templates.
+   Evaluate the top 3 by: last commit date, stars, dependency freshness, test coverage."
+   ```
+
+2. **克隆并审计**
+
+   ```bash
+   git clone <candidate-repo> skeleton-eval
+   cd skeleton-eval
+   claude
+   ```
+
+   然后在 Claude 中执行审计：
+
+   ```
+   Audit this repository as a potential skeleton for our project:
+   1. List all dependencies and their versions (flag outdated ones)
+   2. Assess code quality: patterns, consistency, test coverage
+   3. Identify what we'd keep vs. what we'd remove
+   4. Flag any security concerns (vulnerable deps, exposed secrets)
+   5. Rate overall suitability (1-5) with specific justification
+   ```
+
+3. **多角度评估**（可选，用于深度分析）
+
+   ```
+   Run a multi-perspective evaluation of this skeleton:
+
+   Agent 1 (Security): Check for vulnerabilities, hardcoded secrets, unsafe patterns
+   Agent 2 (Architecture): Assess modularity, separation of concerns, scalability
+   Agent 3 (DX): Evaluate developer experience - setup time, documentation, tooling
+
+   Synthesize findings into a go/no-go recommendation.
+   ```
+</Steps>
+
+### 阶段二：Fork 并定制
+
+<Steps>
+1. **从骨架创建项目**
+
+   ```bash
+   mkdir my-project
+   cp -r skeleton-eval/. my-project/
+   cd my-project
+   rm -rf .git
+   git init
+   ```
+
+2. **用 Claude 精简和适配**
+
+   ```
+   Customize this skeleton for our project "Acme Dashboard":
+
+   1. Remove: example routes, demo data, sample tests
+   2. Keep: config structure, auth setup, database schema pattern, CI pipeline
+   3. Update: package.json (name, description, version 0.1.0)
+   4. Add: our CLAUDE.md with project conventions
+   5. Verify: pnpm install && pnpm build && pnpm test all pass after changes
+
+   Important: Don't break the working skeleton. Each removal should be followed
+   by a build check.
+   ```
+</Steps>
+
+### 阶段三：从骨架扩展到 MVP
+
+<Steps>
+1. **构建第一个真实功能**
+
+   ```
+   Using the patterns established in this skeleton, implement our first feature:
+   User Authentication (login + registration + password reset)
+
+   Follow the skeleton's existing patterns for:
+   - Route structure (match the example routes pattern)
+   - Service layer (match the existing service pattern)
+   - Test structure (match the example test pattern)
+   - Error handling (match the existing error pattern)
+
+   Create a task plan before starting implementation.
+   ```
+
+2. **验证骨架完整性**
+
+   ```
+   Now that we have one real feature, verify the skeleton still works:
+   1. Run full test suite
+   2. Check that the CI pipeline passes
+   3. Verify no skeleton patterns were broken
+   4. Confirm new code follows skeleton conventions consistently
+   ```
+</Steps>
+
+### 阶段四：记录并迭代
+
+将决策记录到 CLAUDE.md 中：
+
+```
+Update CLAUDE.md with:
+1. Which skeleton we started from (repo URL, commit hash)
+2. What we kept and why
+3. What we removed and why
+4. Any pattern deviations from the original skeleton
+5. Conventions we've added on top
+```
+
+---
+
+## 骨架扩展时间线
+
+| 阶段 | 第 1 天（骨架） | 第 1 周（MVP） | 第 1 个月（生产） |
+|------|----------------|---------------|------------------|
+| **路由** | 1 个示例路由 | 5 个真实路由 | 20+ 路由 |
+| **测试** | 1 个示例测试 | 30 个测试 | 200+ 测试 |
+| **配置** | 基础配置 | 基于环境变量的配置 | 多环境 + 密钥管理 |
+| **数据库** | SQLite / 本地数据库 | Docker PostgreSQL | 托管数据库 + 迁移 |
+| **CI/CD** | 无 | 基础 CI | 完整 CI/CD 流水线 |
+| **文档** | 仅 README | CLAUDE.md + ADR | 完整文档体系 |
+
+---
+
+## 实战案例：从骨架创建微服务
+
+```bash
+# 1. 克隆经过验证的骨架
+git clone https://github.com/example/express-prisma-starter skeleton
+cd skeleton && claude
+
+# 2. 审计（约 2 分钟）
+# "Audit this skeleton. Is it suitable for a billing microservice?"
+# Claude 输出依赖列表、模式分析和适用性评分
+
+# 3. 定制（约 5 分钟）
+# "Strip examples, rename to billing-service, add our CLAUDE.md"
+# Claude 移除示例代码、更新配置、添加项目上下文
+
+# 4. 第一个功能（约 30 分钟）
+# "Implement invoice creation endpoint following skeleton patterns"
+# Claude 创建路由、服务层、仓储层和测试，遵循骨架约定
+
+# 5. 验证（约 2 分钟）
+# "Run all tests, verify build, check skeleton patterns preserved"
+# Claude 验证全部通过、模式一致
+```
+
+---
+
+## 常见陷阱
+
+| 陷阱 | 症状 | 解决方案 |
+|------|------|---------|
+| **骨架过于复杂** | 精简时间比开发时间还长 | 选择更简单的骨架，或自行构建最小化版本 |
+| **依赖过时** | 安装时出现安全警告 | 克隆前检查最后提交日期（理想情况下 < 6 个月） |
+| **骨架模式被破坏** | 新代码偏离了骨架的约定 | 将骨架模式作为约束写入 CLAUDE.md |
+| **保留了无用代码** | 未使用的示例代码使项目杂乱 | 在阶段二彻底精简，每次删除后验证构建 |
+| **缺少文档** | 忘记了当初为什么选择该骨架 | 在阶段四立即记录到 CLAUDE.md |
+
+<Aside type="tip">
+骨架项目工作流的核心理念是"先借鉴，再定制"。与其花时间从零搭建基础设施，不如站在成熟项目的肩膀上，把精力集中在业务逻辑上。
+</Aside>

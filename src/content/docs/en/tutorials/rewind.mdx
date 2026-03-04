@@ -1,0 +1,178 @@
+---
+title: "Rewind Feature"
+description: "Master Claude Code's undo mechanism: rewind, checkpoints, and multi-level recovery strategies"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Rewind is Claude Code's undo mechanism. When Claude's changes go wrong, you can quickly restore to a previous state.
+
+---
+
+## Using Rewind
+
+Access the rewind feature through:
+
+<CardGrid>
+  <Card title="Keyboard Shortcut">
+    `Esc + Esc` (double-tap Escape)
+  </Card>
+  <Card title="Command">
+    Type the `/rewind` command
+  </Card>
+</CardGrid>
+
+Both methods open a scrollable **checkpoint list**.
+
+---
+
+## Four Rewind Actions
+
+From the checkpoint list, you can select one of four actions:
+
+| Action | Effect |
+|--------|--------|
+| **Restore code and conversation** | Revert both file changes and conversation to the selected point |
+| **Restore conversation only** | Keep current code, rewind conversation only |
+| **Restore code only** | Revert file changes, keep conversation |
+| **Summarize from here** | Compress conversation from selected point forward (frees space without reverting) |
+
+<Aside type="note">
+Key distinction: **Restore** = undo (reverts state). **Summarize** = compress (frees space without reverting). Checkpoints persist across sessions (30-day cleanup).
+</Aside>
+
+---
+
+## Limitations
+
+- Only works on Claude's changes (not manual edits)
+- Works within the current session
+- Git commits are **NOT** automatically reverted
+
+---
+
+## Recovery Ladder: Three Levels of Undo
+
+When things go wrong, you have multiple recovery options. Use the **lightest-weight** approach that solves your problem:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│               RECOVERY LADDER                           │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│   Level 3: Git Restore (nuclear option)                 │
+│   ─────────────────────────────────────                 │
+│   • git checkout -- <file>    (discard uncommitted)     │
+│   • git stash                 (save for later)          │
+│   • git reset --hard HEAD~1   (undo last commit)        │
+│   • Works for: Manual edits, multiple sessions          │
+│                                                         │
+│   Level 2: /rewind (session undo)                       │
+│   ─────────────────────────────                         │
+│   • Reverts Claude's recent file changes                │
+│   • Works within current session only                   │
+│   • Doesn't touch git commits                           │
+│   • Works for: Bad code generation, wrong direction     │
+│                                                         │
+│   Level 1: Reject Change (inline)                       │
+│   ────────────────────────────                          │
+│   • Press 'n' when reviewing diff                       │
+│   • Change never applied                                │
+│   • Works for: Catching issues before they happen       │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### When to Use Each Level
+
+| Scenario | Recovery Level | Command |
+|----------|----------------|---------|
+| Claude proposed bad code | Level 1 | Press `n` |
+| Claude made changes, want to undo | Level 2 | `/rewind` |
+| Changes committed, need full rollback | Level 3 | `git reset` |
+| Experimental branch went wrong | Level 3 | `git checkout main` |
+| Context corrupted, strange behavior | Fresh start | `/clear` + restate goal |
+
+<Aside type="tip">
+The `/rewind` command shows a list of changes to undo. You can **selectively** revert specific files rather than all changes.
+</Aside>
+
+---
+
+## Best Practice: Checkpoint Before Risk
+
+Before a risky operation:
+
+```
+You: Let's commit what we have before trying this experimental approach
+```
+
+This creates a git checkpoint you can always return to.
+
+---
+
+## Checkpoint Pattern: Safe Experimentation
+
+For systematic experimentation, use the checkpoint pattern to create safe restore points:
+
+<Steps>
+1. **Create checkpoint**
+   ```bash
+   git stash push -u -m "checkpoint-before-refactor"
+   # Saves all changes including untracked files
+   ```
+
+2. **Experiment freely**
+   - Try risky refactoring, architectural changes, etc.
+   - If it works -> commit normally
+   - If it fails -> restore checkpoint
+
+3. **Restore checkpoint**
+   ```bash
+   git stash list              # Find your checkpoint
+   git stash apply stash@{0}   # Restore without deleting
+   # or
+   git stash pop stash@{0}     # Restore and delete
+   ```
+</Steps>
+
+### Automated Checkpoint
+
+Create a Stop hook to auto-checkpoint on session end:
+
+```bash
+# .claude/hooks/auto-checkpoint.sh
+# See: examples/hooks/bash/auto-checkpoint.sh
+
+# Automatically creates git stash on session end
+# Naming: claude-checkpoint-{branch}-{timestamp}
+# Logs to: ~/.claude/logs/checkpoints.log
+```
+
+---
+
+## Common Workflows
+
+<CardGrid>
+  <Card title="Risky Refactor">
+    Checkpoint -> Try -> Commit or restore
+  </Card>
+  <Card title="A/B Testing Approaches">
+    Checkpoint -> Try A -> Restore -> Try B -> Compare
+  </Card>
+  <Card title="Incremental Migration">
+    Checkpoint -> Migrate piece -> Test -> Repeat
+  </Card>
+  <Card title="Prototype Exploration">
+    Checkpoint -> Experiment -> Discard cleanly
+  </Card>
+</CardGrid>
+
+### Benefits Over Branching
+
+| Feature | Checkpoints (git stash) | Branches |
+|---------|------------------------|----------|
+| Speed | Faster | Requires creating and switching |
+| Uncommitted changes | Preserved | Must commit or stash first |
+| Best for | Quick experiments | Long-term development |
+| Multi-file support | Yes | Yes |

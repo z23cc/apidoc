@@ -1,0 +1,353 @@
+---
+title: "AI Tool Ecosystem"
+description: "When to use Claude Code vs complementary AI tools and how to chain them for optimal workflows"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Claude Code excels at codebase-level contextual reasoning, but it is not a universal tool. This guide helps you understand when to use Claude Code versus complementary AI tools, and how to chain them together for optimal workflows.
+
+---
+
+## Core Philosophy: Augmentation, Not Replacement
+
+Claude Code excels at:
+- **Contextual reasoning** across entire codebases
+- **Multi-file implementation** with test integration
+- **Persistent memory** via CLAUDE.md files
+- **CLI automation** for CI/CD pipelines
+- **Agentic task completion** with minimal supervision
+
+What Claude Code does not do well (by design):
+- Real-time web search with source verification
+- Image generation
+- PowerPoint/slide generation
+- Audio synthesis
+- Browser-based prototyping
+
+**The goal is not to find "better" tools, but to chain the right tool for each step.**
+
+---
+
+## The Complementarity Matrix
+
+| Task | Claude Code | Better Alternative | Why |
+|------|-------------|-------------------|-----|
+| **Code implementation** | Best | - | Contextual reasoning + file editing |
+| **Deep research with sources** | Limited | Perplexity Pro | 100+ verified sources |
+| **Image to code** | Limited | Gemini 2.5+ | Superior visual understanding |
+| **Slide generation** | None | Kimi.com | Native PPTX export |
+| **Audio overview** | None | NotebookLM | Podcast-style synthesis |
+| **Browser prototyping** | None | v0.dev, Bolt | Live preview |
+| **IDE autocomplete** | None | Copilot, Cursor | Inline suggestions |
+
+---
+
+## 1. Perplexity AI (Research & Sourcing)
+
+### When to Use Perplexity Over Claude
+
+| Scenario | Use Perplexity | Use Claude |
+|----------|---------------|------------|
+| "What's the latest API for X?" | Best | Knowledge cutoff limitation |
+| "Compare 5 libraries for auth" | Cited sources | May hallucinate |
+| "Explain this error message" | Generic answer | Contextual answer |
+| "Implement auth in my codebase" | No file access | Full access |
+
+### Integration Pattern: Research to Spec to Code
+
+```
+1. PERPLEXITY (Deep Research)
+   "Research best practices for JWT refresh tokens
+    in Next.js 15. Include security considerations,
+    common pitfalls, and library recommendations."
+   → Output: 2000-word spec with sources
+
+2. CLAUDE CODE
+   "Implement JWT refresh tokens following spec.md.
+    Use the jose library as recommended."
+   → Output: Working implementation with tests
+```
+
+### Claude WebSearch vs Perplexity
+
+| Feature | Claude WebSearch | Perplexity Pro |
+|---------|-----------------|----------------|
+| Source count | ~5-10 | 100+ (Deep Research) |
+| Source verification | Basic | Full citations |
+| Best for | Quick lookups | Comprehensive research |
+| Cost | Included | $20/month Pro |
+
+<Aside type="tip">
+Use Claude WebSearch for quick factual checks. Use Perplexity Deep Research before any significant implementation that requires understanding the ecosystem.
+</Aside>
+
+---
+
+## 2. Google Gemini (Visual Understanding)
+
+### Developer Use Cases
+
+- UI mockup to HTML/CSS/React code (90%+ fidelity)
+- Diagram interpretation (flowcharts to Mermaid/code)
+- Screenshot debugging ("why does this look broken?")
+- Design token extraction (colors, spacing from images)
+
+### Integration Pattern: Visual to Code
+
+```
+1. GEMINI 2.5 PRO
+   Upload: Figma design screenshot
+   Prompt: "Convert to React component using Tailwind CSS"
+   → Output: JSX + Tailwind code
+
+2. CLAUDE CODE
+   "Refine this component for our Next.js project.
+    Add TypeScript types, use our Button component,
+    connect to auth context."
+   → Output: Production-ready component
+```
+
+---
+
+## 3. Kimi (PPTX & Long Document Generation)
+
+[Kimi](https://kimi.ai) is Moonshot AI's assistant, notable for native PPTX generation, 128K+ token context, and code-aware layouts.
+
+### Integration Pattern: Code to Presentation
+
+```
+1. CLAUDE CODE
+   "Generate a summary of all changes in the last
+    5 commits. Format as markdown with sections:
+    Overview, Key Changes, Breaking Changes, Migration."
+   → Output: changes-summary.md
+
+2. KIMI
+   "Create a 10-slide presentation from this summary
+    for non-technical stakeholders.
+    Use business-friendly language."
+   → Output: stakeholder-update.pptx
+```
+
+### Presentation Tool Comparison
+
+| Tool | Strengths | Best For |
+|------|-----------|----------|
+| **Kimi** | Native PPTX, code-aware | Technical decks |
+| **Gamma.app** | Beautiful templates | Business decks |
+| **Marp** | Markdown to slides | Developer decks |
+
+---
+
+## 4. NotebookLM (Synthesis & Audio)
+
+### Developer Use Cases
+
+- Upload 50+ files for unified understanding
+- Ask questions about your codebase
+- Generate audio overview for commute learning (10-15 minute "podcast")
+
+### Integration Pattern: Codebase to Audio Onboarding
+
+<Steps>
+1. **Export**: Use Claude Code to combine all docs into `combined-docs.md`
+2. **Upload to NotebookLM**: Add as source, click "Generate Audio Overview"
+3. **Back to Claude Code**: Dive deeper into specific flows based on audio notes
+</Steps>
+
+### NotebookLM MCP Integration
+
+Query your NotebookLM notebooks directly from Claude Code:
+
+```bash
+# Installation
+claude mcp add notebooklm npx notebooklm-mcp@latest
+
+# Configure profile
+export NOTEBOOKLM_PROFILE=standard  # minimal | standard | full
+```
+
+| Profile | Tools | Use Case |
+|---------|-------|----------|
+| `minimal` | 5 | Basic queries, token-constrained environments |
+| `standard` | 10 | **Recommended** -- queries + library management |
+| `full` | 16 | Advanced (browser control, cleanup, re-auth) |
+
+---
+
+## 5. Voice-to-Text Tools
+
+**Philosophy**: "Vibe coding" -- dictate intent, let AI implement
+
+Voice input delivers ~4x typing speed (~150 WPM vs ~40 WPM) with richer context.
+
+| Tool | Processing | Latency | Privacy | Price |
+|------|------------|---------|---------|-------|
+| **Wispr Flow** | Cloud | ~500ms | SOC 2 certified | $12/mo |
+| **Superwhisper** | Local | 1-2s | 100% offline | ~$50 one-time |
+| **MacWhisper** | Local | Variable | 100% offline | $49 one-time |
+
+---
+
+## 6. IDE-Based Tools (Cursor, Windsurf, Cline)
+
+### When IDE Tools Complement Claude Code
+
+| Scenario | Use IDE Tool | Use Claude Code |
+|----------|-------------|-----------------|
+| Quick inline edits | Faster | Context switch needed |
+| Autocomplete while typing | Essential | Not available |
+| Multi-file refactoring | Limited | Superior |
+| Understanding large codebase | Limited | Better context |
+| CI/CD automation | Manual | Native |
+
+### Hybrid Workflow
+
+```bash
+# Morning session (strategic)
+claude "Review the auth module and suggest improvements"
+
+# During coding (tactical)
+# In Cursor/VS Code with Copilot
+# Quick autocomplete, inline suggestions
+
+# Before commit (validation)
+claude "Review my changes and suggest tests"
+```
+
+### Multi-IDE Configuration Sync
+
+| Tool | Config File | Format |
+|------|-------------|--------|
+| Claude Code | `CLAUDE.md` | Markdown + @imports |
+| Cursor | `.cursorrules` | Plain markdown |
+| Codex/ChatGPT | `AGENTS.md` | AGENTS.md standard |
+| Copilot | `.github/copilot-instructions.md` | GitHub-specific |
+
+<Aside type="caution">
+Claude Code does **not** natively support AGENTS.md. Workaround: `ln -s AGENTS.md .claude/CLAUDE.md`
+</Aside>
+
+---
+
+## 7. UI Prototypers (v0, Bolt, Lovable)
+
+| Tool | Strengths | Stack | Best For |
+|------|-----------|-------|----------|
+| **v0.dev** | Shadcn/Tailwind | React | Component prototypes |
+| **Bolt.new** | Full app scaffold | Various | Quick MVPs |
+| **Lovable** | Design-to-code | React | Designer handoff |
+
+### Integration Pattern: Prototype to Production
+
+```
+1. V0.DEV
+   "A user profile card with avatar, stats,
+    and action buttons"
+   → Output: React + Shadcn component preview
+
+2. CLAUDE CODE
+   "Adapt this v0 component for our Next.js app:
+    Use existing Button, Avatar components,
+    add TypeScript types, connect to API."
+   → Output: Production-ready integrated component
+```
+
+---
+
+## 8. Workflow Orchestration
+
+### The Complete Pipeline
+
+```
+Planning Phase
+├─ Perplexity: Deep research → spec.md
+├─ Gemini: Diagram analysis → Mermaid + plan
+└─ NotebookLM: Doc synthesis → audio overview
+
+Implementation Phase
+├─ Claude Code: Multi-file implementation → working code + tests
+└─ IDE + Copilot: Inline autocomplete → polished code
+
+Delivery Phase
+├─ Claude Code: PR description
+└─ Kimi: Stakeholder presentation
+```
+
+---
+
+## 9. Cost & Subscription Strategy
+
+### Recommended Stacks
+
+<Tabs>
+  <TabItem label="Minimal Stack ($40-70/mo)">
+    - Claude Code (pay-per-use) -- $20-50
+    - Perplexity Pro -- $20
+    - Everything else: Free tiers
+  </TabItem>
+  <TabItem label="Balanced Stack ($80-110/mo)">
+    - Claude Code -- $30-50
+    - Perplexity Pro -- $20
+    - Gemini Advanced -- $20
+    - Cursor Pro -- $20
+    - Free: NotebookLM, Kimi
+  </TabItem>
+  <TabItem label="Power Stack ($120-150/mo)">
+    - Claude Code (heavy usage) -- $50-80
+    - Perplexity Pro -- $20
+    - Gemini Advanced -- $20
+    - Cursor Pro -- $20
+    - v0 Pro -- $20
+    - Free: NotebookLM, Kimi
+  </TabItem>
+</Tabs>
+
+### Cost Optimization Tips
+
+<Steps>
+1. Use Claude Code's Haiku model for simple tasks (`/model haiku`)
+2. Batch research sessions in Perplexity to maximize Deep Research
+3. Use free tiers for Gemini Flash, NotebookLM, Kimi
+4. Check context usage regularly (`/status`) to avoid waste
+5. Use Opus sparingly -- only for architectural decisions
+</Steps>
+
+---
+
+## 10. AI Coding Agents Matrix
+
+[coding-agents-matrix.dev](https://coding-agents-matrix.dev) provides an interactive comparison of 23 AI coding agents across 11 technical criteria (open source, MCP support, Skills, Commands, Plan Mode, etc.).
+
+| Matrix (Discovery) | This Guide (Mastery) |
+|---------------------|---------------------|
+| "Which agents exist?" | "How to use Claude Code effectively?" |
+| 23 agents x shallow | 1 agent x deep |
+| Technical specs | Practical workflows and templates |
+
+---
+
+## Quick Reference Card
+
+### Tool Decision Matrix
+
+| I need to... | Use |
+|--------------|-----|
+| Implement a feature | Claude Code |
+| Research before implementing | Perplexity Deep Research |
+| Convert design to code | Gemini → Claude |
+| Create a presentation | Claude → Kimi |
+| Understand new codebase | NotebookLM → Claude |
+| Rapid UI prototype | v0/Bolt → Claude |
+| Quick inline edits | IDE + Copilot |
+
+### Chaining Patterns
+
+```
+Research → Code:     Perplexity → Claude Code
+Visual → Code:       Gemini → Claude Code
+Prototype → Prod:    v0/Bolt → Claude Code
+Code → Slides:       Claude Code → Kimi
+Docs → Understanding: NotebookLM → Claude Code
+```

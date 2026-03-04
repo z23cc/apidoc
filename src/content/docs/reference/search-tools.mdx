@@ -1,0 +1,238 @@
+---
+title: "搜索工具速查"
+description: "rg、grepai、Serena 和 ast-grep 的快速选择参考"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Claude Code 中搜索工具的快速选择参考。涵盖 rg（ripgrep）、grepai、Serena 和 ast-grep——何时使用、如何对比，以及组合使用的工作流。
+
+---
+
+## 5 秒快速决策
+
+```
+知道确切文本？     → rg
+知道确切名称？     → rg 或 Serena
+知道概念？         → grepai
+知道结构？         → ast-grep
+需要依赖关系？     → grepai trace
+```
+
+<Aside type="tip">
+90% 的搜索从 `rg` 开始。只有当 rg 无法满足需求时，才升级到其他工具。
+</Aside>
+
+---
+
+## 速度 vs 智能
+
+```
+快速 ←────────────────────────────────→ 智能
+
+rg        Serena       ast-grep      grepai
+~20ms     ~100ms       ~200ms        ~500ms
+
+精确匹配   符号感知     结构匹配      语义理解
+```
+
+<CardGrid>
+  <Card title="rg (ripgrep)" icon="magnifying-glass">
+    最快。精确文本和正则模式匹配。零配置。
+  </Card>
+  <Card title="Serena" icon="seti:folder">
+    符号感知搜索。查找函数/类定义。会话记忆。
+  </Card>
+  <Card title="ast-grep" icon="seti:json">
+    AST 级模式匹配。不受格式影响地查找代码结构。
+  </Card>
+  <Card title="grepai" icon="star">
+    按含义语义搜索。调用图追踪，理解依赖关系。
+  </Card>
+</CardGrid>
+
+---
+
+## 使用场景
+
+| 任务 | 工具 | 命令 |
+|------|------|------|
+| 查找 TODO 注释 | `rg` | `rg "TODO"` |
+| 查找 login 函数 | `rg` / `Serena` | `rg "login"` 或 `serena find_symbol` |
+| 查找认证相关代码 | `grepai` | `grepai search "authentication"` |
+| 谁调用了 login？ | `grepai` | `grepai trace callers "login"` |
+| 获取文件结构 | `Serena` | `serena get_symbols_overview` |
+| 没有 try/catch 的 async | `ast-grep` | `ast-grep "async function $F"` |
+| React class 转 hooks | `ast-grep` | 迁移模式 |
+| 记住决定 | `Serena` | `serena write_memory` |
+
+---
+
+## 能力矩阵
+
+| 能力 | rg | grepai | Serena | ast-grep |
+|------|:--:|:------:|:------:|:--------:|
+| **精确匹配** | 是 | 否 | 是 | 是 |
+| **语义搜索** | 否 | 是 | 否 | 否 |
+| **调用图** | 否 | 是 | 否 | 否 |
+| **符号感知** | 否 | 否 | 是 | 否 |
+| **AST 模式** | 否 | 否 | 否 | 是 |
+| **会话记忆** | 否 | 否 | 是 | 否 |
+| **零配置** | 是 | 需配置 | 需配置 | 需配置 |
+
+---
+
+## 组合工作流
+
+以重构认证模块为例的 5 步实战工作流：
+
+<Steps>
+1. **发现**（grepai —— 语义搜索）
+
+   ```bash
+   grepai search "authentication flow"
+   ```
+
+2. **结构**（Serena —— 符号）
+
+   ```bash
+   serena get_symbols_overview --file auth.service.ts
+   ```
+
+3. **依赖**（grepai —— 调用图）
+
+   ```bash
+   grepai trace callers "login"
+   ```
+
+4. **模式**（ast-grep —— 结构匹配）
+
+   ```bash
+   ast-grep "async function login"
+   ```
+
+5. **验证**（rg —— 精确匹配）
+
+   ```bash
+   rg "validateSession" --type ts
+   ```
+</Steps>
+
+---
+
+## 常见错误
+
+| 错误做法 | 正确做法 |
+|---------|---------|
+| `grepai search "createSession"`（用语义工具搜确切文本） | `rg "createSession"` |
+| `rg "auth.*login.*session"`（用正则搜概念） | `grepai search "auth flow"` |
+| `rg + sed` 做重构 | `Serena find_symbol` |
+| 重构前不检查调用方 | 先用 `grepai trace callers` |
+
+<Aside type="caution">
+不要用 grepai 搜索精确文本——对于字面匹配，它比 rg 更慢且更不精确。不要用 rg 搜索概念——复杂的正则表达式脆弱且会遗漏语义匹配。
+</Aside>
+
+---
+
+## 升级路径
+
+```
+起点：rg（90% 的搜索）
+  |
+  需要理解含义？ → grepai
+  需要符号定义？ → Serena
+  需要 AST 匹配？ → ast-grep
+```
+
+### 何时从 rg 升级
+
+| 场景 | 升级到 | 原因 |
+|------|--------|------|
+| 搜索概念而非确切文本 | grepai | 语义理解 |
+| 需要找出所有调用方/被调用方 | grepai trace | 调用图分析 |
+| 只需要函数/类定义 | Serena | 符号级过滤 |
+| 需要匹配带变量名的代码模式 | ast-grep | AST 感知 |
+| 正则表达式假阳性太多 | grepai 或 Serena | 更高精度 |
+
+---
+
+## 工具配置
+
+<Tabs>
+  <TabItem label="rg (ripgrep)">
+    Claude Code 预装，无需配置。
+
+    ```bash
+    rg "pattern"                    # 基本搜索
+    rg "pattern" --type ts          # 按文件类型过滤
+    rg "pattern" -g "!node_modules" # 排除目录
+    rg "pattern" -C 3               # 显示 3 行上下文
+    ```
+  </TabItem>
+  <TabItem label="grepai">
+    语义搜索 MCP 服务器。
+
+    ```json
+    // .mcp.json
+    {
+      "mcpServers": {
+        "grepai": {
+          "command": "npx",
+          "args": ["-y", "grepai-mcp"]
+        }
+      }
+    }
+    ```
+
+    ```bash
+    grepai search "authentication flow"
+    grepai trace callers "login"
+    grepai trace callees "validateToken"
+    ```
+  </TabItem>
+  <TabItem label="Serena">
+    符号感知搜索 MCP 服务器，带会话记忆。
+
+    ```bash
+    # 初始索引
+    uvx --from git+https://github.com/oraios/serena serena project index
+
+    # 增量更新
+    serena project index --incremental --parallel 4
+    ```
+
+    ```bash
+    serena find_symbol --name "UserController"
+    serena get_symbols_overview --file auth.service.ts
+    serena write_memory "决定：使用 JWT 做认证"
+    serena read_memory
+    ```
+  </TabItem>
+  <TabItem label="ast-grep">
+    基于抽象语法树的模式匹配。
+
+    ```bash
+    # 安装
+    npm install -g @ast-grep/cli
+
+    # 查找没有错误处理的 async 函数
+    ast-grep "async function $F($$$) { $$$ }"
+
+    # 查找 React class 组件
+    ast-grep "class $C extends React.Component"
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## 快速对比表
+
+| 方面 | rg | grepai | Serena | ast-grep |
+|------|-----|--------|--------|----------|
+| **速度** | ~20ms | ~500ms | ~100ms | ~200ms |
+| **搜索类型** | 文本/正则 | 语义 | 符号 | AST 模式 |
+| **最适合** | 已知模式 | 未知代码、概念 | 定义、结构 | 代码迁移 |
+| **配置** | 无需 | MCP 配置 | MCP + 索引 | npm 安装 |
+| **假阳性** | 宽泛正则时可能较多 | 低 | 低 | 低 |

@@ -1,0 +1,165 @@
+---
+title: "语义锚点"
+description: "使用精确的技术术语引导 Claude 生成更高质量的代码"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+LLM 是在大量文本语料上训练的统计模式匹配器。使用**精确的技术术语**可以帮助 Claude 激活其训练数据中正确的模式，从而产出更高质量的代码。
+
+<CardGrid>
+  <Card title="精确导航" icon="magnifier">
+    技术术语就像 GPS 坐标，精确定位 Claude 的知识库。
+  </Card>
+  <Card title="减少歧义" icon="approve-check-circle">
+    具体的术语比模糊的描述能激活更准确的模式。
+  </Card>
+  <Card title="可复用" icon="puzzle">
+    将语义锚点写入 CLAUDE.md，在整个项目中一致使用。
+  </Card>
+  <Card title="可组合" icon="setting">
+    与 XML 标签结合使用，发挥更强大的效果。
+  </Card>
+</CardGrid>
+
+---
+
+## 为什么精确性很重要
+
+当你说"写干净的代码"时，Claude 可能生成数十种不同的解读。但当你说"遵循 SOLID 原则，使用依赖注入，按照 Clean Architecture 分层"时，你就将 Claude 锚定到了一个具体的、有充分文档记录的模式。
+
+<Aside type="tip">
+**核心洞察**：技术术语就像 Claude 知识的 GPS 坐标。越精确，导航就越准确。
+</Aside>
+
+---
+
+## 常用语义锚点对照表
+
+| 模糊表述 | 语义锚点 | 为什么更好 |
+|---------|---------|-----------|
+| "错误处理" | "面向铁路的编程（Railway Oriented Programming），使用 Either/Result 单子" | 激活函数式错误处理模式 |
+| "干净代码" | "SOLID 原则，尤其是 SRP 和 DIP" | 定向到具体的设计原则 |
+| "好的测试" | "TDD London School，由外向内的方法" | 指定测试方法论 |
+| "好的架构" | "六边形架构（端口与适配器）" | 命名一个具体的模式 |
+| "可读代码" | "尖叫架构（Screaming Architecture），使用表达意图的命名" | 触发特定的命名约定 |
+| "可扩展设计" | "CQRS + 事件溯源" | 激活分布式模式 |
+| "文档" | "arc42 模板结构" | 指定文档框架 |
+| "需求" | "EARS 语法（Easy Approach to Requirements Syntax）" | 指定需求格式 |
+| "API 设计" | "REST Level 3 + HATEOAS" | 指定成熟度级别 |
+| "安全" | "OWASP Top 10 缓解措施" | 激活安全知识 |
+
+---
+
+## 在 CLAUDE.md 中使用语义锚点
+
+将语义锚点添加到项目指令中：
+
+```markdown
+# 架构原则
+
+遵循以下模式：
+- **架构**：六边形架构（端口与适配器），清晰的领域边界
+- **错误处理**：面向铁路的编程 - 永不抛出异常，返回 Result<T, E>
+- **测试**：TDD London School - mock 协作者，测试行为而非实现
+- **文档**：ADR（架构决策记录）用于重要决策
+```
+
+<Aside type="tip">
+将语义锚点放入 CLAUDE.md 中，可以让每次会话都自动携带这些精确指令，无需重复输入。
+</Aside>
+
+---
+
+## 与 XML 标签结合
+
+语义锚点与 XML 结构化提示词结合使用效果更强大：
+
+```xml
+<instruction>
+  按照领域驱动设计（Evans）重构用户服务
+</instruction>
+
+<constraints>
+  - 应用六边形架构（端口与适配器）
+  - 使用 Repository 模式进行持久化
+  - 实现面向铁路的编程进行错误处理
+  - 遵循 CQRS 进行读写分离
+</constraints>
+
+<quality_criteria>
+  - 尖叫架构：包结构揭示意图
+  - 每个类遵循单一职责原则
+  - 依赖倒置：依赖于抽象
+</quality_criteria>
+```
+
+---
+
+## 按领域分类的语义锚点
+
+<Tabs>
+  <TabItem label="测试">
+    - **TDD London School**（模拟派）vs **Chicago School**（经典派）
+    - **基于属性的测试**（QuickCheck 风格）
+    - **变异测试**（PIT, Stryker）
+    - **BDD Gherkin 语法**（Given/When/Then）
+  </TabItem>
+  <TabItem label="架构">
+    - **六边形架构**（端口与适配器）
+    - **Clean Architecture**（洋葱层）
+    - **CQRS + 事件溯源**
+    - **C4 模型**（上下文、容器、组件、代码）
+  </TabItem>
+  <TabItem label="设计模式">
+    - **GoF 模式**（指定具体的：策略、工厂、观察者...）
+    - **DDD 战术模式**（聚合、仓储、领域事件）
+    - **函数式模式**（Monad、Functor、Railway）
+  </TabItem>
+  <TabItem label="需求">
+    - **EARS**（Easy Approach to Requirements Syntax）
+    - **用户故事映射**（Jeff Patton）
+    - **待完成的工作框架**（Jobs-to-be-Done）
+    - **BDD 场景**
+  </TabItem>
+</Tabs>
+
+---
+
+## 实战演练
+
+<Steps>
+1. **识别模糊表述**
+
+   找出你常用的模糊描述，例如"写好的代码"、"处理错误"、"设计好的 API"。
+
+2. **替换为具体锚点**
+
+   将"写好的代码"替换为"遵循 SOLID 原则，应用 Martin Fowler 的重构目录，特别是提取方法（Extract Method）和用多态替代条件（Replace Conditional with Polymorphism）"。
+
+3. **写入 CLAUDE.md**
+
+   将常用的锚点放入项目的 CLAUDE.md 文件中，确保每次会话都能使用。
+
+4. **在提示中应用**
+
+   将锚点嵌入 XML 标签中使用，让 Claude 精确理解你的意图。
+</Steps>
+
+---
+
+## 进阶技巧
+
+<Aside type="tip">
+当 Claude 生成的代码过于通用时，尝试添加更具体的锚点。
+
+**之前**："使用干净的代码"
+
+**之后**："应用 Martin Fowler 的重构目录，特别是 Extract Method 和 Replace Conditional with Polymorphism。"
+
+效果会有显著提升。
+</Aside>
+
+<Aside type="note">
+语义锚点的概念由 Alexandre Soyer 提出。完整目录参见 [LLM-Coding/Semantic-Anchors](https://github.com/LLM-Coding/Semantic-Anchors)（Apache-2.0 许可证）。
+</Aside>

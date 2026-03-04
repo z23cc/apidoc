@@ -1,0 +1,330 @@
+---
+title: "团队 AI 指令管理"
+description: "使用基于角色的模块化方法在多人团队中管理 CLAUDE.md"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+在多人团队中管理 AI 指令（CLAUDE.md、.cursorrules）是一个容易被忽视但日益重要的问题。本教程介绍 **基于角色的模块化组装** 方案：共享模块 + 个人配置文件 + 自动化组装器，系统性地解决指令碎片化问题。
+
+**适用场景：** 5+ 开发者团队、使用多种 AI 工具（Claude Code + Cursor/Windsurf）、混合操作系统。
+
+**无需使用：** 个人开发者、工具和系统统一的小团队、短期项目（< 3 个月）。
+
+---
+
+## 问题：N x M x P 的碎片化
+
+当团队规模增长时，AI 指令会迅速碎片化：
+
+| 因素 | 可能的值 | 示例 |
+|------|---------|------|
+| **N 个开发者** | 5-20 | Alice、Bob、Charlie... |
+| **M 种工具** | 2-4 | Claude Code、Cursor、Windsurf、Copilot |
+| **P 种操作系统** | 2-3 | macOS、Linux、WSL |
+
+**变体总数：** N x M x P = 5 x 3 x 2 = **30 种可能的配置**。
+
+如果没有系统化管理：
+
+```
+第 1 周：团队商定了统一的 CLAUDE.md
+第 3 周：Alice 本地加了 TypeScript 严格模式规则
+第 5 周：Bob 复制了 Alice 的文件，删掉了一半规则
+第 8 周：新人 Charlie 拿到了 Bob 的过时版本
+第 12 周：5 个开发者，5 份不同的 CLAUDE.md，没人知道哪个才是权威版本
+```
+
+<Aside type="caution">
+**根本原因：** CLAUDE.md 被当作一个整体文件来管理，而不是一组可组合的配置。
+</Aside>
+
+---
+
+## 架构总览
+
+```
+profiles/                    modules/
+├── alice.yaml               ├── core-standards.md
+├── bob.yaml                 ├── git-workflow.md
+├── charlie.yaml             ├── typescript-rules.md
+│                            ├── test-conventions.md
+│                            ├── macos-paths.md
+│                            ├── linux-paths.md
+│                            ├── cursor-rules.md
+│                            └── communication-verbose.md
+│
+├── skeleton/
+│   └── claude-skeleton.md   ← 带 {{MODULE:name}} 占位符的模板
+│
+└── sync-ai-instructions.ts  ← 读取配置 → 注入模块 → 写入输出
+        │
+        ▼
+output/
+├── alice/CLAUDE.md          ← 生成的文件（只读）
+├── bob/CLAUDE.md
+└── charlie/CLAUDE.md
+```
+
+**流程：** 配置文件（YAML）+ 骨架（模板）+ 模块（片段）→ 组装器 → 生成的 CLAUDE.md
+
+---
+
+## 阶段一：审计现有 CLAUDE.md
+
+**目标：** 将每一行分类为通用、条件或个人。
+
+```markdown
+# 审计模板
+
+## 通用（所有开发者、所有工具）
+- 架构：六角形架构
+- 测试：PR 前必须通过
+- 命名：文件使用 kebab-case
+
+## 条件（取决于工具或操作系统）
+- Cursor：使用 @filename 语法 → 模块：cursor-rules
+- macOS 路径：/opt/homebrew → 模块：macos-paths
+- Linux 路径：/usr/local → 模块：linux-paths
+
+## 个人（个体偏好）
+- 风格：详细解释 → 配置文件偏好
+- 语言：中文注释 → 配置文件偏好
+```
+
+<Aside type="tip">
+**典型分布：** 60% 通用、25% 条件、15% 个人。
+</Aside>
+
+---
+
+## 阶段二：提取模块
+
+**目标：** 每个主题一个 `.md` 文件。
+
+```
+modules/
+├── core-standards.md         # 架构、命名、模式（所有人）
+├── git-workflow.md           # Git 规范（所有人）
+├── typescript-rules.md       # TS 严格配置（如果用 TypeScript）
+├── test-conventions.md       # 测试模式（所有人）
+├── macos-paths.md            # macOS 特有路径（如果用 macOS）
+├── linux-paths.md            # Linux 路径（如果用 Linux）
+├── cursor-rules.md           # Cursor 特有规则（如果用 Cursor）
+└── communication-verbose.md  # 详细说明风格（如果偏好）
+```
+
+**模块格式**（每个模块是独立的 Markdown 片段）：
+
+```markdown
+<!-- modules/typescript-rules.md -->
+## TypeScript Rules
+
+- Use strict mode: "strict": true in tsconfig
+- Prefer type over interface for unions
+- No any -- use unknown + type guards
+- Zod for runtime validation at boundaries
+```
+
+**编写原则：**
+
+| 原则 | 说明 |
+|------|------|
+| 自包含 | 模块之间不要有交叉引用 |
+| 适中长度 | 15-50 行为最佳 |
+| 领域命名 | 按功能领域命名，而非按受众 |
+| 单一职责 | 一个模块 = 一个变更原因 |
+
+---
+
+## 阶段三：创建开发者配置文件
+
+**目标：** 每个开发者一个 YAML，列出其模块。
+
+```yaml
+# profiles/alice.yaml
+name: "Alice"
+os: "macos"
+tools:
+  - claude-code
+  - cursor
+communication_style: "concise"
+modules:
+  core:
+    - core-standards
+    - git-workflow
+    - typescript-rules
+    - test-conventions
+  conditional:
+    - macos-paths          # os: macos 时自动包含
+    - cursor-rules         # 工具列表含 cursor 时自动包含
+preferences:
+  language: "english"
+```
+
+**配置文件规则：**
+- `core` 模块：所有人都包含（团队标准）
+- `conditional` 模块：根据 `os` 和 `tools` 字段自动包含
+- `preferences`：个人设置，注入到骨架变量中
+
+---
+
+## 阶段四：编写组装器脚本
+
+**目标：** 读取配置文件 → 注入模块 → 输出 CLAUDE.md。
+
+```typescript
+// sync-ai-instructions.ts（简化版 ~30 行）
+import { readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { parse } from 'yaml';
+import { join } from 'path';
+
+const profile = parse(readFileSync(`profiles/${process.argv[2]}.yaml`, 'utf8'));
+let skeleton = readFileSync('skeleton/claude-skeleton.md', 'utf8');
+
+// 从配置文件收集模块
+const modules = [...profile.modules.core, ...profile.modules.conditional];
+
+// 用模块内容替换占位符
+for (const mod of modules) {
+  const content = readFileSync(`modules/${mod}.md`, 'utf8');
+  skeleton = skeleton.replace(`{{MODULE:${mod}}}`, content);
+}
+
+// 移除未使用的占位符
+skeleton = skeleton.replace(/\{\{MODULE:\w+\}\}/g, '');
+
+// 写入输出
+const outDir = `output/${process.argv[2]}`;
+mkdirSync(outDir, { recursive: true });
+writeFileSync(join(outDir, 'CLAUDE.md'), skeleton);
+console.log(`Generated ${outDir}/CLAUDE.md (${modules.length} modules)`);
+```
+
+**运行方式：**
+
+```bash
+npx ts-node sync-ai-instructions.ts alice   # 单个开发者
+npx ts-node sync-ai-instructions.ts --all   # 生成所有配置
+npx ts-node sync-ai-instructions.ts --check # 验证无漂移
+```
+
+---
+
+## 阶段五：CI 漂移检测
+
+**目标：** 当输出文件与配置文件/模块不同步时及时发现。
+
+```yaml
+# .github/workflows/ai-instructions-check.yml
+name: AI Instructions Drift Check
+on:
+  push:
+    paths:
+      - 'modules/**'
+      - 'profiles/**'
+      - 'skeleton/**'
+  schedule:
+    - cron: '0 9 * * 1-5'  # 工作日每天 9 点
+
+jobs:
+  check-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx ts-node sync-ai-instructions.ts --check
+      - name: Fail if drift detected
+        run: |
+          if git diff --quiet output/; then
+            echo "No drift detected"
+          else
+            echo "::error::AI instructions are out of sync!"
+            git diff output/
+            exit 1
+          fi
+```
+
+**检测内容：**
+- 模块被编辑但组装器未重新运行
+- 新增了配置文件但没有生成对应的 CLAUDE.md
+- 开发者手动编辑了生成的 CLAUDE.md
+
+<Aside>
+**策略：** 生成的文件是只读的。所有变更都通过配置文件和模块进行，然后重新运行组装器。
+</Aside>
+
+---
+
+## 阶段六：新成员入职
+
+**目标：** 新开发者在 5 分钟内获得自己的 CLAUDE.md。
+
+<Steps>
+1. 克隆仓库
+
+   ```bash
+   git clone <repo>
+   ```
+
+2. 复制配置模板
+
+   ```bash
+   cp examples/team-config/profile-template.yaml profiles/dave.yaml
+   # 编辑：name、os、tools、modules
+   ```
+
+3. 生成
+
+   ```bash
+   npx ts-node sync-ai-instructions.ts dave
+   ```
+
+4. 安装
+
+   ```bash
+   cp output/dave/CLAUDE.md .claude/CLAUDE.md
+   ```
+</Steps>
+
+<Aside type="tip">
+**CLAUDE.md 放置位置提醒：**
+- 项目级：`project/CLAUDE.md`（提交到 Git，用于团队规范）
+- 个人覆盖：`.claude/CLAUDE.md`（加入 .gitignore，用于个人偏好）
+</Aside>
+
+---
+
+## 故障排除
+
+| 问题 | 原因 | 解决方案 |
+|------|------|---------|
+| 生成文件过长 | 包含了太多模块 | 审查配置文件，移除低频模块 |
+| 模块在输出中缺失 | 骨架中的占位符拼写错误 | 检查 `{{MODULE:name}}` 与文件名匹配 |
+| CI 漂移告警 | 模块编辑后未重新生成 | 运行组装器并提交 |
+| A 有的规则 B 没有 | 这是预期行为 | 验证配置文件是否正确 |
+| 合并后输出过时 | 合并未触发重新生成 | 添加 git hook 在合并后运行组装器 |
+
+---
+
+## 规模化阈值
+
+| 团队规模 | 推荐方案 |
+|----------|---------|
+| 1-2 人 | 共享 CLAUDE.md + 优先级规则 |
+| 3-5 人，工具统一 | 可选：仅模块化，无需配置文件 |
+| 5+ 人或多工具 | 基于角色的模块化组装（本工作流） |
+| 20+ 人 | 考虑 CLAUDE.md 配置服务器 + 基于 PR 的模块变更 |
+
+---
+
+## 实测效果
+
+来自一个生产团队（5 名开发者、3 种工具、2 种操作系统）：
+
+| 指标 | 之前 | 之后 |
+|------|------|------|
+| 每份 CLAUDE.md 行数 | ~380（整体式） | ~185（组装式） |
+| Token 消耗 | -- | 减少 59% |
+| 提取的模块数 | 0 | 12 |
+| 入职时间 | "复制别人的文件" | 5 分钟（模板 + 生成） |
+| 漂移事件 | 每周发生 | 0（CI 检测） |

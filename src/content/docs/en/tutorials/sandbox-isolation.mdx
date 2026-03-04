@@ -1,0 +1,370 @@
+---
+title: "Sandbox Isolation"
+description: "Running Claude Code safely in isolated environments with Docker, native sandbox, and cloud solutions"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Claude Code's permission system protects you from unintended actions, but it creates a tension: `--dangerously-skip-permissions` removes all guardrails, while interactive approval slows down autonomous workflows. **Sandbox isolation** resolves this -- let the agent run freely inside an environment where the blast radius is contained.
+
+---
+
+## Quick Comparison
+
+| Solution | Isolation | Local/Cloud | Best For |
+|----------|-----------|-------------|----------|
+| **Docker Sandboxes** | microVM (hypervisor) | Local | Max security, Docker-in-Docker |
+| **Native CC sandbox** | Process (Seatbelt/bubblewrap) | Local | Lightweight daily dev, trusted code |
+| **Fly.io Sprites** | Firecracker microVM | Cloud | API-driven agent workflows |
+| **E2B** | Firecracker microVM | Cloud | Multi-framework AI apps |
+| **Vercel Sandboxes** | Firecracker microVM | Cloud | Next.js / Vercel ecosystem |
+| **Cloudflare Sandbox SDK** | Container | Cloud | Workers-based serverless |
+
+**Quick start**:
+
+```bash
+docker sandbox run claude ~/my-project
+```
+
+---
+
+## The Problem: Safe Autonomy
+
+- **`--dangerously-skip-permissions`** removes all guardrails -- Claude can `rm -rf`, `git push --force`, or `DROP TABLE` without asking. On a bare host, this is dangerous.
+- **Permission fatigue** -- approving every file edit and shell command slows down autonomous workflows.
+- **The gap**: How do you run Claude Code autonomously AND safely?
+
+<Aside type="tip">
+**Answer**: Isolate the execution environment. Let the agent run free inside a sandbox where the blast radius is contained. The sandbox is the security boundary, not the permission system.
+</Aside>
+
+---
+
+## Docker Sandboxes
+
+Docker Sandboxes run AI coding agents in **microVM-based isolation** on your local machine. Each sandbox gets its own private Docker daemon and filesystem. Sandboxes do NOT appear in `docker ps` -- they are VMs, not containers.
+
+**Requires**: Docker Desktop 4.58+ (macOS or Windows)
+
+### Quick Start
+
+```bash
+# Create and run a sandbox with your project
+docker sandbox run claude ~/my-project
+
+# Run with autonomous mode (safe inside sandbox)
+docker sandbox run claude ~/my-project -- --dangerously-skip-permissions
+
+# Pass a prompt directly
+docker sandbox run claude ~/my-project -- "Refactor auth module to use JWT"
+
+# Continue a previous session
+docker sandbox run my-sandbox -- --continue
+```
+
+### Architecture
+
+```
++----------------------------------------------------------+
+|                     HOST MACHINE                          |
+|                                                          |
+|  +----------------------------------------------------+  |
+|  |              DOCKER SANDBOX (microVM)               |  |
+|  |                                                    |  |
+|  |  +------------+  +---------------------------+     |  |
+|  |  | Claude Code |  | Private Docker daemon     |     |  |
+|  |  | (--dsp mode)|  | (isolated from host)      |     |  |
+|  |  +------------+  +---------------------------+     |  |
+|  |                                                    |  |
+|  |  +----------------------------------------------+  |  |
+|  |  | Workspace: ~/my-project (synced with host)   |  |  |
+|  |  +----------------------------------------------+  |  |
+|  |                                                    |  |
+|  |  Base: Ubuntu, Node.js, Python 3, Go, Git,        |  |
+|  |        Docker CLI, GitHub CLI, ripgrep, jq         |  |
+|  +----------------------------------------------------+  |
+|                                                          |
+|  Host Docker daemon: NOT accessible from sandbox          |
+|  Host filesystem: NOT accessible (except workspace)       |
++----------------------------------------------------------+
+```
+
+Key properties:
+- **Workspace sync**: Host directory mounts at the same absolute path inside the sandbox
+- **Full isolation**: Agent cannot access host Docker daemon, host containers, or files outside workspace
+- **Private Docker**: Each sandbox has its own Docker daemon
+- **Claude runs with `--dangerously-skip-permissions`**: Intentional -- the sandbox is the security boundary
+
+### Network Policies
+
+Control what the sandbox can access on the network:
+
+```bash
+# View network activity
+docker sandbox network log my-sandbox
+
+# Denylist mode (block all, allow specific)
+docker sandbox network proxy my-sandbox \
+  --policy deny \
+  --allow-host api.anthropic.com \
+  --allow-host "*.npmjs.org" \
+  --allow-host github.com
+
+# Allowlist mode (allow all, block specific)
+docker sandbox network proxy my-sandbox \
+  --policy allow \
+  --block-host "*.malicious-domain.com" \
+  --block-cidr "192.168.0.0/16"
+```
+
+| Mode | Default behavior | Use case |
+|------|-----------------|----------|
+| **Allowlist** (default) | Permits most traffic, blocks specific destinations | General development |
+| **Denylist** | Blocks all traffic, allows only specified destinations | High-security environments |
+
+**Default blocked ranges**: Private CIDRs (`10.0.0.0/8`, `127.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`).
+
+### Custom Templates
+
+For teams needing reproducible environments:
+
+```dockerfile
+FROM docker/sandbox-templates:claude-code
+
+USER root
+
+# Install project-specific dependencies
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    redis-tools
+
+RUN npm install -g pnpm turbo
+
+USER agent
+```
+
+```bash
+# Build and use custom template
+docker build -t my-team-sandbox:v1 .
+docker sandbox create my-sandbox \
+  --template my-team-sandbox:v1 \
+  --load-local-template ~/my-project
+```
+
+### Commands Reference
+
+| Command | Description |
+|---------|-------------|
+| `docker sandbox run <agent> <path>` | Create and start a sandbox |
+| `docker sandbox create <name>` | Create without starting |
+| `docker sandbox ls` | List all sandboxes |
+| `docker sandbox run <name> -- "prompt"` | Pass a prompt |
+| `docker sandbox run <name> -- --continue` | Continue previous session |
+| `docker sandbox network proxy <name>` | Configure network policies |
+| `docker sandbox network log <name>` | View network activity |
+
+### Supported Agents
+
+| Agent | Provider | Status |
+|-------|----------|--------|
+| Claude Code | Anthropic | Full support |
+| Codex CLI | OpenAI | Supported |
+| Gemini CLI | Google | Supported |
+| cagent | Docker | Supported |
+| Kiro | AWS | Supported |
+
+### Limitations
+
+- **macOS and Windows only** for microVM mode. Linux uses legacy container-based sandboxes.
+- **Docker Desktop required** -- not available with standalone Docker Engine.
+- **MCP Gateway not yet supported** inside sandboxes.
+- **No GPU passthrough** -- not suitable for ML training workloads.
+- **Workspace sync is one-way**: changes inside propagate to host, but concurrent host edits may conflict.
+
+---
+
+## Native Claude Code Sandbox
+
+Claude Code includes built-in **native sandboxing** using OS-level primitives for process-level isolation. No Docker required.
+
+**Requires**: macOS (built-in) or Linux/WSL2 (bubblewrap + socat). Claude Code v2.1.0+.
+
+### Key Differences from Docker Sandboxes
+
+| Aspect | Native Sandbox | Docker Sandboxes |
+|--------|---------------|------------------|
+| **Isolation level** | Process (Seatbelt/bubblewrap) | microVM (hypervisor) |
+| **Kernel** | Shared with host | Separate kernel per sandbox |
+| **Setup** | 0 dependencies (macOS), 2 packages (Linux) | Docker Desktop 4.58+ |
+| **Overhead** | Minimal (~1-3% CPU) | Moderate (~5-10% CPU, +200MB RAM) |
+| **Docker-in-Docker** | Not supported | Private Docker daemon |
+| **Use case** | Daily dev, trusted code | Untrusted code, max isolation |
+
+### Quick Start
+
+```bash
+# Enable sandboxing (interactive menu)
+/sandbox
+
+# Linux/WSL2 only: install prerequisites first
+sudo apt-get install bubblewrap socat  # Ubuntu/Debian
+sudo dnf install bubblewrap socat      # Fedora
+```
+
+### Configuration
+
+```json
+{
+  "sandbox": {
+    "autoAllowMode": true,
+    "network": {
+      "policy": "deny",
+      "allowedDomains": [
+        "api.anthropic.com",
+        "registry.npmjs.com",
+        "github.com"
+      ]
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(~/.ssh/**)", "Read(~/.aws/**)",
+      "Edit(~/.ssh/**)", "Edit(~/.aws/**)"
+    ]
+  }
+}
+```
+
+### When to Use Native vs Docker
+
+**Use Native Sandbox when**:
+- Daily development with trusted team
+- Lightweight setup (no Docker Desktop)
+- Minimal overhead priority
+- Code is mostly trusted
+- Don't need Docker-in-Docker
+
+**Use Docker Sandboxes when**:
+- Running untrusted code
+- Maximum security isolation (kernel exploits protection)
+- Need private Docker daemon inside sandbox
+- Testing AI-generated scripts
+- Production CI/CD with sensitive workloads
+
+### Open-Source Runtime
+
+The sandbox implementation is available as an open-source npm package:
+
+```bash
+# Use sandbox runtime directly
+npx @anthropic-ai/sandbox-runtime <command-to-sandbox>
+
+# Example: sandbox an MCP server
+npx @anthropic-ai/sandbox-runtime node mcp-server.js
+```
+
+---
+
+## Cloud Sandboxes Landscape
+
+<CardGrid>
+  <Card title="Fly.io Sprites" icon="rocket">
+    Firecracker microVMs with checkpoint/restore in ~300ms. Up to 8 CPUs, 16GB RAM. Pay-per-use pricing.
+  </Card>
+  <Card title="E2B" icon="open-book">
+    Open-source sandbox platform. ~150ms cold boot. Custom images up to 10GB. Cloud, BYOC, or self-hosted.
+  </Card>
+  <Card title="Vercel Sandboxes" icon="laptop">
+    Ephemeral Linux microVMs. Sub-second initialization. GA since Jan 2026. Best for Next.js/Vercel ecosystem.
+  </Card>
+  <Card title="Cloudflare Sandbox SDK" icon="setting">
+    Containers on Cloudflare Workers. Python, JS/TS, shell commands. R2 bucket mounting for persistence.
+  </Card>
+</CardGrid>
+
+---
+
+## Full Comparison Matrix
+
+| Criterion | Docker Sandboxes | Native CC | Fly.io | Cloudflare | E2B | Vercel |
+|-----------|-----------------|-----------|--------|------------|-----|--------|
+| **Isolation** | microVM | Process | Firecracker | Container | Firecracker | Firecracker |
+| **Kernel isolation** | Yes | No (shared) | Yes | Partial | Yes | Yes |
+| **Runs locally** | Yes | Yes | No | No | No | No |
+| **Setup** | Docker Desktop | 0 deps (mac) | API key | Workers Paid | API key | SDK |
+| **Docker-in-Docker** | Yes | No | Yes | No | Yes | Yes |
+| **Network control** | Allow/Deny | Allow/Deny | L3 egress | N/A | N/A | N/A |
+| **Platform** | macOS, Windows | macOS, Linux, WSL2 | Any (API) | Any | Any | Any |
+| **Overhead** | ~5-10% CPU | ~1-3% CPU | Cloud | Cloud | Cloud | Cloud |
+| **Best for** | Max security | Daily dev | API agents | Serverless | Multi-framework | Next.js |
+
+---
+
+## Safe Autonomy Workflows
+
+### Pattern: Docker Sandbox + Autonomous Mode
+
+The recommended pattern for local autonomous development:
+
+<Steps>
+1. **Create a sandbox** with your project
+   ```bash
+   docker sandbox create my-feature ~/my-project
+   ```
+2. **Configure network** (optional, recommended for security)
+   ```bash
+   docker sandbox network proxy my-feature \
+     --policy deny \
+     --allow-host api.anthropic.com \
+     --allow-host "*.npmjs.org" \
+     --allow-host github.com
+   ```
+3. **Run Claude autonomously** (safe inside sandbox)
+   ```bash
+   docker sandbox run my-feature -- --dangerously-skip-permissions \
+     "Refactor the auth module to use JWT. Run all tests before finishing."
+   ```
+4. **Review changes** on host (workspace syncs automatically)
+   ```bash
+   cd ~/my-project && git diff
+   ```
+5. **If satisfied, commit. If not, discard or re-run.**
+   ```bash
+   git add -A && git commit -m "feat: JWT auth (sandbox-generated)"
+   ```
+</Steps>
+
+### Pattern: CI/CD Pipeline with Sandbox
+
+```yaml
+jobs:
+  agent-task:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Claude in E2B sandbox
+        uses: e2b-dev/e2b-github-action@v1
+        with:
+          api-key: ${{ secrets.E2B_API_KEY }}
+          command: |
+            claude --dangerously-skip-permissions \
+              -p "Run the full test suite and fix any failures"
+```
+
+<Aside type="tip">
+For CI/CD, cloud sandboxes (E2B, Vercel, Sprites) are typically better than Docker Sandboxes since they don't require Docker Desktop.
+</Aside>
+
+---
+
+## Anti-Patterns
+
+| Anti-pattern | Why it's dangerous | Do instead |
+|-------------|-------------------|------------|
+| `--dsp` without sandbox | Unrestricted access to host | Use a sandbox as security boundary |
+| Assuming containers = VMs | Containers share host kernel | Use microVM solutions |
+| Mounting entire filesystem | Defeats isolation purpose | Mount only project workspace |
+| Allowlisting `*` in network | Agent can exfiltrate data anywhere | Use denylist with explicit allowances |
+| Skipping `git diff` review | Autonomous agent may make unintended changes | Always review diffs |
+| Using sandbox to skip code review | Isolation protects host, not code quality | Sandbox + review are complementary |

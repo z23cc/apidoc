@@ -1,0 +1,540 @@
+---
+title: "Git Best Practices"
+description: "Best practices for Git workflows with Claude Code, including commit conventions, branch management, worktrees, and parallel development"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+This guide covers effective Git workflows with Claude Code for professional development, including commit message standards, branch management, the choice between Rewind and Revert, and Git Worktree for parallel development.
+
+---
+
+## Commit Message Best Practices
+
+Claude Code generates commit messages automatically. Guide it with clear context via your CLAUDE.md.
+
+### Default Behavior
+
+```bash
+# After changes, Claude creates commits like:
+git commit -m "feat: add user authentication middleware
+
+- Implement JWT validation
+- Add session management
+- Create auth error handling
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>"
+```
+
+### Customize Commit Style
+
+Define commit conventions in your CLAUDE.md:
+
+```markdown
+## Git Commit Conventions
+
+Follow Conventional Commits format:
+- feat: New features
+- fix: Bug fixes
+- docs: Documentation changes
+- refactor: Code restructuring
+- test: Test additions/changes
+- chore: Maintenance tasks
+
+Keep first line under 72 characters.
+Include ticket number: [PROJ-123]
+```
+
+### Example with Guidance
+
+```bash
+You: "Implement login endpoint"
+
+Claude: Creates commit:
+git commit -m "feat: implement user login endpoint [AUTH-42]
+
+- Add POST /api/auth/login route
+- Validate credentials with bcrypt
+- Generate JWT tokens
+- Return user profile on success
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>"
+```
+
+### AI Attribution Standards
+
+Beyond the default `Co-Authored-By` tag, there are other attribution options:
+
+- LLVM's `Assisted-by:` trailer standard
+- git-ai checkpoint tracking
+- Team and enterprise compliance patterns
+
+---
+
+## Git Amend Workflow
+
+<CardGrid>
+  <Card title="When to Amend" icon="approve-check">
+    - Fix typos in recent commit
+    - Add forgotten files to last commit
+    - Improve commit message
+    - **Only for unpushed commits**
+  </Card>
+  <Card title="Safety Rule" icon="warning">
+    **Never amend pushed commits** (requires force push, breaks team history). Create a new commit instead.
+  </Card>
+</CardGrid>
+
+### Safe Amend Pattern
+
+```bash
+# Check if commit is unpushed
+git status
+# Output: "Your branch is ahead of 'origin/main' by 1 commit"
+
+# Amend the commit
+You: "Add the missing test file to the last commit"
+
+Claude:
+git add tests/auth.test.ts
+git commit --amend --no-edit
+```
+
+### For Pushed Commits
+
+```bash
+You: "Fix typo in authentication function"
+
+Claude:
+# Creates new commit instead of amending
+git commit -m "fix: correct typo in authenticateUser function"
+```
+
+---
+
+## Branch Management
+
+### Feature Branch Pattern
+
+Define your branch workflow in CLAUDE.md:
+
+```markdown
+## CLAUDE.md Git Workflow
+
+Always work on feature branches:
+1. Create branch from main: git checkout -b feature/name
+2. Make changes and commit regularly
+3. Push to remote: git push -u origin feature/name
+4. Create pull request when ready
+5. Never commit directly to main/master
+```
+
+### Branch Naming Conventions
+
+```
+feature/user-authentication
+fix/login-validation-bug
+refactor/api-endpoints
+docs/update-readme
+chore/dependency-updates
+```
+
+### Claude Code with Branches
+
+```bash
+# Start new feature
+You: "Create a new branch for adding search functionality"
+Claude: git checkout -b feature/search-functionality
+
+# When complete
+You: "Create pull request for search feature"
+Claude:
+git push -u origin feature/search-functionality
+# Opens PR creation
+```
+
+---
+
+## Rewind vs Revert
+
+<Tabs>
+  <TabItem label="/rewind (Local Undo)">
+    - Undoes Claude's recent changes in current session
+    - Does **NOT** create git commits
+    - Works only for uncommitted changes
+    - Use when: Claude made a mistake, you want to try a different approach
+
+    ```bash
+    You: "Add email validation to login form"
+    Claude: [Makes changes]
+    You: [Reviews diff] "This breaks the existing flow"
+    /rewind
+    # Changes are undone, back to previous state
+    You: "Add email validation but preserve existing flow"
+    ```
+  </TabItem>
+  <TabItem label="git revert (Committed Changes)">
+    - Creates new commit that undoes previous commit
+    - Safe for pushed commits (preserves history)
+    - Use when: Need to undo committed changes
+
+    ```bash
+    You: "Revert the authentication changes from the last commit"
+
+    Claude:
+    git revert HEAD
+    # Creates new commit: "Revert 'feat: add authentication'"
+    ```
+  </TabItem>
+</Tabs>
+
+### Decision Tree
+
+```
+Changes not committed yet?          → Use /rewind
+Changes committed but not pushed?   → Use git reset (careful!)
+Changes committed and pushed?       → Use git revert
+```
+
+---
+
+## Git Worktrees for Parallel Development
+
+### What Are Worktrees?
+
+Git worktrees (available since Git 2.5.0) create multiple working directories from the same repository, each checked out to a different branch.
+
+### Traditional Workflow Problem
+
+```bash
+# Working on feature A
+git checkout feature-a
+# 2 hours of work...
+
+# Urgent hotfix needed
+git stash              # Save current work
+git checkout main
+git checkout -b hotfix
+# Fix the bug...
+git checkout feature-a
+git stash pop          # Resume work
+```
+
+### Worktree Solution
+
+```bash
+# One-time setup
+git worktree add ../myproject-hotfix hotfix
+git worktree add ../myproject-feature-a feature-a
+
+# Now work in parallel
+cd ../myproject-hotfix    # Terminal 1
+claude                    # Fix the bug
+
+cd ../myproject-feature-a # Terminal 2
+claude                    # Continue feature work
+```
+
+### When to Use Worktrees
+
+<CardGrid>
+  <Card title="Use Worktrees When" icon="approve-check">
+    - Working on multiple features simultaneously
+    - Need to test different approaches in parallel
+    - Reviewing code while developing
+    - Running long CI/CD builds while coding
+    - Maintaining multiple versions (v1 support + v2 development)
+  </Card>
+  <Card title="Don't Use Worktrees When" icon="close">
+    - Simple branch switching is sufficient
+    - Disk space is limited (each worktree = full working directory)
+    - Team is unfamiliar with worktrees (adds complexity)
+  </Card>
+</CardGrid>
+
+### Worktree Lifecycle Commands
+
+| Command | Purpose |
+|---------|---------|
+| `/git-worktree` | Create worktree with branch validation, symlinked deps, background checks |
+| `/git-worktree-status` | Check background verification tasks (type check, tests, build) |
+| `/git-worktree-remove` | Safely remove single worktree with merge checks and DB cleanup |
+| `/git-worktree-clean` | Batch cleanup of stale worktrees with disk usage report |
+
+```bash
+# Create with auto-prefix and symlinked node_modules
+You: "/git-worktree auth"
+# → Creates feat/auth branch, symlinks node_modules, runs checks in background
+
+# Check background verification status
+You: "/git-worktree-status"
+# → Type check: PASS, Tests: PASS (142 tests)
+
+# Remove after merge
+You: "/git-worktree-remove feat/auth"
+# → Removes worktree + branch (local + remote) + DB cleanup reminder
+
+# Batch cleanup of all merged worktrees
+You: "/git-worktree-clean --dry-run"
+# → Preview: 3 merged (4.2 MB), 1 unmerged (kept)
+```
+
+<Aside type="tip">
+The `/git-worktree` command symlinks `node_modules` from the main worktree by default, saving ~30s per worktree creation and significant disk space. Use `--isolated` when you need fresh dependencies (e.g., testing upgrades).
+</Aside>
+
+### Worktree Management
+
+```bash
+# List all worktrees
+git worktree list
+
+# Remove worktree (after merging feature)
+git worktree remove .worktrees/feature/new-api
+
+# Cleanup stale worktree references
+git worktree prune
+```
+
+<Aside type="tip" title="Shell Aliases for Fast Navigation">
+The Claude Code team uses single-letter aliases to hop between worktrees instantly:
+
+```bash
+# ~/.zshrc or ~/.bashrc
+alias za="cd .worktrees/feature-a"
+alias zb="cd .worktrees/feature-b"
+alias zc="cd .worktrees/feature-c"
+alias zlog="cd .worktrees/analysis"  # Dedicated worktree for logs & queries
+```
+
+The dedicated "analysis" worktree is used for reviewing logs and running database queries without polluting active feature branches.
+</Aside>
+
+### Claude Code Context in Worktrees
+
+Each worktree maintains **independent Claude Code context**:
+
+```bash
+# Terminal 1 - Worktree A
+cd .worktrees/feature-a
+claude
+You: "Implement user authentication"
+# Claude indexes feature-a worktree
+
+# Terminal 2 - Worktree B (simultaneous)
+cd .worktrees/feature-b
+claude
+You: "Add payment integration"
+# Claude indexes feature-b worktree (separate context)
+```
+
+### Memory Files with Worktrees
+
+| Level | Location | Scope |
+|-------|----------|-------|
+| Global memory | `~/.claude/CLAUDE.md` | Shared across all worktrees |
+| Project memory | Repo root `CLAUDE.md` | Committed, shared |
+| Worktree-local memory | `.claude/CLAUDE.md` in worktree | Specific to that worktree |
+
+### Recommended Structure
+
+```
+~/projects/
+├── myproject/              # Main worktree (main branch)
+│   ├── CLAUDE.md          # Project conventions (committed)
+│   └── .claude/
+├── myproject-develop/      # develop branch worktree
+│   └── .claude/           # Develop-specific config
+├── myproject-feature-a/    # feature-a branch worktree
+│   └── .claude/           # Feature A context
+└── myproject-hotfix/       # hotfix branch worktree
+    └── .claude/           # Hotfix context
+```
+
+### Worktree Best Practices
+
+<Steps>
+1. **Name worktrees clearly**
+
+   ```bash
+   # Bad
+   git worktree add ../temp feature-x
+
+   # Good
+   git worktree add ../myproject-feature-x feature-x
+   ```
+
+2. **Add to .gitignore**
+
+   ```gitignore
+   # Worktree directories
+   .worktrees/
+   worktrees/
+   ```
+
+3. **Clean up merged branches**
+
+   ```bash
+   git worktree remove myproject-feature-x
+   git branch -d feature-x  # Delete local branch after merge
+   git push origin --delete feature-x  # Delete remote branch
+   ```
+
+4. **Use consistent locations**
+
+   - `.worktrees/` (hidden, in project root)
+   - `worktrees/` (visible, in project root)
+   - `../myproject-*` (sibling directories)
+
+5. **Don't commit worktree contents**
+
+   Always ensure worktree directories are in `.gitignore`. The `/git-worktree` command verifies this automatically.
+</Steps>
+
+---
+
+## Claude Code Native Worktree Features
+
+Claude Code has built-in worktree integration beyond the manual `git worktree` workflow.
+
+### Start Claude in an Isolated Worktree
+
+```bash
+# --worktree / -w flag: creates a temporary worktree based on HEAD
+claude --worktree
+claude -w
+```
+
+The worktree is created automatically, Claude runs inside it, and it is cleaned up on exit (if no changes were made).
+
+### Declarative Isolation in Agent Definitions
+
+Set `isolation: "worktree"` in an agent's frontmatter to automatically spawn it in a fresh worktree every time:
+
+```yaml
+---
+name: refactoring-agent
+description: Large-scale refactors that must not pollute the main working tree
+model: opus
+isolation: "worktree"   # Each invocation gets its own isolated checkout
+---
+
+Perform the requested refactoring. Commit your changes inside the worktree.
+```
+
+### Worktree Lifecycle Hooks
+
+Two hook events fire around agent worktree lifecycle:
+
+| Event | Fires When | Use Case |
+|-------|-----------|----------|
+| `WorktreeCreate` | Agent worktree is created | Set up DB branch, copy .env, install deps |
+| `WorktreeRemove` | Agent worktree is torn down | Clean up DB branch, delete temp credentials |
+
+```json
+{
+  "hooks": {
+    "WorktreeCreate": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "scripts/worktree-setup.sh $CLAUDE_WORKTREE_PATH"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Database Branch Isolation with Worktrees
+
+Combine git worktrees with database branches for true feature isolation.
+
+### The Problem and Solution
+
+```
+Traditional workflow:
+Git branch → Shared dev database → Schema conflicts → Migration hell
+
+Modern workflow:
+Git worktree + DB branch → Isolated environments → Safe experimentation
+```
+
+### Provider Auto-Detection
+
+The `/git-worktree` command automatically detects your database:
+
+| Provider | Suggested Command |
+|----------|------------------|
+| **Neon** | `neonctl branches create` |
+| **PlanetScale** | `pscale branch create` |
+| **Supabase** | Notes lack of branching support |
+| **Local Postgres** | Suggests schema-based isolation |
+
+### When to Create a DB Branch
+
+| Scenario | Create Branch? |
+|----------|---------------|
+| Adding database migrations | Yes |
+| Refactoring data model | Yes |
+| Bug fix (no schema change) | No |
+| Performance experiments | Yes |
+
+### Complete Workflow
+
+```bash
+# 1. Create worktree
+/git-worktree feature/payments
+
+# 2. Follow suggestion to create DB branch
+cd .worktrees/feature-payments
+neonctl branches create --name feature-payments --parent main
+
+# 3. Update .env with new DATABASE_URL
+
+# 4. Work in isolation
+npx prisma migrate dev
+pnpm test
+
+# 5. After PR merge, cleanup
+git worktree remove .worktrees/feature-payments
+neonctl branches delete feature-payments
+```
+
+---
+
+## Worktree Troubleshooting
+
+<Tabs>
+  <TabItem label="Creation Fails">
+    **Problem**: Worktree creation fails with "already checked out"
+
+    ```bash
+    # Solution: You can't check out the same branch in multiple worktrees
+    git worktree list  # See which branches are checked out
+    # Use a different branch or remove the existing worktree first
+    ```
+  </TabItem>
+  <TabItem label="Disk Space">
+    **Problem**: Disk space issues
+
+    ```bash
+    # Each worktree is a full working directory
+    # Solution: Clean up unused worktrees regularly
+    git worktree prune
+    ```
+  </TabItem>
+  <TabItem label="Can't Delete">
+    **Problem**: Can't delete worktree directory
+
+    ```bash
+    # Solution: Use git worktree remove, not rm -rf
+    git worktree remove --force .worktrees/old-feature
+    ```
+  </TabItem>
+</Tabs>

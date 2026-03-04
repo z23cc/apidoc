@@ -1,0 +1,144 @@
+---
+title: "Permission Modes"
+description: "Understand Claude Code's five permission modes and choose the right level of AI autonomy for your workflow"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Claude Code offers five permission modes that control how much autonomy Claude has. Choosing the right mode for your situation helps you balance safety with productivity.
+
+<CardGrid>
+  <Card title="Default Mode" icon="approve-check-circle">
+    Asks permission for every action. Safest for learning.
+  </Card>
+  <Card title="Auto-accept Mode" icon="pencil">
+    Auto-approves file edits for faster development.
+  </Card>
+  <Card title="Plan Mode" icon="open-book">
+    Read-only analysis. No modifications allowed.
+  </Card>
+  <Card title="Bypass Permissions" icon="warning">
+    Fully autonomous. Only for sandboxed environments.
+  </Card>
+</CardGrid>
+
+---
+
+## The Five Permission Modes
+
+### 1. Default Mode
+
+This is the mode Claude Code starts in, and it is the safest option.
+
+Claude asks permission before:
+
+- Editing files
+- Running commands
+- Making commits
+
+<Aside type="tip">
+If you are new to Claude Code, stay in Default Mode until you are comfortable with the workflow and understand what each operation does.
+</Aside>
+
+### 2. Auto-accept Mode (`acceptEdits`)
+
+```bash
+# Tell Claude to enable auto-accept in the current session
+You: Turn on auto-accept for the rest of this session
+```
+
+Claude auto-approves file edits but **still asks** before running shell commands.
+
+**Best for:**
+- Well-defined, reversible operations
+- High-volume file editing sessions
+- Tasks where you trust Claude's edit judgment
+
+<Aside type="caution">
+Only use auto-accept for well-defined, reversible operations. Commit your current changes with Git first so you can always roll back.
+</Aside>
+
+### 3. Plan Mode
+
+```bash
+/plan
+```
+
+In Plan Mode, Claude can **only read and analyze** — no modifications are allowed.
+
+**Perfect for:**
+- Understanding unfamiliar codebases
+- Exploring architectural options
+- Safe investigation before making changes
+
+Exit Plan Mode with `/execute` when you are ready to make changes.
+
+<Aside type="tip">
+Build the habit of "plan first, execute later." Use `/plan` to have Claude analyze the problem and propose a solution, then switch to execution once you have confirmed the approach.
+</Aside>
+
+### 4. Don't Ask Mode (`dontAsk`)
+
+Auto-denies tools unless pre-approved via `/permissions` or `permissions.allow` rules. Claude never interrupts with permission prompts — if a tool is not explicitly allowed, it is silently denied.
+
+**Best for:**
+- Restrictive workflows with tight tool control
+- Scenarios where you do not want interactive confirmation
+- Automation pipelines with defined tool allowlists
+
+### 5. Bypass Permissions Mode (`bypassPermissions`)
+
+Auto-approves everything, including shell commands. No permission prompts at all.
+
+```bash
+# Requires a CLI flag to enable
+claude --dangerously-skip-permissions
+```
+
+<Aside type="danger">
+Only use in sandboxed CI/CD environments. Never use on production systems or with untrusted code. The flag name includes "dangerously" for a reason.
+</Aside>
+
+---
+
+## Choosing the Right Mode
+
+<Tabs>
+  <TabItem label="Learning Phase">
+    **Recommended: Default Mode**
+
+    - Every operation requires confirmation, helping you learn Claude's behavior
+    - Safe environment for practice and exploration
+    - Gradually build trust with the tool
+  </TabItem>
+  <TabItem label="Daily Development">
+    **Recommended: Default Mode + Plan Mode**
+
+    - Use `/plan` to analyze problems and formulate approaches
+    - Switch to `/execute` once you confirm the plan
+    - Enable auto-accept for familiar, well-understood tasks
+  </TabItem>
+  <TabItem label="CI/CD Automation">
+    **Recommended: Don't Ask Mode or Bypass Permissions**
+
+    - Run in isolated, sandboxed environments
+    - Use `permissions.allow` to precisely control allowed operations
+    - Bypass Permissions Mode only in fully controlled environments
+  </TabItem>
+</Tabs>
+
+---
+
+## Quick Reference Table
+
+| Mode | File Edits | Shell Commands | Best For |
+|------|-----------|---------------|---------|
+| Default | Asks | Asks | Learning, sensitive operations |
+| Auto-accept | Auto-approved | Asks | Fast development |
+| Plan | Blocked | Blocked | Code analysis, exploration |
+| Don't Ask | By rules | By rules | Controlled automation |
+| Bypass | Auto-approved | Auto-approved | Sandboxed CI/CD |
+
+<Aside type="note">
+Security principle: Start with the most restrictive permissions and relax them as trust builds. Never use Bypass Permissions Mode in production environments.
+</Aside>

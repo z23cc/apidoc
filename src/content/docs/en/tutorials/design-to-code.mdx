@@ -1,0 +1,431 @@
+---
+title: "Design-to-Code Workflow"
+description: "Automated design system implementation using Figma MCP Server"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Automated design system implementation using Figma MCP Server enables Product Designers to hand off production-ready specifications to Claude Code, which generates components maintaining 1:1 design-code parity.
+
+---
+
+## Documented Impact
+
+Based on production case studies from January 2026:
+
+| Metric | Improvement | Source |
+|--------|-------------|--------|
+| Design inconsistencies | 62% reduction | Parallel HQ study |
+| Workflow efficiency | 78% improvement | builder.io case study |
+| Engineering time saved | 75 days (over 6 months) | Parallel HQ production data |
+| Time-to-market | 56% reduction | Multi-org composite |
+| Design technical debt | 82% reduction | Post-implementation audit |
+
+**Typical timing:**
+- Single frame to production component: 2-3 minutes
+- Design system drift audit: 3 weeks to 3 minutes
+- Token update propagation: manual hours to automated seconds
+
+---
+
+## Architecture Overview
+
+### Full Stack
+
+```
+[Figma Design File]
+    ↓ (Variables & Styles)
+[Tokens Studio Plugin] (optional but recommended)
+    ↓ (JSON export)
+[GitHub Repository]
+    ↓ (CI/CD)
+[Style Dictionary]
+    ↓ (Transform)
+[CSS Custom Properties / Tailwind Config]
+    ↓ (Consumed by)
+[Component Library]
+    ↑ (Reads via)
+[Claude Code + Figma MCP]
+```
+
+### MCP Integration Point
+
+Claude Code accesses Figma through the Figma MCP Server:
+
+| Can Access | Cannot Access |
+|------------|--------------|
+| File structure and frames | Private files without token permissions |
+| Color/text/effect styles | Edit capabilities (read-only) |
+| Component properties | Real-time collaboration data |
+| Variables (tokens) | Version history (only current state) |
+| Dev Mode annotations | |
+| Code Connect snippets | |
+
+---
+
+## 3-Tier Token Hierarchy
+
+Modern design systems use a hierarchical token structure. Claude Code understands this hierarchy when consuming Figma data.
+
+| Tier | Definition | Figma Implementation | Code Output |
+|------|------------|----------------------|-------------|
+| **Base** | Primitive values | Figma Variables (e.g., `blue-600: #0066CC`) | CSS custom properties (`--blue-600`) |
+| **Composite** | Combined primitives | Component fills referencing variables | Tailwind config or CSS classes |
+| **Semantic** | Contextual meaning | Contextual variable aliases (e.g., `color-interactive-primary` -> `blue-600`) | Component props or theme tokens |
+
+### Example Hierarchy
+
+```css
+/* Base */
+--color-blue-600: #0066CC;
+--spacing-2: 8px;
+--radius-md: 4px;
+
+/* Composite */
+--button-padding: var(--spacing-2) var(--spacing-4);
+--button-border-radius: var(--radius-md);
+
+/* Semantic */
+--interactive-primary: var(--color-blue-600);
+--interactive-primary-hover: var(--color-blue-700);
+```
+
+---
+
+## Prerequisites
+
+<Tabs>
+  <TabItem label="For Designers">
+    | Requirement | Details |
+    |-------------|---------|
+    | **Figma License** | Dev Mode seat (enables variable inspection, code snippets) |
+    | **Organized Variables** | Use Figma Variables or Tokens Studio plugin |
+    | **Component Structure** | Auto Layout, named layers, consistent naming conventions |
+    | **Frame Naming** | Descriptive frame names (Claude uses these for component names) |
+  </TabItem>
+  <TabItem label="For Developers">
+    | Requirement | Details |
+    |-------------|---------|
+    | **Claude Code** | Version 1.5.0+ (MCP support) |
+    | **Figma MCP Server** | `npm install -g @modelcontextprotocol/server-figma` |
+    | **Personal Access Token** | Generated from Figma account settings -> Tokens |
+    | **MCP Configuration** | Token configured in Claude Code settings |
+  </TabItem>
+</Tabs>
+
+### MCP Configuration
+
+Add to your Claude Code MCP settings (`.claude/mcp.json` or settings UI):
+
+```json
+{
+  "mcpServers": {
+    "figma": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-figma"],
+      "env": {
+        "FIGMA_PERSONAL_ACCESS_TOKEN": "your-token-here"
+      }
+    }
+  }
+}
+```
+
+<Aside type="caution">
+**Security note:** Use environment variables for production:
+
+```json
+{
+  "env": {
+    "FIGMA_PERSONAL_ACCESS_TOKEN": "${FIGMA_TOKEN}"
+  }
+}
+```
+
+Then export in your shell: `export FIGMA_TOKEN="figd_..."`
+</Aside>
+
+---
+
+## Core Workflows
+
+### Workflow A: Single Frame to Production Component
+
+**Timing:** 2-3 minutes per component
+
+<Steps>
+1. **Designer** creates the component in Figma with proper variables/styles
+2. **Designer** shares the Figma file URL with the developer
+3. **Developer** prompts Claude Code:
+
+   ```
+   Read the "Button/Primary" component from Figma file:
+   https://www.figma.com/design/FILE_KEY
+
+   Implement as a React component with TypeScript.
+   Use Tailwind for styling, mapping Figma variables to our design tokens.
+   Ensure responsive behavior matches Figma's Auto Layout constraints.
+   ```
+
+4. **Claude** fetches the component via Figma MCP, extracts styles/dimensions/spacing, maps variables to code tokens, and generates the component
+5. **Verification:** `npm run dev` and visually compare against Figma
+</Steps>
+
+**Example output:**
+
+```tsx
+// components/Button/Primary.tsx
+interface ButtonProps {
+  size?: 'sm' | 'md' | 'lg';
+  disabled?: boolean;
+  children: React.ReactNode;
+}
+
+export function PrimaryButton({ size = 'md', disabled, children }: ButtonProps) {
+  return (
+    <button
+      className={cn(
+        'rounded-md font-medium transition-colors',
+        'bg-interactive-primary text-white',
+        'hover:bg-interactive-primary-hover',
+        'disabled:opacity-50 disabled:cursor-not-allowed',
+        {
+          'px-3 py-1.5 text-sm': size === 'sm',
+          'px-4 py-2 text-base': size === 'md',
+          'px-6 py-3 text-lg': size === 'lg',
+        }
+      )}
+      disabled={disabled}
+    >
+      {children}
+    </button>
+  );
+}
+```
+
+---
+
+### Workflow B: Design System Drift Audit
+
+**Timing:** 3 weeks manual review reduced to 3 minutes automated
+
+**Problem:** Over time, code diverges from the design system (magic numbers, hardcoded colors, inconsistent spacing).
+
+**Prompt:**
+
+```
+Audit src/components for design system compliance.
+Compare against our Figma design system:
+https://www.figma.com/design/FILE_KEY
+
+Report:
+1. Hardcoded colors not using design tokens
+2. Magic number spacing values
+3. Components not matching Figma structure
+4. Missing responsive patterns
+
+Then propose fixes with token replacements.
+```
+
+---
+
+### Workflow C: Token Automation Pipeline
+
+**Goal:** Figma variable changes automatically propagate to code.
+
+```
+Figma Variables
+    ↓ (Tokens Studio export or Figma API)
+GitHub Repository (tokens.json)
+    ↓ (GitHub Actions CI/CD)
+Style Dictionary Transform
+    ↓ (generates)
+CSS / Tailwind / Platform-specific tokens
+    ↓ (commit & deploy)
+Production
+```
+
+**One-time setup:**
+
+<Steps>
+1. **Tokens Studio Plugin:** Connect to GitHub repo
+2. **Style Dictionary Config:** Define transform rules
+3. **GitHub Actions:** Auto-run on token updates
+4. **Claude Role:** Review and validate generated tokens
+</Steps>
+
+---
+
+### Workflow D: Visual Iteration Loop (Figma + Playwright)
+
+**Goal:** Automated visual regression testing against Figma designs.
+
+**MCP Stack:** Figma MCP + Playwright MCP
+
+```
+Take a screenshot of our Button component in all variants.
+Compare against Figma frames from:
+https://www.figma.com/design/FILE_KEY → "Button Tests" page
+
+Report any visual differences (color, spacing, typography).
+```
+
+**Workflow:**
+
+<Steps>
+1. Claude reads Figma frames (expected state)
+2. Claude uses Playwright to screenshot live components (actual state)
+3. Claude compares (pixel diff or visual inspection)
+4. Reports discrepancies with fix suggestions
+</Steps>
+
+---
+
+## Code Connect Setup
+
+**Code Connect** is Figma's no-code tool for linking design components to code snippets, enhancing Claude's ability to generate correct code.
+
+| Without Code Connect | With Code Connect |
+|---------------------|-------------------|
+| Claude generates generic code | Claude uses team conventions |
+| Prop naming inconsistent | Props match Figma variants exactly |
+| Requires manual correction | Production-ready first pass |
+
+**Setup steps:**
+
+<Steps>
+1. In Figma Dev Mode, select a component and open the Code Connect panel
+2. Add a code snippet showing how the component is used:
+
+   ```tsx
+   <Button variant="primary" size="lg">
+     Click me
+   </Button>
+   ```
+
+3. Claude sees this when asked to implement, and uses your team's exact patterns
+</Steps>
+
+---
+
+## Example Prompts
+
+<Tabs>
+  <TabItem label="Component Implementation">
+    ```
+    Implement the "Card/Product" component from our Figma design system:
+    [Figma URL]
+
+    Requirements:
+    - Use our existing design tokens from tailwind.config.ts
+    - Include hover states matching Figma interactions
+    - Implement all variants (default, featured, compact)
+    - Add TypeScript types for all props
+    ```
+  </TabItem>
+  <TabItem label="Design System Expansion">
+    ```
+    Our design team added a new "Badge" component to Figma:
+    [Figma URL → Badge frame]
+
+    Generate:
+    1. React component with all variants
+    2. Storybook stories
+    3. Unit tests for prop combinations
+    4. Update design system docs
+    ```
+  </TabItem>
+  <TabItem label="Token Validation">
+    ```
+    Compare the color tokens in our Tailwind config against
+    Figma variables from: [Figma URL]
+
+    Report any mismatches and generate update script.
+    ```
+  </TabItem>
+  <TabItem label="Responsive Implementation">
+    ```
+    Implement the "Hero" section from Figma with exact responsive behavior:
+    [Figma URL → Hero/Responsive frame]
+
+    Figma has 3 breakpoints configured. Match these precisely.
+    ```
+  </TabItem>
+  <TabItem label="Accessibility Audit">
+    ```
+    Review the "Modal" component implementation against Figma specs:
+    [Figma URL]
+
+    Check:
+    - Focus management matches Figma's interaction flow
+    - Color contrast meets WCAG AA
+    - Keyboard navigation (Figma annotations specify tab order)
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## Team Adoption Patterns
+
+<CardGrid>
+  <Card title="Product Designers" icon="pencil">
+    Design in Figma -> Share URL -> Claude generates code -> Designer reviews visually (no code reading needed).
+  </Card>
+  <Card title="Developers" icon="laptop">
+    Receive Figma URL -> Prompt Claude to implement -> Review code architecture -> Run visual comparison -> Commit.
+  </Card>
+  <Card title="Product Managers" icon="document">
+    Request implementation complexity estimates and timelines based on Figma frames.
+  </Card>
+</CardGrid>
+
+---
+
+## Anti-Patterns
+
+| Anti-Pattern | Why It Fails | Correct Approach |
+|-------------|-------------|-----------------|
+| Manual design transcription | Error-prone, time-consuming, drift inevitable | Let Claude read Figma directly via MCP |
+| Screenshots as specs | No token data, no interactivity, ambiguous | Share Figma URLs, let Claude access structured data |
+| Hardcoded values | Breaks when design system updates | Use design tokens from Figma variables |
+| Designer codes | Inefficient use of designer skills | Designer designs -> Claude codes -> Dev reviews |
+| Developer guesses spacing | Inconsistent with design system | Claude extracts exact values from Figma |
+| Skipping visual comparison | Implementation drift | Always verify against Figma source |
+| Token naming mismatch | Figma variables != code tokens | Establish naming convention, use Style Dictionary |
+| Single-tier tokens | Inflexible, hard to theme | Use 3-tier hierarchy (base/composite/semantic) |
+
+---
+
+## Implementation Roadmap
+
+### Phase 1: Foundation (Week 1-2)
+
+**Goal:** Basic Figma -> Claude -> Code pipeline
+
+- Install Figma MCP Server
+- Configure personal access token
+- Test connection: Claude reads a Figma file
+- Create project CLAUDE.md with design system conventions
+- Implement 3-5 simple components (Button, Input, Badge)
+- Establish visual QA process
+
+### Phase 2: Scaling (Week 3-4)
+
+**Goal:** Full design system implementation + automation
+
+- Implement 20+ components from Figma library
+- Set up token automation (Tokens Studio + Style Dictionary)
+- Create component testing suite (Storybook + visual regression)
+- Train designers on variable hygiene
+- Run first design system drift audit
+
+### Phase 3: Orchestration (Week 5+)
+
+**Goal:** Multi-MCP workflows + continuous sync
+
+- Integrate Playwright MCP for automated visual testing
+- Set up CI/CD for design-code parity checks
+- Create Figma -> GitHub -> Production pipeline
+- Implement design system governance (linting, audits)
+- Measure metrics (TTM, inconsistency rate, dev time saved)

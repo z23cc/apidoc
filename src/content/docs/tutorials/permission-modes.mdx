@@ -1,0 +1,146 @@
+---
+title: "权限模式"
+description: "了解 Claude Code 的五种权限模式，根据工作场景灵活控制 AI 的自主权限"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Claude Code 提供五种权限模式，帮助你在安全性和效率之间灵活切换。选择合适的模式可以显著提升开发体验。
+
+<CardGrid>
+  <Card title="默认模式" icon="approve-check-circle">
+    每次操作都需确认，最安全的学习模式。
+  </Card>
+  <Card title="自动接受模式" icon="pencil">
+    自动批准文件编辑，加速开发流程。
+  </Card>
+  <Card title="计划模式" icon="open-book">
+    只读分析，不做任何修改，适合代码探索。
+  </Card>
+  <Card title="跳过权限模式" icon="warning">
+    全自动执行，仅限沙盒环境使用。
+  </Card>
+</CardGrid>
+
+---
+
+## 五种权限模式详解
+
+### 1. 默认模式（Default Mode）
+
+这是 Claude Code 启动时的默认模式，也是最安全的模式。
+
+Claude 在执行以下操作前都会请求你的许可：
+
+- 编辑文件
+- 运行命令
+- 提交代码
+
+<Aside type="tip">
+如果你刚开始使用 Claude Code，建议先在默认模式下熟悉工作流程，确保理解每一步操作后再考虑提升自主权限。
+</Aside>
+
+### 2. 自动接受模式（Auto-accept Mode）
+
+```bash
+# 在会话中告诉 Claude 开启自动接受
+You: Turn on auto-accept for the rest of this session
+```
+
+在此模式下，Claude 会自动批准文件编辑，但 **仍然会询问** 是否执行 Shell 命令。
+
+**适用场景：**
+- 你已信任 Claude 的编辑判断
+- 正在进行大量文件修改
+- 想要提升工作速度
+
+<Aside type="caution">
+仅在任务明确且操作可逆的情况下使用自动接受模式。建议先用 Git 提交当前更改，确保可以回退。
+</Aside>
+
+### 3. 计划模式（Plan Mode）
+
+```bash
+/plan
+```
+
+在计划模式下，Claude **只能读取和分析**，不允许进行任何修改。
+
+**适用场景：**
+- 理解陌生代码库
+- 探索架构方案
+- 在执行修改前安全地调查问题
+
+准备好执行修改时，使用 `/execute` 退出计划模式。
+
+<Aside type="tip">
+养成"先计划，后执行"的习惯——先用 `/plan` 让 Claude 分析并给出方案，确认后再切换到执行模式。
+</Aside>
+
+### 4. 免打扰模式（Don't Ask Mode）
+
+自动拒绝未预先批准的工具调用。你可以通过 `/permissions` 或 `permissions.allow` 规则来预先批准特定工具。
+
+Claude 不会弹出任何权限确认提示——如果某个工具没有被明确允许，就会被静默拒绝。
+
+**适用场景：**
+- 需要严格控制哪些工具可以运行
+- 不想被交互式确认打断工作流
+- 自动化场景中限制性工作流
+
+### 5. 跳过权限模式（Bypass Permissions Mode）
+
+自动批准所有操作，包括 Shell 命令，完全不会弹出任何权限提示。
+
+```bash
+# 需要通过 CLI 标志启用
+claude --dangerously-skip-permissions
+```
+
+<Aside type="danger">
+此模式仅适用于沙盒化的 CI/CD 环境。绝不要在生产系统或处理不受信任的代码时使用。
+</Aside>
+
+---
+
+## 模式选择指南
+
+<Tabs>
+  <TabItem label="学习阶段">
+    **推荐：默认模式**
+
+    - 每次操作都会被确认，帮助你了解 Claude 的行为
+    - 可以安全地练习和探索
+    - 逐步建立对工具的信任
+  </TabItem>
+  <TabItem label="日常开发">
+    **推荐：默认模式 + 计划模式交替使用**
+
+    - 先用 `/plan` 分析问题和制定方案
+    - 确认方案后用 `/execute` 切换到执行
+    - 对于熟悉的任务，可以开启自动接受模式
+  </TabItem>
+  <TabItem label="CI/CD 自动化">
+    **推荐：免打扰模式或跳过权限模式**
+
+    - 在隔离的沙盒环境中运行
+    - 通过 `permissions.allow` 精确控制允许的操作
+    - 跳过权限模式仅限完全受控的环境
+  </TabItem>
+</Tabs>
+
+---
+
+## 快速对照表
+
+| 模式 | 文件编辑 | Shell 命令 | 适用场景 |
+|------|---------|-----------|---------|
+| 默认模式 | 需确认 | 需确认 | 学习、敏感操作 |
+| 自动接受 | 自动批准 | 需确认 | 快速开发 |
+| 计划模式 | 禁止 | 禁止 | 代码分析、方案探索 |
+| 免打扰 | 按规则 | 按规则 | 受控自动化 |
+| 跳过权限 | 自动批准 | 自动批准 | 沙盒 CI/CD |
+
+<Aside type="note">
+安全原则：从最严格的权限开始，随着信任的建立逐步放宽。永远不要在生产环境中使用跳过权限模式。
+</Aside>

@@ -1,0 +1,269 @@
+---
+title: "Migrating from Other AI Tools"
+description: "A complete guide for migrating to Claude Code from GitHub Copilot, Cursor, and other AI coding assistants"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Switching from GitHub Copilot, Cursor, or other AI coding assistants? This guide helps you understand the differences, plan your migration strategy, and make a smooth transition.
+
+---
+
+## How Claude Code Differs
+
+<Aside type="note">
+**Key mindset shift**: Claude Code is a **structured context system**, not a chatbot or autocomplete tool. You build persistent context (CLAUDE.md, Skills, Hooks) that compounds over time.
+</Aside>
+
+| Feature | GitHub Copilot | Cursor | Windsurf | Claude Code |
+|---------|---------------|--------|----------|-------------|
+| **Interaction** | Inline autocomplete | Chat + autocomplete | Cascade agent | CLI + conversation |
+| **Context** | Current file | Open files | ~200K tokens | Entire project (agentic search) |
+| **Autonomy** | Suggestions only | Edit + chat | Multi-agent | Full task execution |
+| **Customization** | Limited | Extensions | Hooks Cascade | Agents, Skills, Hooks, MCP |
+| **Cost Model** | $10-20/month flat | Credit-based | Credit-based | Subscription (Pro $20+) |
+| **Inline autocomplete** | Native | Tab | Supercomplete | Not supported (use Copilot alongside) |
+
+---
+
+## Migration Guide: GitHub Copilot to Claude Code
+
+<Tabs>
+  <TabItem label="Copilot Strengths">
+    - **Inline suggestions** — Fast autocomplete as you type
+    - **Familiar workflow** — Works inside your editor
+    - **Low friction** — No context switching
+  </TabItem>
+  <TabItem label="Where Claude Code Excels">
+    - **Multi-file refactoring** — Copilot works one file at a time; Claude reads and edits across files
+    - **Complex tasks** — Copilot suggests lines; Claude implements features
+    - **Understanding context** — Copilot sees the current file; Claude can search the entire project
+    - **Explaining code** — Copilot is limited; Claude provides detailed explanations
+    - **Debugging** — Copilot is weak; Claude performs systematic root cause analysis
+  </TabItem>
+</Tabs>
+
+### Recommended: Hybrid Approach
+
+<CardGrid>
+  <Card title="Use Copilot For" icon="pencil">
+    - Quick autocomplete while typing
+    - Boilerplate code generation
+    - Simple function completions
+  </Card>
+  <Card title="Use Claude Code For" icon="rocket">
+    - Feature implementation (multi-file changes)
+    - Debugging complex issues
+    - Code reviews and refactoring
+    - Understanding unfamiliar codebases
+    - Writing tests for entire modules
+  </Card>
+</CardGrid>
+
+**Hybrid workflow example:**
+
+```bash
+# Morning: Plan a feature with Claude Code
+claude
+You: "I need to add user authentication. What's the best approach for this codebase?"
+# Claude analyzes the project and suggests architecture
+
+# During coding: Use Copilot for inline completions
+# Type in VS Code, Copilot autocompletes
+
+# Afternoon: Debug with Claude Code
+claude
+You: "Login fails on mobile but works on desktop. Debug this."
+# Claude systematically investigates
+
+# End of day: Review with Claude Code
+claude
+You: "Review my changes today. Check for security issues."
+# Claude reviews all modified files
+```
+
+---
+
+## Migration Guide: Cursor to Claude Code
+
+<Tabs>
+  <TabItem label="Cursor Strengths">
+    - **Inline editing** — Direct code modifications in editor
+    - **GUI interface** — Familiar VS Code experience
+    - **Chat + autocomplete** — Both modalities in one tool
+  </TabItem>
+  <TabItem label="Where Claude Code Excels">
+    - **Terminal-native workflow** — Better for CLI-heavy developers
+    - **Advanced customization** — Agents, Skills, Hooks, Commands
+    - **MCP servers** — Extensibility beyond what Cursor offers
+    - **Git integration** — Native git operations, commit generation
+    - **CI/CD integration** — Headless mode for automation
+  </TabItem>
+</Tabs>
+
+### When to Switch
+
+<CardGrid>
+  <Card title="Stick with Cursor If" icon="seti:config">
+    - You strongly prefer GUI over CLI
+    - You want an all-in-one IDE experience
+    - You use it more than 4 hours/day (flat rate is more economical)
+    - You do not need advanced customization
+  </Card>
+  <Card title="Switch to Claude Code If" icon="rocket">
+    - You are comfortable with terminal workflows
+    - You want deeper customization (Agents, Hooks)
+    - You work with complex, multi-repo projects
+    - You want to integrate AI into CI/CD
+    - You prefer pay-per-use pricing
+  </Card>
+</CardGrid>
+
+### Running Both Together
+
+```bash
+# Cursor for editing and quick changes
+# Claude Code in terminal for complex tasks
+
+# Example workflow:
+# 1. Use Cursor to explore code and make quick edits
+# 2. Open terminal: claude
+# 3. Ask Claude Code: "Review my changes and suggest improvements"
+# 4. Apply suggestions in Cursor
+# 5. Use Claude Code to generate tests
+```
+
+---
+
+## Migration Timeline
+
+<Steps>
+
+1. **Week 1: Learning Phase**
+
+   - Complete the basic tutorials
+   - Understand context management (this is critical)
+   - Try 3-5 small tasks (bug fixes, small features)
+   - Learn when to use `/plan` mode
+   - Practice reviewing diffs before accepting
+
+2. **Week 2: Establishing Your Workflow**
+
+   - Create a project CLAUDE.md file
+   - Set up 1-2 custom commands for frequent tasks
+   - Configure MCP servers
+   - Define your hybrid workflow (when to use Claude Code vs. other tools)
+   - Track costs and optimize based on usage
+
+3. **Weeks 3-4: Advanced Usage**
+
+   - Create custom Agents for specialized tasks
+   - Set up Hooks for automation (formatting, linting)
+   - Integrate into CI/CD if applicable
+   - Build team patterns if working with others
+   - Refine CLAUDE.md based on your learnings
+
+</Steps>
+
+---
+
+## Common Migration Issues
+
+<Tabs>
+  <TabItem label="Missing Inline Suggestions">
+    **Issue:** "I miss inline autocomplete"
+
+    **Solution:**
+    - Keep using Copilot/Cursor for autocomplete; use Claude Code for complex tasks
+    - Alternative: Ask Claude to generate code snippets you can paste into your editor
+  </TabItem>
+  <TabItem label="Context Switching">
+    **Issue:** "Switching between tools is annoying"
+
+    **Solution:**
+    - Use a split terminal (editor on left, Claude Code on right)
+    - Set up a keyboard shortcut to toggle terminal focus
+  </TabItem>
+  <TabItem label="Which Tool to Use">
+    **Issue:** "I don't know when to use which tool"
+
+    **Rule of thumb:**
+    - **Fewer than 5 lines of code** — Use Copilot/autocomplete
+    - **5-50 lines, single file** — Either tool works
+    - **More than 50 lines or multi-file** — Use Claude Code
+  </TabItem>
+  <TabItem label="Speed and Cost">
+    **Issue:** "Claude Code is slower than autocomplete" / "Costs are unpredictable"
+
+    **On speed:**
+    - Claude Code solves different types of problems
+    - Do not compare autocomplete with full task execution
+    - Use specific queries and manage context well
+
+    **On cost:**
+    - Track costs in the Anthropic Console
+    - Set a mental budget per session ($0.10-$0.50)
+    - Use `/compact` to compress context; be specific in queries
+  </TabItem>
+</Tabs>
+
+---
+
+## Transition Strategies
+
+<Tabs>
+  <TabItem label="Gradual (Recommended)">
+    ```
+    Week 1: Use Claude Code 1-2 times/day for specific tasks
+    Week 2: Use Claude Code for all debugging and reviews
+    Week 3: Use Claude Code for feature implementation
+    Week 4: Full workflow integration
+    ```
+  </TabItem>
+  <TabItem label="Cold Turkey">
+    ```
+    Day 1: Disable Copilot/Cursor, use only Claude Code
+    Day 2-3: Frustration period (learning curve)
+    Day 4-7: Productivity recovery
+    Week 2+: Full proficiency
+    ```
+  </TabItem>
+  <TabItem label="Task-Based">
+    ```
+    Use Claude Code exclusively for:
+    - All new features
+    - All debugging sessions
+    - All code reviews
+
+    Keep Copilot/Cursor for:
+    - Quick edits
+    - Autocomplete
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## Measuring Success
+
+You know you have successfully migrated when:
+
+<Steps>
+
+1. You instinctively reach for Claude Code for complex tasks
+
+2. You manage context without thinking about it
+
+3. You have created at least 2-3 custom commands or Agents
+
+4. You can estimate costs before starting a session
+
+5. You prefer Claude Code's explanations over inline docs
+
+6. You have integrated Claude Code into your daily workflow
+
+</Steps>
+
+<Aside type="tip">
+**Subjective productivity indicators** (your experience may vary): Feeling more productive on complex tasks, spending less time on boilerplate and debugging, catching more issues through Claude reviews, better understanding of unfamiliar code.
+</Aside>

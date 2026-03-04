@@ -1,0 +1,343 @@
+---
+title: "PDF Generation"
+description: "Generate professional PDFs using Claude Code with Quarto and Typst stack"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+## Quick Start
+
+```bash
+# Install
+brew install quarto  # macOS
+
+# Generate
+quarto render document.qmd  # -> document.pdf
+
+# Preview
+quarto preview document.qmd  # Hot-reload
+```
+
+**Stack**: Quarto (orchestration) + Typst (typography) + Pandoc (markdown)
+
+---
+
+## When to Use
+
+| Use Case | Good Fit | Alternative |
+|----------|----------|-------------|
+| Technical documentation | Yes | -- |
+| Whitepapers / Reports | Yes | -- |
+| API documentation | Maybe | OpenAPI + Redoc |
+| Slides / Presentations | Maybe | Quarto Revealjs |
+| Quick notes | No | Plain Markdown |
+| Collaborative editing | No | Google Docs, Notion |
+
+<Aside type="tip">
+Best for long-form technical content requiring professional layout, version control, and reproducibility.
+</Aside>
+
+---
+
+## Stack Overview
+
+```
+┌─────────────────────────────────────────────┐
+│              Your .qmd File                  │
+│       (Markdown + YAML frontmatter)          │
+└─────────────────────────────────────────────┘
+                      |
+                      v
+┌─────────────────────────────────────────────┐
+│                  Quarto                      │
+│         (Document rendering engine)          │
+│       * Processes YAML metadata              │
+│       * Handles extensions                   │
+│       * Manages output formats               │
+└─────────────────────────────────────────────┘
+                      |
+          ┌───────────┴───────────┐
+          v                       v
+┌───────────────────┐   ┌───────────────────┐
+│      Pandoc       │   │      Typst        │
+│   (MD -> AST)     │   │  (Typography/PDF) │
+│  * Markdown parser│   │  * Modern engine  │
+│  * AST transforms │   │  * Fast compile   │
+│  * Format bridges │   │  * No LaTeX       │
+└───────────────────┘   └───────────────────┘
+                      |
+                      v
+┌─────────────────────────────────────────────┐
+│              document.pdf                    │
+│       (Professional typography output)       │
+└─────────────────────────────────────────────┘
+```
+
+| Component | Version | Role |
+|-----------|---------|------|
+| **Quarto** | &ge;1.4.0 | Orchestration, extensions, multi-format |
+| **Typst** | 0.13.0 | Modern typography (replaces LaTeX) |
+| **Pandoc** | 3.x | Markdown parsing (bundled with Quarto) |
+
+---
+
+## Setup
+
+<Tabs>
+  <TabItem label="macOS">
+    ```bash
+    brew install quarto
+    ```
+  </TabItem>
+  <TabItem label="Linux (Debian/Ubuntu)">
+    ```bash
+    wget https://github.com/quarto-dev/quarto-cli/releases/download/v1.4.555/quarto-1.4.555-linux-amd64.deb
+    sudo dpkg -i quarto-1.4.555-linux-amd64.deb
+    ```
+  </TabItem>
+  <TabItem label="Windows">
+    ```powershell
+    winget install Posit.Quarto
+    ```
+  </TabItem>
+</Tabs>
+
+**Verify installation**:
+
+```bash
+quarto --version  # Should be >=1.4.0
+```
+
+### Project Structure
+
+```
+project/
+├── _extensions/           # Quarto extensions (templates)
+│   └── custom-template/
+│       ├── _extension.yml
+│       ├── typst-template.typ
+│       └── typst-show.typ
+├── documents/
+│   ├── guide.qmd          # Source file
+│   └── guide.pdf          # Generated output
+└── assets/
+    └── logo.png           # Shared assets
+```
+
+### Minimal Document
+
+Create `document.qmd`:
+
+```yaml
+---
+title: "My Document"
+author: "Author Name"
+date: 2026-01-17
+format:
+  typst:
+    toc: true
+lang: en
+---
+
+# Introduction
+
+Your content here...
+
+## Section 1
+
+More content with **bold** and `code`.
+```
+
+Generate:
+
+```bash
+quarto render document.qmd  # Creates document.pdf
+```
+
+---
+
+## Workflow
+
+<Steps>
+
+1. **Write content in Markdown** (`.qmd` file)
+2. **Add YAML frontmatter** for metadata
+3. **Preview with hot-reload**: `quarto preview document.qmd`
+4. **Generate final PDF**: `quarto render document.qmd`
+5. **Version control** both source and PDF
+
+</Steps>
+
+### Available YAML Parameters
+
+| Parameter | Type | Description | Example |
+|-----------|------|-------------|---------|
+| `title` | string | Main title | `"Technical Guide"` |
+| `subtitle` | string | Secondary title | `"v2.0 Edition"` |
+| `author` | string/array | Author(s) | `"John Doe"` |
+| `date` | date | Document date | `2026-01-17` |
+| `toc` | boolean | Table of contents | `true` |
+| `toc-depth` | number | TOC levels (1-3) | `2` |
+| `lang` | string | Language | `fr` or `en` |
+| `section-numbering` | string | Number format | `"1.1"` |
+
+### Markdown Features
+
+**Page Breaks**:
+
+```markdown
+{{< pagebreak >}}
+```
+
+**Code Blocks** (with syntax highlighting):
+
+````markdown
+```typescript
+function hello(): string {
+  return "world";
+}
+```
+````
+
+**Images**:
+
+```markdown
+![Alt text](path/to/image.png){width=50%}
+```
+
+---
+
+## Integration with Claude Code
+
+### Prompt Examples
+
+<Tabs>
+  <TabItem label="Generate Documentation">
+    ```
+    Create a technical guide for our API as a Quarto document.
+    Use the Typst format with a table of contents.
+    Include sections for: Authentication, Endpoints, Error Codes.
+    ```
+  </TabItem>
+  <TabItem label="Convert Existing Markdown">
+    ```
+    Convert README.md to a professional PDF.
+    Add a cover page with title and date.
+    Use Quarto/Typst format.
+    ```
+  </TabItem>
+  <TabItem label="Create Template">
+    ```
+    Create a Quarto extension for our company's document style:
+    - Logo in header
+    - Custom colors: primary #0f172a, accent #6366f1
+    - Inter font for body, JetBrains Mono for code
+    ```
+  </TabItem>
+</Tabs>
+
+### Auto-Generate with Hooks
+
+Auto-generate PDF after edits using a PostToolUse hook:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "command": "if echo \"$TOOL_INPUT\" | grep -q '.qmd'; then quarto render \"$FILE\"; fi"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Custom Templates
+
+### Create an Extension
+
+Create `_extensions/mytemplate/_extension.yml`:
+
+```yaml
+title: My Template
+author: Your Name
+version: 1.0.0
+contributes:
+  formats:
+    typst:
+      template: typst-template.typ
+      template-partials:
+        - typst-show.typ
+```
+
+### Typst Template Variables
+
+```typst
+// Colors
+#let primary = rgb("#0f172a")      // Dark text
+#let secondary = rgb("#334155")    // Lighter text
+#let accent = rgb("#6366f1")       // Highlights
+
+// Typography
+#set text(
+  font: ("Inter", "Helvetica Neue", "Arial"),
+  size: 11pt,
+)
+
+#set par(
+  leading: 0.75em,  // Line height
+  justify: true,
+)
+
+// Code blocks
+#show raw.where(block: true): it => {
+  block(
+    fill: rgb("#f8fafc"),
+    stroke: (left: 3pt + accent),
+    inset: 10pt,
+    radius: 4pt,
+    it,
+  )
+}
+```
+
+---
+
+## Troubleshooting
+
+### Quick Checks
+
+```bash
+# Verify Quarto
+quarto --version
+
+# Check extension exists
+ls _extensions/*/
+
+# Validate code block pairs (must be even)
+grep -c '^```' document.qmd
+
+# Check encoding
+file -i document.qmd  # Should show utf-8
+```
+
+### Common Issues
+
+| Issue | Symptom | Fix |
+|-------|---------|-----|
+| Nested code blocks | Content escapes block | Use 4+ backticks for outer block |
+| Tables as code | Grey background | Check unmatched backticks above |
+| Missing extension | "Extension not found" | Verify `_extensions/` path |
+| Font warnings | "unknown font family" | Normal; uses fallbacks |
+| Special chars broken | Garbled text | Convert to UTF-8 |
+
+---
+
+## See Also
+
+- [Quarto Documentation](https://quarto.org/docs/guide/)
+- [Typst Documentation](https://typst.app/docs/)
+- [Quarto + Typst Guide](https://quarto.org/docs/output-formats/typst.html)

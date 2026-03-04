@@ -1,0 +1,343 @@
+---
+title: "Dual-Instance Planning Workflow"
+description: "Use two Claude instances with distinct roles for planning and implementation"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Use two Claude instances with distinct roles: one for planning and review (Claude Zero), one for implementation (Claude One). Separation of concerns improves plan quality and reduces implementation errors.
+
+---
+
+## Core Concept
+
+```
+1. Launch Claude Zero (planner): explores, writes plans, reviews
+2. Launch Claude One (implementer): reads plans, codes, commits
+3. Human gatekeeper: approve plans before implementation
+4. Plans directory flow: Review/ → Active/ → Completed/
+```
+
+**Best for:** Solo devs, spec-heavy work, quality over speed scenarios.
+
+---
+
+## When to Use
+
+<CardGrid>
+  <Card title="Complex Specifications" icon="document">
+    Requirements that need clarification through interview-style questions.
+  </Card>
+  <Card title="Quality-Critical Features" icon="approve-check">
+    Security, payments, data migrations -- features where mistakes are costly.
+  </Card>
+  <Card title="Learning Phase" icon="open-book">
+    New codebase, unfamiliar patterns -- planning overhead reduces risk.
+  </Card>
+  <Card title="Budget Constraints" icon="seti:money">
+    Runs on $100-200/month, more economical than multi-instance parallel approaches.
+  </Card>
+</CardGrid>
+
+<Aside type="caution">
+**When NOT to use:** Simple changes (typo fixes, trivial refactors), exploratory coding (problem space unknown), tight deadlines (speed over quality).
+</Aside>
+
+### Pattern Comparison
+
+| Pattern | Scaling Axis | Monthly Cost | Best For |
+|---------|-------------|-------------|----------|
+| **Single instance** | None | $50-100 | Most developers, general use |
+| **Dual instance** | Vertical (plan + implement) | $100-200 | Spec-heavy, quality focus |
+| **Multi-instance parallel** | Horizontal (5-15 parallel) | $500-1,000 | Teams, high-volume shipping |
+
+---
+
+## Setup
+
+### Step 1: Create Directory Structure
+
+```bash
+cd ~/projects/your-project
+mkdir -p .claude/plans/{Review,Active,Completed}
+```
+
+**Directory roles:**
+- `Review/` -- Plans awaiting human approval
+- `Active/` -- Approved plans under implementation
+- `Completed/` -- Archived plans (learning resource)
+
+Add to `.gitignore`:
+
+```bash
+.claude/plans/Review/
+.claude/plans/Active/
+# Optional: commit Completed/ for team learning
+```
+
+### Step 2: Launch Claude Zero (Planner)
+
+In **Terminal 1**:
+
+```bash
+cd ~/projects/your-project
+claude
+```
+
+Send the role enforcement message:
+
+```
+You are Claude Zero (Planner).
+
+Your role:
+- Explore codebase using Plan Mode (Shift+Tab twice)
+- Interview user about requirements
+- Write detailed plans to .claude/plans/Review/
+- Review implementations after Claude One completes them
+- NEVER edit code directly
+- NEVER commit changes
+
+Start by acknowledging this role.
+```
+
+### Step 3: Launch Claude One (Implementer)
+
+In **Terminal 2** (new session):
+
+```bash
+cd ~/projects/your-project
+claude
+```
+
+Send the role enforcement message:
+
+```
+You are Claude One (Implementer).
+
+Your role:
+- Read approved plans from .claude/plans/Active/
+- Implement exactly as specified
+- Commit changes after each logical step
+- Report completion back to user
+- NEVER create plans
+- NEVER skip approval steps
+
+Start by acknowledging this role.
+```
+
+---
+
+## Complete Workflow
+
+### Phase 1: Planning (Claude Zero)
+
+<Steps>
+1. **Initiate planning**
+
+   Enter Plan Mode in Claude Zero (press Shift+Tab twice), then describe the requirement:
+
+   ```
+   Implement JWT authentication for the API:
+   - Access tokens (15min expiry)
+   - Refresh tokens (7 day expiry)
+   - Middleware to protect routes
+   - Logout capability (revoke refresh tokens)
+   ```
+
+2. **Claude Zero explores the codebase**
+
+   Claude Zero in Plan Mode:
+   - Reads existing auth code
+   - Searches for auth patterns in the codebase
+   - Identifies dependencies (libraries, env vars)
+
+3. **Claude Zero interviews you**
+
+   ```
+   Before I draft the plan, I need to clarify:
+   1. Should we support multiple concurrent sessions per user?
+   2. Where should refresh tokens be stored? (Database / Redis / Other)
+   3. Which routes should be protected? (All /api/* or specific routes only?)
+   4. Do you want rate limiting on login attempts?
+   5. Success criteria for "done"? (Tests passing? Postman collection? Documentation?)
+   ```
+
+   You answer, and Claude Zero refines its understanding.
+
+4. **Claude Zero writes the plan**
+
+   Claude Zero creates `.claude/plans/Review/auth-jwt.md`, containing:
+   - Summary and estimated effort
+   - Confirmed requirements list
+   - Files to create (with function signatures and line estimates)
+   - Files to modify (with before/after comparisons)
+   - Sequential implementation steps
+   - Success criteria checklist
+   - Security checklist
+   - Risks and mitigation strategies
+</Steps>
+
+### Phase 2: Human Review
+
+Review `.claude/plans/Review/auth-jwt.md`:
+
+| Check | Description |
+|-------|-------------|
+| Requirements coverage | Are all requirements addressed? |
+| Technical approach | Does the approach fit this codebase? |
+| Security considerations | Are security concerns handled? |
+| Effort estimate | Is the estimated time realistic? |
+| Success criteria | Are criteria clear and testable? |
+| File paths | Are create/modify paths correct? |
+
+**If approved:**
+
+```bash
+mv .claude/plans/Review/auth-jwt.md .claude/plans/Active/
+```
+
+**If changes needed:** Ask Claude Zero to revise the plan and re-review.
+
+### Phase 3: Implementation (Claude One)
+
+Tell Claude One:
+
+```
+Implement .claude/plans/Active/auth-jwt.md
+
+Follow the plan exactly. Commit after each logical step.
+Report back when complete.
+```
+
+Claude One executes sequentially and commits after each step:
+
+```
+feat: add JWT utility functions
+feat: create refresh_tokens table migration
+feat: add auth middleware
+feat: protect API routes with JWT auth
+test: add JWT auth flow tests
+```
+
+### Phase 4: Verification (Claude Zero)
+
+Tell Claude Zero:
+
+```
+Review the JWT implementation Claude One just completed.
+Check against the plan in .claude/plans/Active/auth-jwt.md.
+```
+
+Claude Zero reviews whether the code structure matches the plan, success criteria are met, the security checklist is complete, and tests are passing.
+
+### Phase 5: Archive
+
+Once verified:
+
+```bash
+mv .claude/plans/Active/auth-jwt.md .claude/plans/Completed/
+```
+
+---
+
+## Cost Analysis
+
+### Dual Instance vs Single Instance (with Corrections)
+
+| Scenario | Single Instance | Dual Instance | Savings |
+|----------|----------------|---------------|---------|
+| **Simple feature** (login form) | 1 session x $5 = **$5** | 2 sessions x $3 = $6 | Single wins |
+| **Medium feature** (auth system) | 1 session x $15 + 2 corrections x $10 = **$35** | 2 sessions x $12 = $24 | **$11 saved** |
+| **Complex feature** (ambiguous spec) | 1 session x $20 + 3 corrections x $15 = **$65** | 2 sessions x $18 = $36 | **$29 saved** |
+
+<Aside type="tip">
+**Breakeven point:** Features requiring 2 or more correction loops make the dual-instance approach cheaper overall.
+</Aside>
+
+---
+
+## Tips and Troubleshooting
+
+### Role Enforcement
+
+**Problem:** Claude Zero starts editing code.
+
+**Solution:** Enforce roles in CLAUDE.md:
+
+```markdown
+## If you are Claude Zero (Planner):
+- Use Plan Mode (Shift+Tab twice) for all exploration
+- Save all plans to .claude/plans/Review/[feature].md
+- NEVER edit code
+- NEVER commit changes
+
+## If you are Claude One (Implementer):
+- Read plans from .claude/plans/Active/
+- Implement exactly as specified
+- Commit after each logical step
+- NEVER create plans
+```
+
+### Context Pollution
+
+**Problem:** Claude One's context is polluted with planning discussions.
+
+**Solution:** Use separate terminal sessions (isolated contexts):
+- Terminal 1 = Claude Zero (planning context)
+- Terminal 2 = Claude One (implementation context)
+
+**Never share context** between Claude Zero and Claude One.
+
+### Plan Drift
+
+**Problem:** Claude One deviates from the plan during implementation.
+
+**Solution:** Include explicit rules in the plan:
+
+```markdown
+## Implementation Rules for Claude One
+- Follow plan steps sequentially (don't skip or reorder)
+- If you encounter blockers, STOP and report (don't improvise)
+- Commit after each step (granular history)
+- If unclear, ask user (don't guess)
+```
+
+### Overhead Management
+
+To simplify file management, add shell aliases:
+
+```bash
+# Add to ~/.bashrc or ~/.zshrc
+
+# Approve plan
+approve-plan() {
+    mv ".claude/plans/Review/$1.md" ".claude/plans/Active/"
+    echo "Approved: $1.md → Active/"
+}
+
+# Archive completed plan
+complete-plan() {
+    mv ".claude/plans/Active/$1.md" ".claude/plans/Completed/"
+    echo "Completed: $1.md → Archived"
+}
+
+# List all plans
+plans() {
+    echo "Review:"
+    ls -1 .claude/plans/Review/ 2>/dev/null || echo "  (empty)"
+    echo ""
+    echo "Active:"
+    ls -1 .claude/plans/Active/ 2>/dev/null || echo "  (empty)"
+    echo ""
+    echo "Completed:"
+    ls -1 .claude/plans/Completed/ 2>/dev/null | tail -5 || echo "  (empty)"
+}
+```
+
+Usage:
+
+```bash
+plans                     # List all plans
+approve-plan auth-jwt     # Approve a plan
+complete-plan auth-jwt    # Archive completed plan
+```

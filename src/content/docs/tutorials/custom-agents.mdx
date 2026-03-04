@@ -1,0 +1,560 @@
+---
+title: "自定义 Agent"
+description: "创建和使用自定义 Agent 来扩展 Claude Code 的专业能力"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Agent 是 Claude 可以委派任务的专业化子进程。通过创建自定义 Agent，你可以让 Claude 拥有特定领域的专业知识和预配置的工具访问权限。
+
+<CardGrid>
+  <Card title="专业化" icon="star">
+    每个 Agent 专注于特定领域，提供比通用提示更好的结果。
+  </Card>
+  <Card title="隔离上下文" icon="approve-check-circle">
+    每个 Agent 有独立的上下文，避免信息混淆。
+  </Card>
+  <Card title="可复用" icon="puzzle">
+    创建一次，在整个项目中反复使用。
+  </Card>
+  <Card title="可组合" icon="setting">
+    通过 Skills 组合知识，通过并行执行提升效率。
+  </Card>
+</CardGrid>
+
+---
+
+## 为什么使用 Agent？
+
+| 不使用 Agent | 使用 Agent |
+|-------------|-----------|
+| 一个 Claude 处理所有事情 | 每个领域有专业专家 |
+| 上下文容易混乱 | 每个 Agent 有聚焦的上下文 |
+| 通用响应 | 领域特定的专业知识 |
+| 手动选择工具 | 预配置的工具访问 |
+
+**对比示例**：
+
+```
+直接提示：
+你: 审查此代码的安全问题，重点关注 OWASP Top 10，
+    检查 SQL 注入、XSS、CSRF 和认证漏洞...
+
+使用 Agent：
+你: 使用 security-reviewer agent 审计此代码
+```
+
+Agent 封装了所有专业知识。
+
+---
+
+## 创建自定义 Agent
+
+Agent 是 `.claude/agents/` 目录中的 Markdown 文件，包含 YAML frontmatter。
+
+### 文件结构
+
+```markdown
+---
+name: agent-name
+description: 清晰的激活触发描述（50-100 字符）
+model: sonnet
+tools: Read, Write, Edit, Bash, Grep, Glob
+---
+
+[Agent 的 Markdown 指令]
+```
+
+### Frontmatter 字段
+
+| 字段 | 必需 | 说明 |
+|------|------|------|
+| `name` | 是 | 短横线命名标识符 |
+| `description` | 是 | 何时激活此 Agent（使用"PROACTIVELY"以自动调用） |
+| `model` | 否 | `sonnet`（默认）、`opus`、`haiku` 或 `inherit` |
+| `tools` | 否 | 允许的工具（逗号分隔），支持 `Task(agent_type)` 语法 |
+| `disallowedTools` | 否 | 要拒绝的工具 |
+| `permissionMode` | 否 | `default`、`acceptEdits`、`dontAsk`、`bypassPermissions` 或 `plan` |
+| `maxTurns` | 否 | 子 Agent 停止前的最大轮次 |
+| `skills` | 否 | 启动时预加载到 Agent 上下文的技能 |
+| `mcpServers` | 否 | 此子 Agent 的 MCP 服务器 |
+| `hooks` | 否 | 限定于此子 Agent 的生命周期钩子 |
+| `memory` | 否 | 持久记忆范围：`user`、`project` 或 `local` |
+| `background` | 否 | `true` 始终作为后台任务运行 |
+| `isolation` | 否 | `worktree` 在临时 git worktree 中运行 |
+| `color` | 否 | CLI 输出颜色（如 `green`、`magenta`） |
+
+### 记忆范围
+
+| 范围 | 存储位置 | 适用场景 |
+|------|---------|---------|
+| `user` | `~/.claude/agent-memory/<name>/` | 跨项目学习 |
+| `project` | `.claude/agent-memory/<name>/` | 项目特定，可通过 git 共享 |
+| `local` | `.claude/agent-memory-local/<name>/` | 项目特定，不提交 |
+
+### 模型选择
+
+| 模型 | 最适合 | 速度 | 成本 |
+|------|--------|------|------|
+| `haiku` | 快速任务、简单修改 | 快 | 低 |
+| `sonnet` | 大多数任务（默认） | 均衡 | 中 |
+| `opus` | 复杂推理、架构决策 | 慢 | 高 |
+
+---
+
+## Agent 模板
+
+复制此模板来创建你自己的 Agent：
+
+```markdown
+---
+name: your-agent-name
+description: 当 [具体触发场景] 时使用此 Agent
+model: sonnet
+tools: Read, Write, Edit, Bash, Grep, Glob
+skills: []
+---
+
+# 你的 Agent 名称
+
+## 角色定义
+
+你是 [领域] 的专家。你的职责包括：
+- [职责 1]
+- [职责 2]
+- [职责 3]
+
+## 激活触发
+
+在以下情况使用此 Agent：
+- [触发条件 1]
+- [触发条件 2]
+- [触发条件 3]
+
+## 方法论
+
+接到任务后，你应该：
+1. [步骤 1]
+2. [步骤 2]
+3. [步骤 3]
+4. [步骤 4]
+
+## 输出格式
+
+你的交付物应包括：
+- [输出 1]
+- [输出 2]
+
+## 约束
+
+- [约束 1]
+- [约束 2]
+
+## 示例
+
+### 示例 1：[场景名称]
+
+**用户**：[示例提示]
+
+**你的方法**：
+1. [首先做什么]
+2. [接下来做什么]
+3. [最终输出]
+```
+
+---
+
+## 最佳实践
+
+### 应该与不应该
+
+| 应该 | 不应该 |
+|------|--------|
+| 让 Agent 成为专家 | 创建通才 Agent |
+| 定义清晰的触发条件 | 使用模糊的描述 |
+| 包含具体示例 | 留下激活歧义 |
+| 限制工具访问 | 给所有 Agent 所有工具 |
+| 通过 Skills 组合 | 重复专业知识 |
+
+### 专业化优于通用化
+
+<Tabs>
+  <TabItem label="好的做法">
+    每个关注点一个 Agent：
+    ```
+    backend-architect    → API 设计、数据库、性能
+    security-reviewer    → OWASP、认证、加密
+    test-engineer        → 测试策略、覆盖率、TDD
+    ```
+  </TabItem>
+  <TabItem label="坏的做法">
+    一个 Agent 做所有事：
+    ```
+    full-stack-expert    → 什么都做（都做不好）
+    ```
+  </TabItem>
+</Tabs>
+
+### 显式激活触发
+
+```yaml
+# 好的描述
+description: 当设计 API、审查数据库 schema 或优化后端性能时使用
+
+# 坏的描述
+description: 后端相关的事情
+```
+
+### Skill 组合
+
+不要重复知识，通过 Skills 引用：
+
+```yaml
+# security-reviewer.md
+skills:
+  - security-guardian  # 继承 OWASP 知识
+```
+
+---
+
+## Agent 验证清单
+
+部署自定义 Agent 前，对照以下标准验证：
+
+<Tabs>
+  <TabItem label="有效性">
+    - 在项目中 3 个以上真实用例中测试
+    - 输出格式一致符合预期
+    - 优雅处理边缘情况（空输入、错误、超时）
+    - 与现有工作流正确集成
+  </TabItem>
+  <TabItem label="效率">
+    - 典型执行 &lt;5000 token
+    - 标准任务 &lt;30 秒
+    - 不重复其他 Agent/Skills 的工作
+    - 相比原生 Claude 能力值得存在
+  </TabItem>
+  <TabItem label="安全性">
+    - 工具限制到最低必需
+    - 除非绝对必要否则不给 Bash 访问
+    - 文件访问限于相关目录
+    - Agent 定义中无凭证或机密
+  </TabItem>
+  <TabItem label="可维护性">
+    - 清晰、描述性的名称和说明
+    - 显式记录激活触发条件
+    - 示例展示常见使用模式
+    - 如果依赖框架则注明版本兼容性
+  </TabItem>
+</Tabs>
+
+<Aside type="tip">
+**三的法则**：如果一个 Agent 不能在至少 3 个重复任务上节省大量时间，那可能是过度工程。从 Skills 开始，只在复杂度需要时才升级到 Agent。
+</Aside>
+
+---
+
+## Agent 示例
+
+### 代码审查 Agent
+
+```markdown
+---
+name: code-reviewer
+description: 用于代码质量审查、安全审计和性能分析
+model: sonnet
+tools: Read, Grep, Glob
+skills:
+  - security-guardian
+---
+
+# 代码审查员
+
+## 范围定义
+
+在隔离上下文中进行全面的代码审查，聚焦于：
+- 代码质量和可维护性
+- 安全最佳实践（OWASP Top 10）
+- 性能优化
+- 测试覆盖率分析
+
+范围：仅代码审查分析。提供发现而不实施修复。
+
+## 方法论
+
+1. **理解上下文**：阅读代码并理解其目的
+2. **检查质量**：评估可读性、可维护性、DRY 原则
+3. **安全扫描**：查找 OWASP Top 10 漏洞
+4. **性能审查**：识别潜在瓶颈
+5. **提供反馈**：带严重程度级别的结构化报告
+
+## 输出格式
+
+### 代码审查报告
+
+**摘要**：[1-2 句概述]
+
+**关键问题**（必须修复）：
+- [问题及文件:行号引用]
+
+**警告**（应该修复）：
+- [问题及文件:行号引用]
+
+**建议**（值得改进）：
+- [改进机会]
+
+**正面评价**：
+- [做得好的地方]
+```
+
+### 调试 Agent
+
+```markdown
+---
+name: debugger
+description: 遇到错误、测试失败或意外行为时使用
+model: sonnet
+tools: Read, Bash, Grep, Glob
+---
+
+# 调试器
+
+## 范围定义
+
+在隔离上下文中进行系统化调试：
+- 调查根本原因，而非症状
+- 使用证据驱动的调试方法
+- 验证而非假设
+
+## 方法论
+
+1. **复现**：确认问题存在
+2. **隔离**：缩小到最小可复现案例
+3. **分析**：阅读代码、检查日志、跟踪执行
+4. **假设**：形成关于原因的理论
+5. **测试**：用最小修改验证假设
+6. **修复**：实施解决方案
+7. **验证**：确认修复有效且不影响其他功能
+
+## 输出格式
+
+### 调试报告
+
+**问题**：[描述]
+**根本原因**：[实际问题所在]
+**证据**：[如何确定的]
+**修复**：[需要改什么]
+**验证**：[如何确认修复有效]
+```
+
+### 后端架构 Agent
+
+```markdown
+---
+name: backend-architect
+description: 用于 API 设计、数据库优化和系统架构决策
+model: opus
+tools: Read, Write, Edit, Bash, Grep
+skills:
+  - backend-patterns
+---
+
+# 后端架构师
+
+## 范围定义
+
+在隔离上下文中分析后端架构，聚焦于：
+- API 设计（REST、GraphQL、tRPC）
+- 数据库建模和优化
+- 系统可扩展性
+- 清洁架构模式
+
+## 方法论
+
+1. **需求分析**：理解业务需求
+2. **架构审查**：检查当前系统状态
+3. **设计方案**：提出 2-3 种方案及权衡
+4. **推荐**：建议最佳方案并说明理由
+5. **实施计划**：拆解为可操作的步骤
+
+## 约束
+
+- 遵循现有项目模式
+- 优先考虑向后兼容性
+- 考虑性能影响
+- 记录架构决策
+```
+
+---
+
+## 高级 Agent 模式
+
+### Tool SEO — 优化 Agent 描述
+
+`description` 字段决定 Claude 何时自动激活你的 Agent。像做 SEO 一样优化它：
+
+```yaml
+# 差的描述
+description: 审查代码
+
+# 好的描述（Tool SEO）
+description: |
+  安全代码审查员 - 在以下情况主动（PROACTIVELY）使用：
+  - 审查认证/授权代码
+  - 分析 API 端点
+  - 检查输入验证
+  - 审计数据处理
+  触发词：安全、认证、漏洞、OWASP、注入
+```
+
+**Tool SEO 技巧**：
+1. **"use PROACTIVELY"**：鼓励自动激活
+2. **显式触发词**：触发 Agent 的关键词
+3. **列出场景**：Agent 相关的上下文
+4. **短别名**：`sec-1`、`perf-a`、`doc-gen`
+
+### Agent 权重分类
+
+| 类别 | Token | 初始化时间 | 最佳使用 |
+|------|-------|-----------|---------|
+| **轻量级** | &lt;3K | &lt;1s | 频繁任务、工作者 |
+| **中等** | 10-15K | 2-3s | 分析、审查 |
+| **重量级** | 25K+ | 5-10s | 架构、全面审计 |
+
+<Aside type="tip">
+**黄金法则**：一个轻量 Agent 使用 100 次 优于 一个重量 Agent 使用 10 次
+</Aside>
+
+### 7 并行任务方法
+
+启动 7 个聚焦范围的子 Agent 并行完成完整功能：
+
+```
+Task 1: 组件     → 创建 React 组件
+Task 2: 样式     → 生成 Tailwind 样式
+Task 3: 测试     → 编写单元测试
+Task 4: 类型     → 定义 TypeScript 类型
+Task 5: Hooks    → 创建自定义 hooks
+Task 6: 集成     → 连接 API/状态
+Task 7: 配置     → 更新配置文件
+
+所有并行 → 最终整合
+```
+
+**示例提示**：
+
+```
+使用 7 个并行子 Agent 实现"用户资料"功能：
+
+1. COMPONENTS：创建 UserProfile.tsx、UserAvatar.tsx、UserStats.tsx
+2. STYLES：在样式文件中定义 Tailwind 类
+3. TESTS：为每个组件编写测试
+4. TYPES：在 types/user-profile.ts 中创建类型
+5. HOOKS：创建 useUserProfile 和 useUserStats hooks
+6. INTEGRATION：连接现有的 tRPC router
+7. CONFIG：更新导出和路由
+
+启动所有 Agent 并行执行。
+```
+
+### 分角色子 Agent
+
+多视角并行分析：
+
+<Steps>
+1. **设置**：激活 Plan 模式
+
+2. **角色建议**：问 Claude "什么专家角色能分析这段代码？"
+
+3. **选择角色**：如安全专家、高级开发者、代码审查员
+
+4. **并行分析**：每个 Agent 在自己的范围内独立分析
+
+5. **整合**：将多份报告综合为最终建议
+</Steps>
+
+### 并行化决策矩阵
+
+|  | 非破坏性（只读） | 破坏性（写入） |
+|---|-----------------|---------------|
+| **独立** | 并行（最大效率） | 顺序执行（先 Plan） |
+| **依赖** | 顺序执行（顺序重要） | 谨慎处理（冲突风险） |
+
+### 后台子 Agent
+
+子 Agent 可以在后台运行，不阻塞主会话：
+
+| 模式 | 行为 | 适用场景 |
+|------|------|---------|
+| 默认 | 父级等待 Agent 输出 | 继续前需要结果 |
+| 后台 | Agent 并行运行，父级继续 | 发射后不管（测试、格式化、通知） |
+
+**管理后台 Agent**：
+
+```bash
+# 列出运行中的 Agent + 管理界面
+ctrl+f    # 打开 Agent 管理器覆盖层
+
+# 仅取消主线程（后台 Agent 继续运行）
+ESC
+ctrl+c
+```
+
+---
+
+## 自进化 Agent 模式
+
+一个在每次执行后更新自身技能的 Agent。Agent 读取其领域的当前状态并重写注入自身的知识，无需手动维护。
+
+**适用场景**：领域不断演进的长期 Agent —— 演示文稿编辑器、跟踪 schema 变化的 API 客户端、管理动态文档的 Agent。
+
+**核心机制**（在 Agent 系统提示中）：
+
+```markdown
+### 步骤 N：自进化（每次执行后）
+
+完成主要任务后，更新预加载的技能以保持同步：
+
+1. 读取 [你修改的领域] 的当前状态
+2. 更新 `.claude/skills/<your-skill>/SKILL.md` 以反映现实
+3. 在此 Agent 文件的"## 学习记录"部分记录变更内容和原因
+
+这防止了你所知道的和实际情况之间的知识漂移。
+```
+
+**完整示例**：
+
+```yaml
+---
+name: presentation-curator
+description: 更新幻灯片、结构或权重时主动（PROACTIVELY）使用
+tools: Read, Write, Edit, Grep, Glob
+model: sonnet
+color: magenta
+skills:
+  - presentation/slide-structure
+  - presentation/styling
+---
+
+## 步骤 5：自进化（每次执行后）
+
+读取 presentation/index.html 并更新你的技能：
+- slide-structure 技能：更新段落范围、权重表、幻灯片计数
+- styling 技能：如果引入了新模式则更新 CSS 模式
+- 将新发现附加到下方的"## 学习记录"部分
+
+## 学习记录
+_每次运行在此附加发现。未来的调用从已知信息开始。_
+- 幻灯片徽章是 JS 注入的——永远不要在 HTML 中硬编码。
+```
+
+<Aside type="tip">
+**为什么有效**：`skills:` frontmatter 在 Agent 启动时注入技能内容。通过在每次运行后回写这些文件，Agent 的下次调用就会从最新知识开始。无需人工维护。
+</Aside>
+
+<Aside type="note">
+**关键约束**：
+- 范围窄化更新——只更新实际变化的内容
+- 保持 `## 学习记录` 日志，让 Agent 跨会话积累知识
+- 配合 `memory: project` 实现更广泛上下文的跨会话持久化
+</Aside>

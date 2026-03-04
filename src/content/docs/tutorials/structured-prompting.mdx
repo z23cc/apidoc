@@ -1,0 +1,521 @@
+---
+title: "结构化提示词"
+description: "使用 XML 标签组织复杂提示词，让 Claude 更好地理解你的意图"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+XML 结构化提示词为复杂请求提供**语义化组织**，帮助 Claude 区分任务的不同方面，从而获得更清晰的理解和更好的结果。
+
+<CardGrid>
+  <Card title="关注点分离" icon="approve-check-circle">
+    任务的不同方面被清晰地划分，减少歧义。
+  </Card>
+  <Card title="更好的上下文处理" icon="document">
+    帮助 Claude 区分主要指令和背景信息的优先级。
+  </Card>
+  <Card title="格式一致" icon="setting">
+    更容易为复杂请求创建模板，保持一致性。
+  </Card>
+  <Card title="多方面请求" icon="list-format">
+    包含多个需求的复杂任务保持井然有序。
+  </Card>
+</CardGrid>
+
+---
+
+## 什么是 XML 结构化提示词？
+
+XML 标签充当**标记容器**，显式地将指令类型、上下文、示例、约束和期望输出格式分开。
+
+**基本语法**：
+
+```xml
+<instruction>
+  你的主要任务描述
+</instruction>
+
+<context>
+  背景信息、项目细节或相关状态
+</context>
+
+<code_example>
+  参考代码或要遵循的示例
+</code_example>
+
+<constraints>
+  - 限制条件 1
+  - 限制条件 2
+  - 需求 3
+</constraints>
+
+<output>
+  期望的响应格式或结构
+</output>
+```
+
+---
+
+## 常用标签及其用途
+
+### 核心指令标签
+
+```xml
+<instruction>主要任务</instruction>          <!-- 主要指令 -->
+<task>具体子任务</task>                      <!-- 单独的操作项 -->
+<question>关于 X 我应该怎么做？</question>    <!-- 明确的询问 -->
+<goal>达成状态 Y</goal>                      <!-- 期望结果 -->
+```
+
+### 上下文和信息标签
+
+```xml
+<context>项目使用 Next.js 14</context>            <!-- 背景信息 -->
+<problem>用户反馈页面加载缓慢</problem>             <!-- 问题描述 -->
+<background>从 Pages Router 迁移</background>     <!-- 历史上下文 -->
+<state>目前在 feature-branch 上</state>           <!-- 当前状况 -->
+```
+
+### 代码和示例标签
+
+```xml
+<code_example>
+  // 要遵循的现有模式
+  const user = await getUser(id);
+</code_example>
+
+<current_code>
+  // 需要修改的代码
+</current_code>
+
+<expected_output>
+  // 结果应该是什么样子
+</expected_output>
+```
+
+### 约束和规则标签
+
+```xml
+<constraints>
+  - 必须保持向后兼容性
+  - 不能破坏公共 API
+  - 最大响应时间 100ms
+</constraints>
+
+<requirements>
+  - TypeScript 严格模式
+  - 100% 测试覆盖率
+  - 无障碍访问 (WCAG 2.1 AA)
+</requirements>
+
+<avoid>
+  - 不要使用 any 类型
+  - 不要修改数据库 schema
+</avoid>
+```
+
+---
+
+## 实战示例
+
+### 示例 1：带上下文的代码审查
+
+```xml
+<instruction>
+审查此认证中间件的安全漏洞
+</instruction>
+
+<context>
+这个中间件用于处理敏感用户数据的金融应用。
+我们遵循 OWASP Top 10 指南，需要 PCI DSS 合规。
+</context>
+
+<code_example>
+async function authenticate(req, res, next) {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'No token' });
+
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  req.user = decoded;
+  next();
+}
+</code_example>
+
+<constraints>
+- 指出所有安全风险
+- 建议 PCI DSS 合规的替代方案
+- 考虑时序攻击和令牌泄露
+</constraints>
+
+<output>
+提供：
+1. 发现的安全问题列表
+2. 每个问题的严重程度评级（关键/高/中/低）
+3. 具体的代码修复示例
+4. 额外的安全加固建议
+</output>
+```
+
+### 示例 2：带需求的功能实现
+
+```xml
+<instruction>
+为我们的 API 端点添加速率限制系统
+</instruction>
+
+<context>
+当前技术栈：Express.js + Redis
+目前没有速率限制
+正在遭受来自特定 IP 的 API 滥用
+</context>
+
+<requirements>
+- 认证用户每分钟每 IP 100 个请求
+- 未认证用户每分钟每 IP 20 个请求
+- 高级用户自定义限制（存储在数据库中）
+- 返回 429 状态码和 Retry-After 头
+</requirements>
+
+<code_example>
+// 我们使用的现有中间件模式
+app.use(authenticate);
+app.use(authorize(['admin', 'user']));
+</code_example>
+
+<constraints>
+- 不能影响现有 API 性能
+- Redis 连接应被复用
+- 优雅处理 Redis 连接失败
+</constraints>
+
+<output>
+提供：
+1. 速率限制中间件实现
+2. Redis 配置
+3. 单元测试
+4. 团队文档
+</output>
+```
+
+### 示例 3：带状态的 Bug 调查
+
+```xml
+<task>
+调查用户会话为什么提前过期
+</task>
+
+<problem>
+用户反馈在活跃 5-10 分钟后就被登出，
+但会话超时配置为 24 小时。
+</problem>
+
+<context>
+- Next.js 14 App Router + next-auth
+- PostgreSQL 会话存储
+- 3 台服务器负载均衡
+- 问题在上周部署 v2.3.0 后出现
+</context>
+
+<state>
+v2.2.0（正常）和 v2.3.0（异常）之间的 Git diff 显示以下文件有变更：
+- middleware.ts（会话刷新逻辑）
+- auth.config.ts（会话策略）
+- database.ts（连接池）
+</state>
+
+<constraints>
+- 不要建议回滚部署
+- 生产问题，需要快速解决
+- 必须保持会话安全性
+</constraints>
+
+<output>
+提供：
+1. 根本原因假设
+2. 需要调查的文件（按优先级排序）
+3. 要运行的调试命令
+4. 可能的修复方案及权衡
+</output>
+```
+
+---
+
+## 高级模式
+
+### 嵌套标签处理复杂层次
+
+```xml
+<task>
+重构认证系统
+  <subtask priority="high">
+    更新用户模型
+    <constraints>
+      - 保留现有用户 ID
+      - 添加邮箱验证迁移
+    </constraints>
+  </subtask>
+
+  <subtask priority="medium">
+    实现 OAuth 提供者
+    <requirements>
+      - Google 和 GitHub OAuth
+      - 复用现有会话逻辑
+    </requirements>
+  </subtask>
+</task>
+```
+
+### 带标签的多示例
+
+```xml
+<code_example label="current_implementation">
+  // 旧方式：回调地狱
+  getUser(id, (user) => {
+    getOrders(user.id, (orders) => {
+      res.json({ user, orders });
+    });
+  });
+</code_example>
+
+<code_example label="desired_pattern">
+  // 新的 async/await 模式
+  const user = await getUser(id);
+  const orders = await getOrders(user.id);
+  res.json({ user, orders });
+</code_example>
+```
+
+### 条件指令
+
+```xml
+<instruction>
+优化数据库查询性能
+</instruction>
+
+<context>
+查询 10,000 条记录目前需要 2.5 秒
+</context>
+
+<constraints>
+  <if condition="PostgreSQL">
+    - 使用 EXPLAIN ANALYZE
+    - 考虑物化视图
+  </if>
+
+  <if condition="MySQL">
+    - 使用 EXPLAIN 分析查询计划
+    - 考虑查询缓存
+  </if>
+</constraints>
+```
+
+---
+
+## 什么时候使用 XML 结构化提示词
+
+| 场景 | 推荐？ | 原因 |
+|------|--------|------|
+| 简单的一行请求 | 不推荐 | 开销大于收益 |
+| 多步骤功能实现 | 推荐 | 分离目标、约束、示例 |
+| 带上下文的 Bug 调查 | 推荐 | 区分症状和环境 |
+| 有特定标准的代码审查 | 推荐 | 清晰分离代码、上下文、需求 |
+| 架构规划 | 推荐 | 组织目标、约束、权衡 |
+| 快速修复 typo | 不推荐 | 不必要的复杂度 |
+
+---
+
+## 最佳实践
+
+<Tabs>
+  <TabItem label="推荐做法">
+    - 使用描述性标签名称，明确其用途
+    - 在相似请求中保持标签一致
+    - 结合 CLAUDE.md 制定项目特定的标签约定
+    - 在表示层次关系时合理嵌套标签
+    - 使用标签分离"做什么"、"为什么"和"怎么做"
+  </TabItem>
+  <TabItem label="避免做法">
+    - 不要过度结构化简单请求（增加噪声）
+    - 不要混淆标签用途（如在代码示例中放约束）
+    - 不要使用通用标签（如 `tag`、`content`）而不赋予明确含义
+    - 嵌套不要超过 3 层（难以阅读）
+  </TabItem>
+</Tabs>
+
+---
+
+## 在 CLAUDE.md 中标准化 XML 标签
+
+你可以在项目的 CLAUDE.md 中标准化 XML 标签的使用：
+
+```markdown
+# XML 提示词约定
+
+发出复杂请求时，使用此结构：
+
+<instruction>主要任务</instruction>
+
+<context>
+  项目上下文和状态
+</context>
+
+<code_example>
+  参考实现
+</code_example>
+
+<constraints>
+  技术和业务需求
+</constraints>
+
+<output>
+  期望的交付物
+</output>
+
+## 项目特定标签
+
+- `<api_design>` - API 端点设计规范
+- `<accessibility>` - WCAG 需求和 ARIA 考虑
+- `<performance>` - 性能预算和优化目标
+```
+
+---
+
+## 与其他功能结合
+
+### XML + Plan 模式
+
+```xml
+<instruction>规划从 REST 到 GraphQL 的迁移</instruction>
+
+<context>
+目前有 47 个 REST 端点服务于移动和 Web 客户端
+</context>
+
+<constraints>
+- 必须在过渡期间维护 REST 端点（6 个月重叠）
+- 移动应用无法立即强制更新
+</constraints>
+
+<output>
+多阶段迁移计划及回滚策略
+</output>
+```
+
+然后使用 `/plan` 在实施前进行只读探索。
+
+### XML + 成本感知
+
+对于大型请求，用 XML 结构帮助 Claude 理解范围并估算 token 使用量：
+
+```xml
+<instruction>分析所有 TypeScript 文件中的未使用导入</instruction>
+
+<scope>
+  src/ 目录（约 200 个文件）
+</scope>
+
+<output_format>
+  仅输出摘要报告（不要列出每个文件）
+</output_format>
+```
+
+这帮助 Claude 优化分析方法并减少 token 消耗。
+
+---
+
+## 可复用模板库
+
+在 `claudedocs/templates/` 中创建可复用模板：
+
+**`claudedocs/templates/code-review.xml`**：
+
+```xml
+<instruction>
+审查以下代码的质量和最佳实践
+</instruction>
+
+<context>
+[描述组件的用途和架构上下文]
+</context>
+
+<code_example>
+[粘贴代码到这里]
+</code_example>
+
+<focus_areas>
+- 安全漏洞
+- 性能瓶颈
+- 可维护性问题
+- 测试覆盖率缺口
+</focus_areas>
+
+<output>
+1. 发现的问题（按严重程度分类）
+2. 具体建议及代码示例
+3. 修复的优先顺序
+</output>
+```
+
+**使用方式**：
+
+```bash
+cat claudedocs/templates/code-review.xml | \
+  sed 's/\[粘贴代码到这里\]/'"$(cat src/auth.ts)"'/' | \
+  claude -p "处理这个审查请求"
+```
+
+---
+
+## 提示词即挑战
+
+Claude Code 团队内部将提示词视为**对同事的挑战**，而不是对助手的指令。这种微妙的转变会产生更高质量的输出，因为它迫使 Claude 证明其推理而非简单遵从。
+
+<Steps>
+1. **守门人模式** — 让 Claude 在发布前审查你的工作：
+
+   ```
+   "严格审查这些改动，在我通过你的测试之前不要创建 PR"
+   ```
+
+   Claude 会审查你的 diff，提出关于边缘情况的尖锐问题，只有满意后才继续。
+
+2. **证据要求** — 要求证据，而非断言：
+
+   ```
+   "证明给我看这有效 — 展示 main 和这个分支之间的行为差异"
+   ```
+
+   Claude 运行两个分支，比较输出，呈现具体证据。
+
+3. **重置模式** — 在第一次平庸尝试后，调用全上下文重写：
+
+   ```
+   "现在你已经知道了一切，抛弃这个方案，实现优雅的解决方案"
+   ```
+
+   这迫使 Claude 利用积累的上下文进行实质性的第二次尝试，而非在薄弱基础上做增量修补。
+</Steps>
+
+<Aside type="tip">
+**为什么这有效**：挑战式提示触发比礼貌请求更深层的推理路径。当 Claude 必须"说服"而非"遵从"时，它会激活更彻底的分析并发现自己的捷径。
+</Aside>
+
+---
+
+## 注意事项
+
+<Aside type="caution">
+**Token 开销**：XML 标签会消耗 token。对于简单请求，自然语言更高效。
+
+**不是必须的**：Claude 完全理解自然语言。只在结构真正有帮助时使用 XML。
+
+**一致性很重要**：如果使用 XML 标签，请保持一致。在一个会话中混合风格可能会混淆上下文。
+</Aside>
+
+<Aside type="tip">
+从自然语言提示开始。在以下情况引入 XML 结构：
+- 请求有 3 个以上不同方面（指令 + 上下文 + 约束）
+- 歧义导致 Claude 误解你的意图
+- 创建可复用的提示模板
+- 与初级开发者合作，需要结构化的沟通模式
+</Aside>

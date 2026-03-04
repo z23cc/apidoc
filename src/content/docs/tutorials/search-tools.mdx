@@ -1,0 +1,294 @@
+---
+title: "搜索工具精通"
+description: "组合使用 rg、grepai、Serena 和 ast-grep 实现高效代码搜索"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+掌握代码搜索的关键不在于精通某一个工具，而在于学会**组合使用正确的工具**。本指南介绍如何将 rg（ripgrep）、grepai、Serena 和 ast-grep 组合起来，实现最大搜索效率。
+
+---
+
+## 快速参考矩阵
+
+| 我需要... | 使用工具 | 命令示例 |
+|-----------|----------|----------|
+| 查找精确文本 | `rg`（Grep 工具） | `rg "authenticate" --type ts` |
+| 按含义查找 | `grepai` | `grepai search "user login flow"` |
+| 查找函数定义 | `Serena` | `serena find_symbol --name "login"` |
+| 查找结构模式 | `ast-grep` | `ast-grep "async function $F"` |
+| 查看谁调用了函数 | `grepai` | `grepai trace callers "login"` |
+| 获取文件结构 | `Serena` | `serena get_symbols_overview` |
+| 跨文件重构 | `Serena + ast-grep` | 组合工作流 |
+| 探索未知代码库 | `grepai → Serena` | 发现模式 |
+
+---
+
+## 工具对比
+
+### 完整特性矩阵
+
+| 特性 | rg (ripgrep) | grepai | Serena | ast-grep |
+|------|-------------|--------|--------|----------|
+| **搜索类型** | 正则/文本 | 语义（含义） | 符号感知 | AST 结构 |
+| **技术原理** | 模式匹配 | 嵌入向量（Ollama） | 符号解析 | 抽象语法树 |
+| **速度** | ~20ms | ~500ms | ~100ms | ~200ms |
+| **安装** | 无需（内置） | 需要 Ollama | MCP 配置 | npm 安装 |
+| **集成** | 原生（`Grep`） | MCP 服务器 | MCP 服务器 | 插件 |
+| **隐私** | 100% 本地 | 100% 本地 | 100% 本地 | 100% 本地 |
+| **调用图** | 不支持 | 支持 | 不支持 | 不支持 |
+| **符号追踪** | 不支持 | 不支持 | 支持 | 不支持 |
+| **会话记忆** | 不支持 | 不支持 | 支持 | 不支持 |
+| **误报率** | 中等 | 低 | 非常低 | 非常低 |
+
+### Token 消耗对比
+
+| 工具 | 典型查询 | Token 消耗 | 返回结果 |
+|------|----------|-----------|----------|
+| **rg** | "authenticate" | ~500 | 仅精确匹配 |
+| **grepai** | "auth flow" | ~2000 | 基于意图的匹配 |
+| **Serena** | find_symbol | ~1000 | 符号 + 上下文 |
+| **ast-grep** | AST 模式 | ~1500 | 结构匹配 |
+
+<Aside type="tip">
+核心洞察：rg 的 Token 效率是语义工具的 4 倍，但智能程度低 10 倍。根据任务选择合适的工具。
+</Aside>
+
+---
+
+## 决策树
+
+### 第一层：你知道什么？
+
+```
+你知道精确的文本/模式吗？
+│
+├─ 是 → 使用 rg (ripgrep)
+│  ├─ 已知函数名: rg "createSession"
+│  ├─ 已知 import: rg "import.*React"
+│  └─ 已知模式: rg "async function"
+│
+└─ 否 → 进入第二层
+```
+
+### 第二层：你在找什么？
+
+```
+你的搜索意图是什么？
+│
+├─ "按含义/概念查找"
+│  → 使用 grepai
+│  └─ 示例: grepai search "payment validation logic"
+│
+├─ "查找函数/类定义"
+│  → 使用 Serena
+│  └─ 示例: serena find_symbol --name "UserController"
+│
+├─ "按代码结构查找"
+│  → 使用 ast-grep
+│  └─ 示例: 没有错误处理的 async 函数
+│
+└─ "理解依赖关系"
+   → 使用 grepai trace
+   └─ 示例: grepai trace callers "validatePayment"
+```
+
+---
+
+## 组合工作流
+
+### 工作流 1：探索未知代码库
+
+**目标**：快速理解新项目
+
+<Steps>
+1. **语义发现**（grepai）：查找与认证相关的文件
+   ```bash
+   grepai search "user authentication and session management"
+   ```
+2. **结构概览**（Serena）：理解每个文件的结构
+   ```bash
+   serena get_symbols_overview --file auth.service.ts
+   ```
+3. **依赖映射**（grepai trace）：查看 login 的使用情况
+   ```bash
+   grepai trace callers "login"
+   ```
+4. **精确搜索**（rg）：查找具体实现细节
+   ```bash
+   rg "validateSession" --type ts -A 5
+   ```
+</Steps>
+
+**结果**：4 条命令即可完全理解（相比 30+ 次文件读取）。
+
+---
+
+### 工作流 2：大规模重构
+
+**目标**：将 `createSession` 重命名为 `initializeUserSession`，涉及 50+ 文件
+
+<Steps>
+1. **影响分析**（grepai trace）：了解完整范围
+   ```bash
+   grepai trace callers "createSession"
+   grepai trace callees "createSession"
+   ```
+2. **结构验证**（ast-grep）：确保一致的使用模式
+   ```bash
+   ast-grep "createSession($$$ARGS)"
+   ```
+3. **符号感知重构**（Serena）：精确重命名
+   ```bash
+   serena find_symbol --name "createSession" --include-body true
+   serena replace_symbol_body --name "createSession" --new-name "initializeUserSession"
+   ```
+4. **验证**（rg）：确认没有旧引用残留
+   ```bash
+   rg "createSession" --type ts
+   ```
+</Steps>
+
+---
+
+### 工作流 3：安全审计
+
+**目标**：查找安全漏洞
+
+<Steps>
+1. **语义发现**（grepai）：查找安全敏感代码
+   ```bash
+   grepai search "SQL query construction"
+   grepai search "user input validation"
+   grepai search "password handling"
+   ```
+2. **结构模式**（ast-grep）：查找具体漏洞模式
+   ```bash
+   # SQL 注入风险
+   ast-grep 'db.query(`${$VAR}`)'
+   # XSS 风险
+   ast-grep 'innerHTML = $VAR'
+   # 缺失错误处理
+   ast-grep -p 'async function $F($$$) { $$$BODY }' --without 'try { $$$TRY } catch'
+   ```
+3. **依赖追踪**（grepai）：查看漏洞代码被谁调用
+   ```bash
+   grepai trace callers "executeQuery"
+   ```
+4. **精确验证**（rg）：确认发现
+   ```bash
+   rg "innerHTML\s*=" --type ts
+   ```
+</Steps>
+
+---
+
+### 工作流 4：框架迁移
+
+**目标**：将 React 类组件迁移到 Hooks
+
+<Steps>
+1. **清单**（ast-grep）：找到所有类组件
+   ```bash
+   ast-grep 'class $C extends React.Component'
+   ```
+2. **依赖分析**（grepai）：理解组件关系，确定迁移顺序（叶子组件优先）
+3. **模式检测**（ast-grep）：识别使用的生命周期方法
+   ```bash
+   ast-grep 'componentDidMount() { $$$BODY }'
+   ast-grep 'componentWillReceiveProps($$$) { $$$BODY }'
+   ```
+4. **增量迁移**（Serena + ast-grep）：逐个组件迁移
+5. **验证**（rg + grepai）：确保迁移成功
+   ```bash
+   rg "React.Component" --type tsx
+   grepai search "component lifecycle methods"
+   ```
+</Steps>
+
+---
+
+### 工作流 5：性能优化
+
+**目标**：识别并修复性能瓶颈
+
+<Steps>
+1. **热点发现**（grepai）：查找性能关键代码
+   ```bash
+   grepai search "heavy computation or loops"
+   grepai search "database queries in loops"
+   ```
+2. **模式检测**（ast-grep）：查找 N+1 查询模式
+   ```bash
+   ast-grep 'for ($$$) { await db.query($$$) }'
+   ```
+3. **调用图分析**（grepai trace）：查找热路径
+   ```bash
+   grepai trace graph "renderUserList" --depth 3
+   ```
+4. **符号追踪**（Serena）：记录和比较优化前后的性能
+5. **验证**（rg）：确认优化已应用
+</Steps>
+
+---
+
+## 性能基准
+
+**测试**：在 50 万行代码库中查找认证代码
+
+| 策略 | 时间 | 结果质量 |
+|------|------|----------|
+| 仅 rg "auth" | 0.2s | 5000+ 误报 |
+| 仅 grepai "auth" | 2.5s | 50 条相关结果 |
+| grepai → rg（组合） | 2.7s | 50 条相关且已验证 |
+| 仅 Serena 符号 | 1.5s | 12 个 auth 函数 |
+| ast-grep 模式 | 3.0s | 8 个 auth 流程 |
+
+---
+
+## 常见陷阱
+
+<CardGrid>
+  <Card title="用语义搜索做精确匹配" icon="warning">
+    如果你知道精确文本，不要用 `grepai search "createSession"`，直接用 `rg "createSession" --type ts`。
+  </Card>
+  <Card title="用正则做概念搜索" icon="warning">
+    正则不理解含义。用 `grepai search "authentication and session management"` 代替 `rg "auth.*login.*session"`。
+  </Card>
+  <Card title="重构前不检查调用图" icon="warning">
+    修改共享代码前，始终先用 `grepai trace callers` 追踪依赖关系。
+  </Card>
+  <Card title="过度工程化简单搜索" icon="warning">
+    找 TODO 注释？直接用 `rg "TODO"`，不需要启动 grepai + Ollama。
+  </Card>
+</CardGrid>
+
+---
+
+## 工具选择速查表
+
+| 你的情况 | 用这个 | 别用这个 |
+|----------|--------|----------|
+| "找函数 `login`" | rg "login" | grepai search "login" |
+| "找登录相关代码" | grepai "login flow" | rg "login.*" |
+| "安全重命名函数" | Serena find_symbol | rg + sed |
+| "谁调用了这个函数？" | grepai trace callers | rg + grep |
+| "获取文件结构" | Serena overview | rg "class\|function" |
+| "找没有 try/catch 的 async" | ast-grep | rg `async.*\{` |
+| "迁移 React 类组件" | ast-grep | rg + 手动 |
+| "找 TODO" | rg "TODO" | 其他任何工具 |
+
+---
+
+## 推荐安装顺序
+
+<Steps>
+1. **起步**：rg（已内置于 Grep 工具中）
+2. **下一步**：Serena MCP（符号感知、会话记忆）
+3. **然后**：grepai（语义搜索 + 调用图）
+4. **最后**：ast-grep（结构模式、大规模重构）
+</Steps>
+
+<Aside>
+90% 的搜索用 rg + Serena 就够了。需要语义搜索时加入 grepai，只有做大规模重构/迁移时才需要 ast-grep。
+</Aside>

@@ -1,0 +1,560 @@
+---
+title: "Custom Agents"
+description: "Create and use custom agents to extend Claude Code with specialized expertise"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Agents are specialized sub-processes that Claude can delegate tasks to. By creating custom agents, you give Claude domain-specific expertise with pre-configured tool access for better results.
+
+<CardGrid>
+  <Card title="Specialization" icon="star">
+    Each agent focuses on a specific domain, delivering better results than generic prompts.
+  </Card>
+  <Card title="Isolated Context" icon="approve-check-circle">
+    Each agent has its own context, avoiding information pollution.
+  </Card>
+  <Card title="Reusable" icon="puzzle">
+    Create once, use repeatedly across your entire project.
+  </Card>
+  <Card title="Composable" icon="setting">
+    Combine knowledge via Skills and boost efficiency with parallel execution.
+  </Card>
+</CardGrid>
+
+---
+
+## Why Use Agents?
+
+| Without Agents | With Agents |
+|----------------|-------------|
+| One Claude doing everything | Specialized experts for each domain |
+| Context gets cluttered | Each agent has focused context |
+| Generic responses | Domain-specific expertise |
+| Manual tool selection | Pre-configured tool access |
+
+**Comparison example**:
+
+```
+Direct Prompt:
+You: Review this code for security issues, focusing on OWASP Top 10,
+     checking for SQL injection, XSS, CSRF, and authentication vulnerabilities...
+
+With Agent:
+You: Use the security-reviewer agent to audit this code
+```
+
+The agent encapsulates all that expertise.
+
+---
+
+## Creating Custom Agents
+
+Agents are markdown files in `.claude/agents/` with YAML frontmatter.
+
+### File Structure
+
+```markdown
+---
+name: agent-name
+description: Clear activation trigger (50-100 chars)
+model: sonnet
+tools: Read, Write, Edit, Bash, Grep, Glob
+---
+
+[Markdown instructions for the agent]
+```
+
+### Frontmatter Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Kebab-case identifier |
+| `description` | Yes | When to activate this agent (use "PROACTIVELY" for auto-invocation) |
+| `model` | No | `sonnet` (default), `opus`, `haiku`, or `inherit` |
+| `tools` | No | Allowed tools (comma-separated). Supports `Task(agent_type)` syntax |
+| `disallowedTools` | No | Tools to deny |
+| `permissionMode` | No | `default`, `acceptEdits`, `dontAsk`, `bypassPermissions`, or `plan` |
+| `maxTurns` | No | Maximum agentic turns before the subagent stops |
+| `skills` | No | Skills to preload into agent context at startup |
+| `mcpServers` | No | MCP servers for this subagent |
+| `hooks` | No | Lifecycle hooks scoped to this subagent |
+| `memory` | No | Persistent memory scope: `user`, `project`, or `local` |
+| `background` | No | `true` to always run as a background task |
+| `isolation` | No | `worktree` to run in a temporary git worktree |
+| `color` | No | CLI output color (e.g., `green`, `magenta`) |
+
+### Memory Scopes
+
+| Scope | Storage | Use When |
+|-------|---------|----------|
+| `user` | `~/.claude/agent-memory/<name>/` | Cross-project learning |
+| `project` | `.claude/agent-memory/<name>/` | Project-specific, shareable via git |
+| `local` | `.claude/agent-memory-local/<name>/` | Project-specific, not committed |
+
+### Model Selection
+
+| Model | Best For | Speed | Cost |
+|-------|----------|-------|------|
+| `haiku` | Quick tasks, simple changes | Fast | Low |
+| `sonnet` | Most tasks (default) | Balanced | Medium |
+| `opus` | Complex reasoning, architecture | Slow | High |
+
+---
+
+## Agent Template
+
+Copy this template to create your own agent:
+
+```markdown
+---
+name: your-agent-name
+description: Use this agent when [specific trigger description]
+model: sonnet
+tools: Read, Write, Edit, Bash, Grep, Glob
+skills: []
+---
+
+# Your Agent Name
+
+## Role Definition
+
+You are an expert in [domain]. Your responsibilities include:
+- [Responsibility 1]
+- [Responsibility 2]
+- [Responsibility 3]
+
+## Activation Triggers
+
+Use this agent when:
+- [Trigger 1]
+- [Trigger 2]
+- [Trigger 3]
+
+## Methodology
+
+When given a task, you should:
+1. [Step 1]
+2. [Step 2]
+3. [Step 3]
+4. [Step 4]
+
+## Output Format
+
+Your deliverables should include:
+- [Output 1]
+- [Output 2]
+
+## Constraints
+
+- [Constraint 1]
+- [Constraint 2]
+
+## Examples
+
+### Example 1: [Scenario Name]
+
+**User**: [Example prompt]
+
+**Your approach**:
+1. [What you do first]
+2. [What you do next]
+3. [Final output]
+```
+
+---
+
+## Best Practices
+
+### Do's and Don'ts
+
+| Do | Don't |
+|----|-------|
+| Make agents specialists | Create generalist agents |
+| Define clear triggers | Use vague descriptions |
+| Include concrete examples | Leave activation ambiguous |
+| Limit tool access | Give all tools to all agents |
+| Compose via skills | Duplicate expertise |
+
+### Specialization Over Generalization
+
+<Tabs>
+  <TabItem label="Good">
+    An agent for each concern:
+    ```
+    backend-architect    → API design, database, performance
+    security-reviewer    → OWASP, auth, encryption
+    test-engineer        → Test strategy, coverage, TDD
+    ```
+  </TabItem>
+  <TabItem label="Bad">
+    One agent for everything:
+    ```
+    full-stack-expert    → Does everything (poorly)
+    ```
+  </TabItem>
+</Tabs>
+
+### Explicit Activation Triggers
+
+```yaml
+# Good description
+description: Use when designing APIs, reviewing database schemas, or optimizing backend performance
+
+# Bad description
+description: Backend stuff
+```
+
+### Skill Composition
+
+Instead of duplicating knowledge, reference via Skills:
+
+```yaml
+# security-reviewer.md
+skills:
+  - security-guardian  # Inherits OWASP knowledge
+```
+
+---
+
+## Agent Validation Checklist
+
+Before deploying a custom agent, validate against these criteria:
+
+<Tabs>
+  <TabItem label="Efficacy">
+    - Tested on 3+ real use cases from your project
+    - Output matches expected format consistently
+    - Handles edge cases gracefully (empty input, errors, timeouts)
+    - Integrates correctly with existing workflows
+  </TabItem>
+  <TabItem label="Efficiency">
+    - &lt;5000 tokens per typical execution
+    - &lt;30 seconds for standard tasks
+    - Doesn't duplicate work done by other agents/skills
+    - Justifies its existence vs. native Claude capabilities
+  </TabItem>
+  <TabItem label="Security">
+    - Tools restricted to minimum necessary
+    - No Bash access unless absolutely required
+    - File access limited to relevant directories
+    - No credentials or secrets in agent definition
+  </TabItem>
+  <TabItem label="Maintainability">
+    - Clear, descriptive name and description
+    - Explicit activation triggers documented
+    - Examples show common usage patterns
+    - Version compatibility noted if framework-dependent
+  </TabItem>
+</Tabs>
+
+<Aside type="tip">
+**Rule of Three**: If an agent doesn't save significant time on at least 3 recurring tasks, it's probably over-engineering. Start with skills, graduate to agents only when complexity demands it.
+</Aside>
+
+---
+
+## Agent Examples
+
+### Code Reviewer Agent
+
+```markdown
+---
+name: code-reviewer
+description: Use for code quality reviews, security audits, and performance analysis
+model: sonnet
+tools: Read, Grep, Glob
+skills:
+  - security-guardian
+---
+
+# Code Reviewer
+
+## Scope Definition
+
+Perform comprehensive code reviews with isolated context, focusing on:
+- Code quality and maintainability
+- Security best practices (OWASP Top 10)
+- Performance optimization
+- Test coverage analysis
+
+Scope: Code review analysis only. Provide findings without implementing fixes.
+
+## Methodology
+
+1. **Understand Context**: Read the code and understand its purpose
+2. **Check Quality**: Evaluate readability, maintainability, DRY principles
+3. **Security Scan**: Look for OWASP Top 10 vulnerabilities
+4. **Performance Review**: Identify potential bottlenecks
+5. **Provide Feedback**: Structured report with severity levels
+
+## Output Format
+
+### Code Review Report
+
+**Summary**: [1-2 sentence overview]
+
+**Critical Issues** (Must Fix):
+- [Issue with file:line reference]
+
+**Warnings** (Should Fix):
+- [Issue with file:line reference]
+
+**Suggestions** (Nice to Have):
+- [Improvement opportunity]
+
+**Positive Notes**:
+- [What was done well]
+```
+
+### Debugger Agent
+
+```markdown
+---
+name: debugger
+description: Use when encountering errors, test failures, or unexpected behavior
+model: sonnet
+tools: Read, Bash, Grep, Glob
+---
+
+# Debugger
+
+## Scope Definition
+
+Perform systematic debugging with isolated context:
+- Investigate root causes, not symptoms
+- Use evidence-based debugging approach
+- Verify rather than assume
+
+## Methodology
+
+1. **Reproduce**: Confirm the issue exists
+2. **Isolate**: Narrow down to smallest reproducible case
+3. **Analyze**: Read code, check logs, trace execution
+4. **Hypothesize**: Form theories about the cause
+5. **Test**: Verify hypothesis with minimal changes
+6. **Fix**: Implement the solution
+7. **Verify**: Confirm fix works and doesn't break other things
+
+## Output Format
+
+### Debug Report
+
+**Issue**: [Description]
+**Root Cause**: [What's actually wrong]
+**Evidence**: [How you know]
+**Fix**: [What to change]
+**Verification**: [How to confirm it works]
+```
+
+### Backend Architect Agent
+
+```markdown
+---
+name: backend-architect
+description: Use for API design, database optimization, and system architecture decisions
+model: opus
+tools: Read, Write, Edit, Bash, Grep
+skills:
+  - backend-patterns
+---
+
+# Backend Architect
+
+## Scope Definition
+
+Analyze backend architecture with isolated context, focusing on:
+- API design (REST, GraphQL, tRPC)
+- Database modeling and optimization
+- System scalability
+- Clean architecture patterns
+
+## Methodology
+
+1. **Requirements Analysis**: Understand the business need
+2. **Architecture Review**: Check current system state
+3. **Design Options**: Propose 2-3 approaches with trade-offs
+4. **Recommendation**: Suggest best approach with rationale
+5. **Implementation Plan**: Break down into actionable steps
+
+## Constraints
+
+- Follow existing project patterns
+- Prioritize backward compatibility
+- Consider performance implications
+- Document architectural decisions
+```
+
+---
+
+## Advanced Agent Patterns
+
+### Tool SEO -- Optimizing Agent Descriptions
+
+The `description` field determines when Claude auto-activates your agent. Optimize it like SEO:
+
+```yaml
+# Bad description
+description: Reviews code
+
+# Good description (Tool SEO)
+description: |
+  Security code reviewer - use PROACTIVELY when:
+  - Reviewing authentication/authorization code
+  - Analyzing API endpoints
+  - Checking input validation
+  - Auditing data handling
+  Triggers: security, auth, vulnerability, OWASP, injection
+```
+
+**Tool SEO Techniques**:
+1. **"use PROACTIVELY"**: Encourages automatic activation
+2. **Explicit triggers**: Keywords that trigger the agent
+3. **Listed contexts**: When the agent is relevant
+4. **Short nicknames**: `sec-1`, `perf-a`, `doc-gen`
+
+### Agent Weight Classification
+
+| Category | Tokens | Init Time | Optimal Use |
+|----------|--------|-----------|-------------|
+| **Lightweight** | &lt;3K | &lt;1s | Frequent tasks, workers |
+| **Medium** | 10-15K | 2-3s | Analysis, reviews |
+| **Heavy** | 25K+ | 5-10s | Architecture, full audits |
+
+<Aside type="tip">
+**Golden Rule**: A lightweight agent used 100x is better than a heavy agent used 10x.
+</Aside>
+
+### The 7-Parallel-Task Method
+
+Launch 7 scope-focused sub-agents in parallel for complete features:
+
+```
+Task 1: Components     → Create React components
+Task 2: Styles         → Generate Tailwind styles
+Task 3: Tests          → Write unit tests
+Task 4: Types          → Define TypeScript types
+Task 5: Hooks          → Create custom hooks
+Task 6: Integration    → Connect with API/state
+Task 7: Config         → Update configurations
+
+All in parallel → Final consolidation
+```
+
+**Example Prompt**:
+
+```
+Implement the "User Profile" feature using 7 parallel sub-agents:
+
+1. COMPONENTS: Create UserProfile.tsx, UserAvatar.tsx, UserStats.tsx
+2. STYLES: Define Tailwind classes in a styles file
+3. TESTS: Write tests for each component
+4. TYPES: Create types in types/user-profile.ts
+5. HOOKS: Create useUserProfile and useUserStats hooks
+6. INTEGRATION: Connect with existing tRPC router
+7. CONFIG: Update exports and routing
+
+Launch all agents in parallel.
+```
+
+### Split Role Sub-Agents
+
+Multi-perspective analysis in parallel:
+
+<Steps>
+1. **Setup**: Activate Plan Mode
+
+2. **Role Suggestion**: Ask Claude "What expert roles would analyze this code?"
+
+3. **Selection**: Choose roles such as Security Expert, Senior Dev, Code Reviewer
+
+4. **Parallel Analysis**: Each agent analyzes independently within its scope
+
+5. **Consolidation**: Synthesize multiple reports into final recommendations
+</Steps>
+
+### Parallelization Decision Matrix
+
+|  | Non-destructive (read-only) | Destructive (write) |
+|---|---------------------------|-------------------|
+| **Independent** | Parallel (max efficiency) | Sequential (Plan Mode first) |
+| **Dependent** | Sequential (order matters) | Extra care (conflict risk) |
+
+### Background Subagents
+
+Subagents can run in the background without blocking the main session:
+
+| Mode | Behavior | Use When |
+|------|----------|----------|
+| Default | Parent waits for agent output | Need result before continuing |
+| Background | Agent runs in parallel, parent continues | Fire-and-forget (tests, linting, notifications) |
+
+**Managing background agents**:
+
+```bash
+# List running agents + kill overlay
+ctrl+f    # Opens agent manager overlay
+
+# Cancel main thread only (background agents keep running)
+ESC
+ctrl+c
+```
+
+---
+
+## The Self-Evolving Agent Pattern
+
+An agent that updates its own skills after each execution. Instead of manually maintaining documentation, the agent reads the current state of its domain and rewrites the knowledge injected into itself.
+
+**When to use**: Long-lived agents whose domain evolves -- presentation editors, API clients tracking schema changes, agents managing living documents.
+
+**Core mechanism** (in agent system prompt):
+
+```markdown
+### Step N: Self-Evolution (after every execution)
+
+After completing your main task, update your preloaded skills to stay in sync:
+
+1. Read the current state of [the domain you modified]
+2. Update `.claude/skills/<your-skill>/SKILL.md` to reflect reality
+3. Log what changed and why in a "## Learnings" section of this agent file
+
+This prevents knowledge drift between what you know and what is.
+```
+
+**Full example**:
+
+```yaml
+---
+name: presentation-curator
+description: PROACTIVELY use when updating slides, structure, or weights
+tools: Read, Write, Edit, Grep, Glob
+model: sonnet
+color: magenta
+skills:
+  - presentation/slide-structure
+  - presentation/styling
+---
+
+## Step 5: Self-Evolution (after every execution)
+
+Read presentation/index.html and update your skills:
+- slide-structure skill: update section ranges, weight table, slide count
+- styling skill: update CSS patterns if new ones were introduced
+- Append new findings to the "## Learnings" section below
+
+## Learnings
+_Each run appends findings here. Future invocations start informed._
+- Slide badges are JS-injected — never hardcode them in HTML.
+```
+
+<Aside type="tip">
+**Why it works**: The `skills:` frontmatter injects skill content at agent startup. By writing back to those files after each run, the agent's next invocation starts with current knowledge. No human maintenance required.
+</Aside>
+
+<Aside type="note">
+**Key constraints**:
+- Scope updates narrowly -- only update what actually changed
+- Keep a `## Learnings` log so the agent builds cumulative knowledge over sessions
+- Pair with `memory: project` for cross-session persistence of broader context
+</Aside>

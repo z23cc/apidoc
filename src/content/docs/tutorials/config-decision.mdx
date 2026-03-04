@@ -1,0 +1,181 @@
+---
+title: "配置决策指南"
+description: "了解 Claude Code 的七种配置机制，快速判断使用哪种机制来满足你的需求"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Claude Code 有七种配置机制——知道**该用哪一种**可以节省大量的试错时间。本指南帮助你建立快速判断的思维捷径。
+
+---
+
+## 七种机制的角色定位
+
+<CardGrid>
+  <Card title="CLAUDE.md + rules/*.md" icon="document">
+    **Claude 始终知道的内容**
+
+    永久上下文，每次会话自动加载。
+  </Card>
+  <Card title="Commands 命令" icon="rocket">
+    **Claude 如何执行工作流**
+
+    按需调用的标准操作流程。
+  </Card>
+  <Card title="Hooks 钩子" icon="setting">
+    **Claude 无法绕过的规则**
+
+    自动化的防护栏，零 token 成本。
+  </Card>
+  <Card title="Agents 代理" icon="star">
+    **Claude 委托出去的工作**
+
+    隔离的并行工作者，有独立的上下文。
+  </Card>
+  <Card title="Skills 技能" icon="puzzle">
+    **共享的领域知识**
+
+    可被多个 Agent 继承的可复用模块。
+  </Card>
+  <Card title="MCP 服务器" icon="external">
+    **外部系统访问**
+
+    通过协议连接 API、数据库和工具。
+  </Card>
+</CardGrid>
+
+---
+
+## 机制对比
+
+| 机制 | 加载时机 | 最适合 | Token 成本 | 可靠性 |
+|------|---------|-------|-----------|-------|
+| **CLAUDE.md** | 每次会话 | 核心规范、身份定义 | 始终消耗 | 100% |
+| **rules/*.md** | 每次会话 | 补充性常规规则 | 始终消耗 | 100% |
+| **Commands** | 调用时 | 可重复的多步骤工作流 | 低（模板） | 100%（调用时） |
+| **Hooks** | 事件触发时 | 防护栏、自动化、规则执行 | 零 | 100%（Shell 脚本） |
+| **Agents** | 生成时 | 隔离/并行分析 | 高（完整上下文） | 100%（生成时） |
+| **Skills** | 调用时 | Agent 的领域知识 | 中等 | ~56% 自动调用率 |
+| **MCP Servers** | 会话启动时 | 外部 API 和工具 | 连接开销 | 100%（连接后） |
+
+---
+
+## 决策树：该用哪种机制？
+
+<Steps>
+
+1. **每次会话、每个任务都需要这条信息吗？**
+
+   - **是** → 使用 **CLAUDE.md**（核心）或 **rules/*.md**（补充）
+   - **否** → 继续下一步
+
+2. **需要在无用户操作的情况下自动触发吗？**
+
+   - **是** → 使用 **Hook**（事件驱动，Shell 脚本）
+   - **否** → 继续下一步
+
+3. **需要访问外部系统（API、数据库、工具）吗？**
+
+   - **是** → 使用 **MCP Server**
+   - **否** → 继续下一步
+
+4. **是一个有固定步骤的可重复工作流吗？**
+
+   - **是** → 使用 **Command**（`.claude/commands/`）
+   - **否** → 继续下一步
+
+5. **需要隔离的上下文或并行工作吗？**
+
+   - **是** → 使用 **Agent**（`.claude/agents/`）
+   - **否** → 继续下一步
+
+6. **是多个 Agent 都需要的共享知识吗？**
+
+   - **是** → 使用 **Skill**（`.claude/skills/`）
+   - **否** → 添加到 **CLAUDE.md**
+
+</Steps>
+
+**决策树的文本表示：**
+
+```
+每次会话都需要？
+├─ 是 → CLAUDE.md 或 rules/*.md
+│
+└─ 否 → 需要自动触发？
+         ├─ 是 → HOOK（事件驱动）
+         │
+         └─ 否 → 需要外部系统访问？
+                  ├─ 是 → MCP SERVER
+                  │
+                  └─ 否 → 可重复的工作流？
+                           ├─ 是 → COMMAND
+                           │
+                           └─ 否 → 需要隔离上下文？
+                                    ├─ 是 → AGENT
+                                    │
+                                    └─ 否 → 多 Agent 共享？
+                                             ├─ 是 → SKILL
+                                             │
+                                             └─ 否 → CLAUDE.md
+```
+
+---
+
+## 56% 可靠性警告
+
+<Aside type="caution">
+Skills 是**按需调用**的——而 Agent 并不总是会调用它们。一项评估发现 Agent 只在 56% 的情况下触发了 Skills。
+</Aside>
+
+**实际影响：**
+
+- **绝不要**把关键指令只放在 Skills 中——它们可能被静默跳过
+- **安全模式：** CLAUDE.md 说明**做什么**（始终加载），Skill 提供**详细怎么做**（按需加载）
+- 对于 Agent 工作流，优先在 Agent frontmatter 的 `skills:` 字段中显式指定 Skill
+
+---
+
+## 常见错误
+
+| 错误 | 为什么有问题 | 正确做法 |
+|------|------------|---------|
+| 关键规则只放在 Skills 中 | 44% 的概率被跳过 | 移到 CLAUDE.md 或 rules/*.md |
+| 所有内容都放 CLAUDE.md | 每次会话都撑满上下文窗口 | 拆分：永久内容 → CLAUDE.md，工作流 → Commands |
+| 用 Hooks 处理复杂逻辑 | Hooks 是 Shell 脚本，不是 Claude | 用 Hooks 做执行，用 Commands 做多步骤工作流 |
+| 用 MCP 做简单文件操作 | 不必要的开销 | 用内置文件工具；MCP 只用于外部系统 |
+
+<Aside type="tip">
+**经验法则**：从 CLAUDE.md 开始。只有当你有了明确的理由（自动化、隔离、外部访问等）时，才引入其他机制。
+</Aside>
+
+---
+
+## 快速参考
+
+<Tabs>
+  <TabItem label="按使用频率">
+    | 频率 | 机制 |
+    |------|------|
+    | 每天使用 | CLAUDE.md、Commands |
+    | 经常使用 | Hooks、MCP Servers |
+    | 按需使用 | Agents、Skills |
+  </TabItem>
+  <TabItem label="按复杂度">
+    | 复杂度 | 机制 |
+    |--------|------|
+    | 简单（一行文本） | CLAUDE.md 规则 |
+    | 中等（模板+步骤） | Commands |
+    | 高级（脚本+逻辑） | Hooks、Agents |
+    | 集成（外部系统） | MCP Servers |
+  </TabItem>
+  <TabItem label="按 Token 成本">
+    | 成本 | 机制 |
+    |------|------|
+    | 零 | Hooks（Shell 脚本，不消耗 token） |
+    | 低 | Commands（仅模板文本） |
+    | 始终消耗 | CLAUDE.md、rules/*.md |
+    | 中等 | Skills（按需加载） |
+    | 高 | Agents（完整上下文复制） |
+  </TabItem>
+</Tabs>

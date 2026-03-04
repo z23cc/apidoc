@@ -1,0 +1,165 @@
+---
+title: "Semantic Anchors"
+description: "Use precise technical vocabulary to guide Claude toward higher-quality code output"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+LLMs are statistical pattern matchers trained on massive text corpora. Using **precise technical vocabulary** helps Claude activate the right patterns in its training data, leading to higher-quality outputs.
+
+<CardGrid>
+  <Card title="Precise Navigation" icon="magnifier">
+    Technical terms act as GPS coordinates into Claude's knowledge base.
+  </Card>
+  <Card title="Reduced Ambiguity" icon="approve-check-circle">
+    Specific terms activate more accurate patterns than vague descriptions.
+  </Card>
+  <Card title="Reusable" icon="puzzle">
+    Write semantic anchors into CLAUDE.md for consistent use across your project.
+  </Card>
+  <Card title="Composable" icon="setting">
+    Combine with XML tags for even more powerful prompting.
+  </Card>
+</CardGrid>
+
+---
+
+## Why Precision Matters
+
+When you say "clean code", Claude might generate any of dozens of interpretations. But when you say "SOLID principles with dependency injection following Clean Architecture layers", you anchor Claude to a specific, well-documented pattern from its training.
+
+<Aside type="tip">
+**Key insight**: Technical terms act as GPS coordinates into Claude's knowledge. The more precise, the better the navigation.
+</Aside>
+
+---
+
+## Common Semantic Anchors Reference
+
+| Vague Term | Semantic Anchor | Why It Helps |
+|------------|-----------------|--------------|
+| "error handling" | "Railway Oriented Programming with Either/Result monad" | Activates functional error patterns |
+| "clean code" | "SOLID principles, especially SRP and DIP" | Targets specific design principles |
+| "good tests" | "TDD London School with outside-in approach" | Specifies test methodology |
+| "good architecture" | "Hexagonal Architecture (Ports & Adapters)" | Names a concrete pattern |
+| "readable code" | "Screaming Architecture with intention-revealing names" | Triggers specific naming conventions |
+| "scalable design" | "CQRS with Event Sourcing" | Activates distributed patterns |
+| "documentation" | "arc42 template structure" | Specifies documentation framework |
+| "requirements" | "EARS syntax (Easy Approach to Requirements)" | Targets requirement format |
+| "API design" | "REST Level 3 with HATEOAS" | Specifies maturity level |
+| "security" | "OWASP Top 10 mitigations" | Activates security knowledge |
+
+---
+
+## Using Anchors in CLAUDE.md
+
+Add semantic anchors to your project instructions:
+
+```markdown
+# Architecture Principles
+
+Follow these patterns:
+- **Architecture**: Hexagonal Architecture (Ports & Adapters) with clear domain boundaries
+- **Error handling**: Railway Oriented Programming - never throw, return Result<T, E>
+- **Testing**: TDD London School - mock collaborators, test behaviors not implementations
+- **Documentation**: ADR (Architecture Decision Records) for significant choices
+```
+
+<Aside type="tip">
+Placing semantic anchors in CLAUDE.md ensures every session automatically carries these precise instructions without repetition.
+</Aside>
+
+---
+
+## Combining with XML Tags
+
+Semantic anchors work powerfully with XML-structured prompts:
+
+```xml
+<instruction>
+  Refactor the user service following Domain-Driven Design (Evans)
+</instruction>
+
+<constraints>
+  - Apply Hexagonal Architecture (Ports & Adapters)
+  - Use Repository pattern for persistence
+  - Implement Railway Oriented Programming for error handling
+  - Follow CQRS for read/write separation
+</constraints>
+
+<quality_criteria>
+  - Screaming Architecture: package structure reveals intent
+  - Single Responsibility Principle per class
+  - Dependency Inversion: depend on abstractions
+</quality_criteria>
+```
+
+---
+
+## Semantic Anchors by Domain
+
+<Tabs>
+  <TabItem label="Testing">
+    - **TDD London School** (mockist) vs **Chicago School** (classicist)
+    - **Property-Based Testing** (QuickCheck-style)
+    - **Mutation Testing** (PIT, Stryker)
+    - **BDD Gherkin syntax** (Given/When/Then)
+  </TabItem>
+  <TabItem label="Architecture">
+    - **Hexagonal Architecture** (Ports & Adapters)
+    - **Clean Architecture** (Onion layers)
+    - **CQRS + Event Sourcing**
+    - **C4 Model** (Context, Container, Component, Code)
+  </TabItem>
+  <TabItem label="Design Patterns">
+    - **Gang of Four patterns** (specify: Strategy, Factory, Observer...)
+    - **Domain-Driven Design tactical patterns** (Aggregate, Repository, Domain Event)
+    - **Functional patterns** (Monad, Functor, Railway)
+  </TabItem>
+  <TabItem label="Requirements">
+    - **EARS** (Easy Approach to Requirements Syntax)
+    - **User Story Mapping** (Jeff Patton)
+    - **Jobs-to-be-Done framework**
+    - **BDD scenarios**
+  </TabItem>
+</Tabs>
+
+---
+
+## Hands-on Walkthrough
+
+<Steps>
+1. **Identify vague terms**
+
+   Spot the vague descriptions you commonly use, such as "write good code", "handle errors", or "design a good API".
+
+2. **Replace with specific anchors**
+
+   Replace "write good code" with "follow SOLID principles, apply Martin Fowler's Refactoring catalog, specifically Extract Method and Replace Conditional with Polymorphism".
+
+3. **Add to CLAUDE.md**
+
+   Put your frequently used anchors into the project's CLAUDE.md file so every session benefits from them.
+
+4. **Use in prompts**
+
+   Embed anchors within XML tags in your prompts so Claude precisely understands your intent.
+</Steps>
+
+---
+
+## Pro Tips
+
+<Aside type="tip">
+When Claude produces generic code, try adding more specific anchors.
+
+**Before**: "Use clean code"
+
+**After**: "Apply Martin Fowler's Refactoring catalog, specifically Extract Method and Replace Conditional with Polymorphism."
+
+The difference in output quality is significant.
+</Aside>
+
+<Aside type="note">
+The Semantic Anchors concept was created by Alexandre Soyer. Full catalog available at [LLM-Coding/Semantic-Anchors](https://github.com/LLM-Coding/Semantic-Anchors) (Apache-2.0 license).
+</Aside>

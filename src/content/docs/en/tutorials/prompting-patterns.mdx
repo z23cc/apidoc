@@ -1,0 +1,225 @@
+---
+title: "Prompting Patterns"
+description: "Named prompting patterns for effective Claude Code interaction, from community best practices"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+Memorable named patterns for effective Claude Code interaction. These patterns have emerged from community best practices and help you communicate more effectively with your AI coding assistant.
+
+---
+
+## The "As If" Pattern
+
+Set quality expectations by establishing context and standards.
+
+**Pattern**: "Implement as if you were a [role] at [high-standard company/context]"
+
+```markdown
+# High quality code
+Implement this authentication system as if you were
+a senior security engineer at a major bank.
+
+# Production readiness
+Review this code as if preparing for a SOC2 audit.
+
+# Performance focus
+Optimize this function as if it will handle
+10,000 requests per second.
+```
+
+<Aside type="tip">
+**Why it works**: Activates relevant knowledge patterns and raises output quality to match the stated context.
+</Aside>
+
+---
+
+## The Constraint Pattern
+
+Force creative solutions by adding explicit limitations.
+
+**Pattern**: "Solve this [with constraint X] [without using Y]"
+
+```markdown
+# Dependency constraint
+Implement this feature without adding any new dependencies.
+
+# Size constraint
+Solve this in under 50 lines of code.
+
+# Time constraint (execution)
+This must complete in under 100ms.
+
+# Simplicity constraint
+Use only standard library functions.
+```
+
+<Aside type="tip">
+**Why it works**: Constraints prevent over-engineering and force focus on the essential solution.
+</Aside>
+
+---
+
+## The "Explain First" Pattern
+
+Force planning before implementation.
+
+**Pattern**: "Before implementing, explain your approach in [N] sentences"
+
+<Tabs>
+  <TabItem label="Simple Planning">
+    ```markdown
+    Before writing code, explain in 2-3 sentences
+    how you'll approach this.
+    ```
+  </TabItem>
+  <TabItem label="Detailed Planning">
+    ```markdown
+    Before implementing, outline:
+    1. What components you'll modify
+    2. What edge cases you've considered
+    3. What could go wrong
+    ```
+  </TabItem>
+  <TabItem label="Trade-off Analysis">
+    ```markdown
+    Before choosing an approach, explain 2-3 alternatives
+    and why you'd pick one.
+    ```
+  </TabItem>
+</Tabs>
+
+<Aside type="tip">
+**Why it works**: Prevents premature coding and catches misunderstandings early. Especially useful for complex tasks.
+</Aside>
+
+---
+
+## The "Rubber Duck" Pattern
+
+Debug collaboratively by having Claude ask questions.
+
+**Pattern**: "I'm stuck on [X]. Ask me questions to help me figure it out."
+
+```markdown
+# Debugging
+I'm stuck on why this test is failing.
+Ask me questions to help diagnose the issue.
+
+# Design
+I can't decide on the right architecture.
+Ask me questions about my requirements.
+
+# Problem understanding
+I don't fully understand what I need to build.
+Ask clarifying questions.
+```
+
+<Aside type="tip">
+**Why it works**: Often the problem is unclear requirements or assumptions. Questions surface hidden constraints.
+</Aside>
+
+---
+
+## The "Incremental" Pattern
+
+Build complex features step by step with validation.
+
+**Pattern**: "Let's build this incrementally. Start with [minimal version], then we'll add [features]."
+
+<Tabs>
+  <TabItem label="Feature Development">
+    ```markdown
+    Build the user registration incrementally:
+    1. First: Basic form that saves to database
+    2. Then: Email validation
+    3. Then: Password strength requirements
+    4. Finally: Email verification flow
+
+    Show me step 1 first.
+    ```
+  </TabItem>
+  <TabItem label="Refactoring">
+    ```markdown
+    Refactor this incrementally.
+    First extract the validation logic,
+    run tests, then we'll continue.
+    ```
+  </TabItem>
+</Tabs>
+
+<Aside type="tip">
+**Why it works**: Reduces risk, enables validation at each step, maintains working code throughout.
+</Aside>
+
+---
+
+## The "Boundary" Pattern
+
+Define explicit scope to prevent over-engineering.
+
+**Pattern**: "Only modify [X]. Don't touch [Y]."
+
+```markdown
+# File scope
+Only modify auth.ts. Don't change any other files.
+
+# Function scope
+Fix just the calculateTotal function.
+Don't refactor surrounding code.
+
+# Feature scope
+Add the logout button only.
+Don't add session management or remember-me features.
+```
+
+<Aside type="tip">
+**Why it works**: Prevents scope creep and keeps changes focused and reviewable.
+</Aside>
+
+---
+
+## Pattern Combinations
+
+Different situations call for different pattern combinations:
+
+| Situation | Pattern Combination |
+|-----------|---------------------|
+| Critical feature | As If + Explain First + Incremental |
+| Quick fix | Constraint + Boundary |
+| Debugging session | Rubber Duck + Incremental |
+| Architecture decision | Explain First + As If |
+| Refactoring | Boundary + Incremental + Constraint |
+
+---
+
+## Anti-Patterns to Avoid
+
+Common prompting anti-patterns and their solutions:
+
+| Anti-Pattern | Problem | Better Approach |
+|--------------|---------|-----------------|
+| "Make it perfect" | Undefined standard | Use "As If" with specific context |
+| "Fix everything" | Scope explosion | Use "Boundary" pattern |
+| "Just do it" | No validation | Use "Explain First" |
+| "Make it fast" | Vague constraint | Specify: "under 100ms" |
+| Overwhelming detail | Context pollution | Focus on relevant constraints only |
+
+---
+
+## Practical Recommendations
+
+<CardGrid>
+  <Card title="Getting Started" icon="rocket">
+    Begin with **"Explain First"** and **"Boundary"** patterns. They are the simplest and most immediately effective.
+  </Card>
+  <Card title="Daily Development" icon="pencil">
+    The **Incremental** pattern is the default choice for everyday feature development, paired with **Constraint** to keep things simple.
+  </Card>
+  <Card title="Debugging" icon="magnifier">
+    The **Rubber Duck** pattern helps you clarify your thinking and lets Claude guide you to the root cause.
+  </Card>
+  <Card title="Critical Systems" icon="approve-check">
+    For security or performance-critical systems, combine **As If** + **Explain First** + **Incremental**.
+  </Card>
+</CardGrid>

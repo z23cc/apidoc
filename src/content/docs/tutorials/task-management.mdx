@@ -1,0 +1,425 @@
+---
+title: "任务管理工作流"
+description: "多会话任务协调、Tasks API 和 TodoWrite 复杂项目管理"
+---
+
+import { Tabs, TabItem, Steps, Aside, Card, CardGrid } from '@astrojs/starlight/components';
+
+任务管理在 Claude Code v2.1.16 中迎来了重大进化：新增了 **Tasks API**，与原有的 **TodoWrite** 工具互为补充。本教程将帮助你理解何时使用哪种系统，以及如何利用多会话任务协调来管理复杂项目。
+
+---
+
+## 适用场景
+
+<CardGrid>
+  <Card title="跨会话项目" icon="puzzle">
+    项目横跨多个编码会话，需要在会话间保持任务状态。
+  </Card>
+  <Card title="多 Agent 协作" icon="rocket">
+    多个 Claude 实例在同一项目上协同工作。
+  </Card>
+  <Card title="复杂依赖" icon="setting">
+    任务之间存在阻塞依赖关系，需要严格的执行顺序。
+  </Card>
+  <Card title="中断恢复" icon="forward-slash">
+    需要在上下文压缩或会话中断后无缝恢复工作。
+  </Card>
+</CardGrid>
+
+<Aside>
+**何时不需要：** 单会话即可完成的简单实现、快速修复、10 分钟内能搞定的任务。
+</Aside>
+
+---
+
+## 系统对比
+
+| 特性 | TodoWrite（旧版） | Tasks API（v2.1.16+） |
+|------|-------------------|----------------------|
+| **持久化** | 仅会话内存 | 磁盘存储（`~/.claude/tasks/`） |
+| **跨会话** | 会话结束即丢失 | 跨会话存活 |
+| **依赖管理** | 手动排序 | 任务阻塞（A 阻塞 B） |
+| **协作** | 单 Agent | 多 Agent 广播 |
+| **状态追踪** | pending / in_progress / completed | pending / in_progress / completed |
+| **适用场景** | 简单的单会话 todo | 复杂的多会话项目 |
+
+<Tabs>
+  <TabItem label="使用 Tasks API（默认）">
+    ```bash
+    # v2.1.19+ 默认启用 Tasks API
+    claude
+    ```
+  </TabItem>
+  <TabItem label="使用 TodoWrite（旧版）">
+    ```bash
+    # 切换回旧版系统
+    CLAUDE_CODE_ENABLE_TASKS=false claude
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## 阶段一：任务规划
+
+**目标：** 将复杂工作分解为可追踪、可执行的单元。
+
+<Steps>
+1. **分析范围**
+
+   ```bash
+   claude
+   > "Analyze this codebase for implementing JWT authentication:
+     - Glob for existing auth patterns
+     - Grep for security-related code
+     - Identify integration points"
+   ```
+
+2. **设计任务层级**
+
+   将工作分解为带有依赖关系的逻辑阶段：
+
+   ```
+   Authentication System (parent)
+   ├── 1. Login endpoint (no dependencies)
+   ├── 2. Token refresh (depends on #1)
+   ├── 3. Logout endpoint (depends on #1)
+   └── 4. Integration tests (depends on #1, #2, #3)
+   ```
+
+3. **创建任务结构**
+
+   ```bash
+   export CLAUDE_CODE_TASK_LIST_ID="auth-system-v2"
+   claude
+
+   > "Create a task hierarchy for JWT authentication:
+
+     Parent task: 'Implement JWT authentication system'
+     - Description: Add JWT-based auth with refresh tokens and secure storage
+
+     Child tasks:
+     1. 'Create login endpoint' (no dependencies)
+     2. 'Implement token refresh logic' (depends on task 1)
+     3. 'Create logout endpoint' (depends on task 1)
+     4. 'Write integration tests' (depends on tasks 1, 2, 3)
+
+     Use TaskCreate with proper metadata."
+   ```
+</Steps>
+
+---
+
+## 阶段二：任务执行
+
+**目标：** 系统性地执行任务并追踪进度。
+
+执行模式：
+
+```
+TaskList → TaskGet (next pending) → Execute → TaskUpdate → Validate → Repeat
+```
+
+<Steps>
+1. **发现下一个任务**
+
+   ```bash
+   export CLAUDE_CODE_TASK_LIST_ID="auth-system-v2"
+   claude
+
+   > "TaskList to show all pending tasks"
+   ```
+
+   输出示例：
+
+   ```
+   Tasks for 'auth-system-v2':
+   ✅ task-login: Create login endpoint [completed]
+   ⏳ task-refresh: Implement token refresh logic [pending, blocked by: none]
+   ⏳ task-logout: Create logout endpoint [pending, blocked by: none]
+   ⏳ task-tests: Write integration tests [pending, blocked by: task-refresh, task-logout]
+   ```
+
+2. **获取任务详情**
+
+   ```bash
+   > "TaskGet task-refresh to see full requirements"
+   ```
+
+3. **执行并更新状态**
+
+   ```bash
+   > "Mark task-refresh as in_progress, then implement the token refresh endpoint"
+
+   # 完成后：
+   > "Mark task-refresh as completed"
+   ```
+
+4. **验证**
+
+   ```bash
+   > "Run tests for token refresh functionality"
+
+   # 如果测试通过：任务保持 completed 状态
+   # 如果测试失败：将任务重新标记为 in_progress 并修复
+   ```
+</Steps>
+
+---
+
+## 阶段三：会话管理
+
+**目标：** 在多个会话和上下文边界之间无缝恢复工作。
+
+### 持久化机制
+
+任务存储在 `~/.claude/tasks/<task-list-id>/`，可以在以下场景中存活：
+- 会话终止
+- 上下文压缩（`/compact`）
+- 系统重启
+- 多天中断
+
+### 恢复模式
+
+```bash
+# 数天后，在不同的终端会话中
+export CLAUDE_CODE_TASK_LIST_ID="auth-system-v2"
+claude
+
+> "TaskList to show current state"
+
+# 输出显示你离开时的确切状态：
+# ✅ task-login [completed]
+# ✅ task-refresh [completed]
+# ⏳ task-logout [pending]
+# ⏳ task-tests [pending, blocked by: task-logout]
+
+> "Continue with next pending task that isn't blocked"
+```
+
+### 多终端协作
+
+```bash
+# 终端 1：前端开发
+export CLAUDE_CODE_TASK_LIST_ID="auth-system-v2"
+claude
+> "Work on task-logout endpoint"
+
+# 终端 2：测试编写（同时进行）
+export CLAUDE_CODE_TASK_LIST_ID="auth-system-v2"
+claude
+> "TaskList - check what's completed so I can write tests"
+
+# 两个终端实时共享任务状态
+```
+
+<Aside type="caution">
+使用仓库特定的任务列表 ID，避免跨项目混淆：
+
+```bash
+# 不推荐：通用 ID
+export CLAUDE_CODE_TASK_LIST_ID="my-project"
+
+# 推荐：仓库特定 + 上下文
+export CLAUDE_CODE_TASK_LIST_ID="mycompany-api-auth-refactor"
+```
+</Aside>
+
+---
+
+## 与 TDD 集成
+
+将测试驱动开发与任务追踪结合，实现系统性的测试覆盖。
+
+```bash
+export CLAUDE_CODE_TASK_LIST_ID="tdd-feature-x"
+claude
+
+> "Create task hierarchy for feature X:
+
+  For each feature component:
+  1. Task: 'Write failing tests for [component]'
+  2. Task: 'Implement [component] to pass tests' (depends on #1)
+  3. Task: 'Refactor [component]' (depends on #2)
+
+  Use TDD red-green-refactor cycle per task."
+```
+
+---
+
+## 与计划驱动开发集成
+
+将战略计划转化为可执行的任务层级。
+
+```bash
+# 步骤 1：进入计划模式
+claude
+> [按 Shift+Tab 进入 Plan Mode]
+
+# 步骤 2：创建架构计划
+> "Design architecture for microservices migration:
+  - Identify service boundaries
+  - Plan data migration strategy
+  - Design API contracts"
+
+# 步骤 3：退出计划模式，转化为任务
+> "Convert this plan into a task hierarchy using TaskCreate"
+```
+
+---
+
+## 最佳实践与反面模式
+
+### 推荐模式
+
+| 模式 | 说明 |
+|------|------|
+| **层级分解** | 项目 → 功能 → 组件 → 叶子任务，镜像自然项目结构 |
+| **依赖优先** | 创建任务时始终定义依赖，防止提前执行 |
+| **频繁状态更新** | 定期更新进度百分比，便于感知和恢复 |
+| **元数据丰富** | 在元数据中包含优先级、估时、相关文件和 Issue 链接 |
+
+### 反面模式
+
+| 反面模式 | 问题 | 改进 |
+|----------|------|------|
+| **巨型任务** (>10 步) | 难以追踪进度 | 分解为多个阶段，每阶段含子任务 |
+| **缺少依赖** | 任务可能以错误顺序执行 | 显式定义依赖链 |
+| **孤立无上下文的任务** | 未来的你不记得任务含义 | 包含完整的描述、错误信息和相关链接 |
+| **状态不一致** | 标记完成但测试未通过 | 验证通过后再更新完成状态 |
+
+---
+
+## 从 TodoWrite 迁移
+
+### 迁移时机
+
+<Tabs>
+  <TabItem label="继续使用 TodoWrite">
+    - 所有工作在单个会话内完成
+    - 不需要多 Agent 协作
+    - 简单线性任务列表（无依赖）
+    - 使用 Claude Code < v2.1.16
+  </TabItem>
+  <TabItem label="迁移到 Tasks API">
+    - 工作跨越多个会话
+    - 需要任务跨天/周持久化
+    - 复杂的依赖关系图
+    - 多终端协作
+    - 需要在上下文压缩后恢复
+  </TabItem>
+</Tabs>
+
+### 迁移步骤
+
+<Steps>
+1. **识别现有 TodoWrite 用法**
+
+   ```bash
+   grep -r "TodoWrite" .claude/
+   ```
+
+2. **转换为 Tasks API**
+
+   **之前（TodoWrite）：**
+   ```markdown
+   - [ ] Implement user authentication
+   - [ ] Add password hashing
+   - [ ] Create session management
+   - [ ] Write tests
+   ```
+
+   **之后（Tasks API）：**
+   ```bash
+   export CLAUDE_CODE_TASK_LIST_ID="user-auth-2026"
+   claude
+
+   > "Create tasks:
+     1. 'Implement user authentication' (parent)
+        - Child: 'Add password hashing'
+        - Child: 'Create session management' (depends on hashing)
+        - Child: 'Write tests' (depends on auth, hashing, sessions)"
+   ```
+
+3. **更新 CLAUDE.md 指令**
+
+   ```markdown
+   For complex tasks:
+   - Set CLAUDE_CODE_TASK_LIST_ID=<project-name>
+   - Use TaskCreate for hierarchical planning
+   - Execute with TaskUpdate status tracking
+   - Resume with TaskList in new sessions
+   ```
+
+4. **测试迁移**
+
+   ```bash
+   # 创建测试任务列表
+   export CLAUDE_CODE_TASK_LIST_ID="migration-test"
+   claude
+   > "Create 3 test tasks with dependencies, mark one completed, then exit"
+
+   # 在新会话中重新启动
+   export CLAUDE_CODE_TASK_LIST_ID="migration-test"
+   claude
+   > "TaskList - verify tasks persisted correctly"
+   ```
+</Steps>
+
+---
+
+## 故障排除
+
+| 问题 | 原因 | 解决方案 |
+|------|------|---------|
+| 任务跨会话不持久 | 未设置环境变量 | 启动前 `export CLAUDE_CODE_TASK_LIST_ID="your-project"` |
+| 看到其他项目的任务 | 多个项目共用同一 ID | 使用仓库特定的 ID，如 `api-v2-migration` |
+| 仍在使用 TodoWrite | 环境中设置了禁用标志 | `unset CLAUDE_CODE_ENABLE_TASKS` |
+| 依赖未强制执行 | 创建时使用了任务标题而非 ID | 确保 `dependencies` 使用实际的任务 ID |
+
+---
+
+## 自定义任务元数据
+
+通过领域特定的元数据增强任务工作流。
+
+<Tabs>
+  <TabItem label="性能优化">
+    ```json
+    {
+      "metadata": {
+        "type": "performance",
+        "baseline_metric": "2000ms",
+        "target_metric": "200ms",
+        "profiling_tool": "Chrome DevTools",
+        "measurement_location": "dashboard load time"
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="安全任务">
+    ```json
+    {
+      "metadata": {
+        "type": "security",
+        "severity": "critical",
+        "cve_id": "CVE-2024-1234",
+        "affected_versions": "< 2.1.0",
+        "mitigation": "Update package X to v3.0+"
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Bug 修复">
+    ```json
+    {
+      "metadata": {
+        "type": "bugfix",
+        "issue_url": "https://github.com/org/repo/issues/456",
+        "reproduction_steps": "1. Login 2. Navigate to dashboard 3. Click export",
+        "error_message": "TypeError: Cannot read property 'map' of undefined"
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
