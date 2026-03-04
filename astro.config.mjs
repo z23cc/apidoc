@@ -48,6 +48,7 @@ export default defineConfig({
 						{ slug: 'tutorials/rewind' },
 						{ slug: 'tutorials/under-the-hood' },
 						{ slug: 'tutorials/trust-calibration' },
+						{ slug: 'tutorials/seeing-like-agent' },
 					],
 				},
 				{
